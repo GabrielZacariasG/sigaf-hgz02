@@ -1,0 +1,35 @@
+:root {
+  --sigaf-verde: #00594c;
+  --sigaf-ambar: #b45309;
+  --sigaf-error: #b91c1c;
+  --sigaf-fondo: #f7f8f7;
+  --sigaf-texto: #26302e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--sigaf-fondo);
+  color: var(--sigaf-texto);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d8dbd9;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+button {
+  cursor: pointer;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
