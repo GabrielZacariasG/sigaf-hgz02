@@ -1,35 +1,140 @@
 :root {
-  --sigaf-verde: #00594c;
-  --sigaf-ambar: #b45309;
-  --sigaf-error: #b91c1c;
-  --sigaf-fondo: #f7f8f7;
-  --sigaf-texto: #26302e;
+  --verde: #00594C;
+  --verde-claro: #E1F5EE;
+  --verde-oscuro: #003D34;
+  --ambar: #B45309;
+  --ambar-claro: #FAEEDA;
+  --rojo: #B91C1C;
+  --rojo-claro: #FCE9E9;
+  --texto: #1F2421;
+  --texto-suave: #5F5E5A;
+  --borde: #D8DBD9;
+  --fondo: #F7F8F7;
+  --blanco: #FFFFFF;
+  --radio: 10px;
+  --sombra: 0 1px 3px rgba(0,0,0,.08);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  margin: 0;
-  background: var(--sigaf-fondo);
-  color: var(--sigaf-texto);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 15px;
+  line-height: 1.5;
 }
 
-input {
+a { color: inherit; text-decoration: none; }
+
+/* ---------- Encabezado ---------- */
+.encabezado {
+  background: var(--verde);
+  color: var(--blanco);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.encabezado .marca { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+.encabezado .sede { font-size: 12px; opacity: .85; }
+.encabezado .usuario { font-size: 13px; display: flex; align-items: center; gap: 14px; }
+
+/* ---------- Contenedor ---------- */
+.contenedor { max-width: 1120px; margin: 0 auto; padding: 28px 24px 60px; }
+.titulo { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.subtitulo { color: var(--texto-suave); font-size: 14px; margin-bottom: 24px; }
+
+/* ---------- Tarjetas ---------- */
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.tarjeta {
+  background: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 18px;
+  box-shadow: var(--sombra);
+  display: block;
+  transition: border-color .15s, transform .15s;
+}
+.tarjeta:hover { border-color: var(--verde); transform: translateY(-2px); }
+.tarjeta .paso {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--verde);
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+.tarjeta h3 { font-size: 16px; margin: 6px 0 4px; }
+.tarjeta p { font-size: 13px; color: var(--texto-suave); min-height: 36px; }
+.tarjeta .cifra { font-size: 30px; font-weight: 700; color: var(--verde); }
+.tarjeta .cifra.alerta { color: var(--ambar); }
+.tarjeta .etiqueta { font-size: 12px; color: var(--texto-suave); }
+
+/* ---------- Botones ---------- */
+.boton {
+  background: var(--verde);
+  color: var(--blanco);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.boton:hover { background: var(--verde-oscuro); }
+.boton:disabled { background: var(--borde); cursor: not-allowed; }
+.boton.secundario {
+  background: var(--blanco);
+  color: var(--verde);
+  border: 1px solid var(--verde);
+}
+
+/* ---------- Formularios ---------- */
+.campo { margin-bottom: 16px; }
+.campo label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.campo input, .campo select, .campo textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #d8dbd9;
-  border-radius: 6px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
   font-size: 14px;
-  margin-top: 4px;
+  font-family: inherit;
+  background: var(--blanco);
+}
+.campo input:focus, .campo select:focus {
+  outline: 2px solid var(--verde);
+  border-color: var(--verde);
+}
+.fila { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ---------- Tablas ---------- */
+.tabla { width: 100%; border-collapse: collapse; background: var(--blanco); }
+.tabla th {
+  background: var(--verde);
+  color: var(--blanco);
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.tabla td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+  font-size: 14px;
 }
 
-button {
-  cursor: pointer;
-  padding: 10px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-}
+/* ---------- Avisos ---------- */
+.aviso { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+.aviso.info { background: var(--verde-claro); color: var(--verde-oscuro); }
+.aviso.atencion { background: var(--ambar-claro); color: var(--ambar); }
+.aviso.error { background: var(--rojo-claro); color: var(--rojo); }
+
+.cargando { color: var(--texto-suave); font-size: 14px; padding: 40px 0; text-align: center; }
