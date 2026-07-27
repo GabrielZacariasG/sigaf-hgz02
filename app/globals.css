@@ -138,3 +138,55 @@ a { color: inherit; text-decoration: none; }
 .aviso.error { background: var(--rojo-claro); color: var(--rojo); }
 
 .cargando { color: var(--texto-suave); font-size: 14px; padding: 40px 0; text-align: center; }
+
+/* ---------- Pantalla de acceso ---------- */
+.pantalla-acceso {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(160deg, var(--verde) 0%, var(--verde-oscuro) 100%);
+}
+.caja-acceso {
+  width: 100%;
+  max-width: 400px;
+  background: var(--blanco);
+  border-radius: 14px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22);
+}
+.acceso-marca {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--verde);
+  letter-spacing: 1.5px;
+  text-align: center;
+}
+.acceso-nombre {
+  font-size: 12.5px;
+  color: var(--texto-suave);
+  text-align: center;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.acceso-sede {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--texto);
+  text-align: center;
+  margin-top: 8px;
+}
+.acceso-linea {
+  height: 3px;
+  background: var(--verde);
+  border-radius: 2px;
+  width: 48px;
+  margin: 18px auto 24px;
+}
+.acceso-pie {
+  margin-top: 20px;
+  font-size: 11.5px;
+  color: var(--texto-suave);
+  text-align: center;
+}
