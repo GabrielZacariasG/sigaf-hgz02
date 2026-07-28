@@ -126,11 +126,14 @@ promedio dinámico, al menos por ahora), configurable en la tabla
   `Σ(cantidad × precio_unitario del catálogo del contrato) × (1 + tasa_iva)`
   debe coincidir con el importe capturado de la factura, dentro de esa
   tolerancia.
-- **Número de contrato**: existen dos campos, `numero_interno` (como lo
-  captura hoy el hospital, puede tener errores) y `numero_ooad` (el
-  formato real de PeopleSoft, fuente de verdad). El campo `numero_ooad`
-  se llena progresivamente vía conciliación con los reportes de OOAD,
-  no se fuerza a corregir manualmente los 18 contratos de golpe.
+- **Número de contrato**: hoy el esquema desplegado tiene un solo campo,
+  `numero_interno` (como lo captura el hospital, puede tener errores).
+  El diseño original contemplaba además un segundo campo `numero_ooad`
+  (el formato real de PeopleSoft, fuente de verdad) que se llenaría
+  progresivamente vía conciliación con los reportes de OOAD, sin forzar
+  la corrección manual de los 18 contratos de golpe. **Nota: ese campo
+  se documentó originalmente pero no se implementó — no existe en el
+  esquema desplegado (verificado contra la base real).**
 - **Vigencia de contrato**: debe generar alerta automática (no solo
   nota de texto) cuando el periodo capturado de una factura cae fuera
   de la vigencia del contrato, o cuando la vigencia está por vencer
@@ -182,11 +185,12 @@ information_schema):**
 - `capitulos(id, nombre)` — el capítulo del piloto se llama exactamente
   `Integrales` (con mayúscula inicial solamente, sin la palabra
   "Servicios").
-- `partidas(id, capitulo_id, cuenta_fiat, cuenta_prei, nombre)`
+- `partidas(id, capitulo_id, cuenta_prei, nombre)`
 - `proveedores(id, no_proveedor, razon_social)`
-- `contratos(id, numero_interno, numero_ooad, proveedor_id, partida_id,
+- `contratos(id, numero_interno, proveedor_id, partida_id,
   adquisicion_servicio, vigencia_inicio, vigencia_fin, monto_minimo,
-  monto_maximo)`
+  monto_maximo)` — nota: `numero_ooad` se documentó en el diseño
+  original pero no se implementó; no existe en el esquema desplegado.
 - `contrato_servicios(id, contrato_id, nombre_servicio, precio_unitario)`
   — catálogo de servicios y precios por contrato, usado para la
   validación de detalle (ver mockup 3, sección 8).
