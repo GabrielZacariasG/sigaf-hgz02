@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Portal() {
@@ -22,23 +23,33 @@ export default function Portal() {
         .single();
       setUsuario(u);
 
+      // Cuenta filas de una tabla. Si la tabla aún no existe (o hay
+      // cualquier otro error), devuelve 0 en vez de propagar la excepción,
+      // para que una tabla faltante no tumbe todo el panel.
       const n = async (tabla, filtro) => {
-        let q = supabase.from(tabla).select('*', { count: 'exact', head: true });
-        if (filtro) q = filtro(q);
-        const { count } = await q;
-        return count ?? 0;
+        try {
+          let q = supabase.from(tabla).select('*', { count: 'exact', head: true });
+          if (filtro) q = filtro(q);
+          const { count, error } = await q;
+          if (error) return 0;
+          return count ?? 0;
+        } catch {
+          return 0;
+        }
       };
 
-      const [entregas, facturas, firmas, pedidos, cortes, contratos] = await Promise.all([
-        n('entregas'),
+      // 'enviadasOoad' cuenta solo las facturas que ya llegaron (o pasaron)
+      // la etapa de envío a OOAD; el total de la tabla va en 'facturas'.
+      const [facturas, enviadasOoad, firmas, pedidos, cortes, contratos] = await Promise.all([
         n('facturas'),
+        n('facturas', q => q.in('estatus_actual', ['enviada_ooad', 'en_tramite_ooad', 'gasto_reflejado'])),
         n('factura_paradas', q => q.is('fecha_regreso', null)),
         n('pedidos_recepcion', q => q.is('fecha_respuesta', null).is('cancelacion_confirmada', null)),
         n('ooad_cortes'),
         n('contratos'),
       ]);
 
-      setC({ entregas, facturas, firmas, pedidos, cortes, contratos });
+      setC({ facturas, enviadasOoad, firmas, pedidos, cortes, contratos });
       setCargando(false);
     })();
   }, [router]);
@@ -51,10 +62,10 @@ export default function Portal() {
   if (cargando) return <p className="cargando">Cargando…</p>;
 
   const tarjetas = [
-    { paso: 'Paso 1', titulo: 'Ingreso de facturas', desc: 'Registrar entregas del proveedor y capturar sus facturas.', cifra: c.entregas, etiqueta: 'entregas registradas', ruta: '/entregas', listo: false },
+    { paso: 'Paso 1', titulo: 'Ingreso de facturas', desc: 'Capturar las facturas recibidas del proveedor.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/facturas/nueva', listo: true },
     { paso: 'Paso 2', titulo: 'Circuito de firmas', desc: 'Validación del servicio, administración y dirección.', cifra: c.firmas, etiqueta: 'paradas sin regresar', ruta: '/firmas', listo: false },
     { paso: 'Paso 3', titulo: 'Pedido y recepción', desc: 'Solicitudes a Abastecimiento en espera de respuesta.', cifra: c.pedidos, etiqueta: 'sin respuesta', alerta: true, ruta: '/pedidos', listo: false },
-    { paso: 'Paso 4', titulo: 'Envío a OOAD', desc: 'Facturas enviadas y seguimiento del contra recibo.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/ooad', listo: false },
+    { paso: 'Paso 4', titulo: 'Envío a OOAD', desc: 'Facturas enviadas y seguimiento del contra recibo.', cifra: c.enviadasOoad, etiqueta: 'enviadas a OOAD', ruta: '/ooad', listo: false },
     { paso: 'Paso 5', titulo: 'Conciliación', desc: 'Cruce diario contra el reporte de disponibilidad.', cifra: c.cortes, etiqueta: 'cortes cargados', ruta: '/conciliacion', listo: false },
     { paso: 'Consulta', titulo: 'Catálogos', desc: 'Contratos, proveedores, cuentas y jefaturas.', cifra: c.contratos, etiqueta: 'contratos vigentes', ruta: '/catalogos', listo: false },
   ];
@@ -79,20 +90,37 @@ export default function Portal() {
         </p>
 
         <div className="rejilla">
-          {tarjetas.map(t => (
-            <div key={t.titulo} className="tarjeta" style={t.listo ? {} : { opacity: .75 }}>
-              <div className="paso">{t.paso}</div>
-              <h3>{t.titulo}</h3>
-              <p>{t.desc}</p>
-              <div className={t.alerta && t.cifra > 0 ? 'cifra alerta' : 'cifra'}>{t.cifra}</div>
-              <div className="etiqueta">{t.etiqueta}</div>
-              {!t.listo && (
-                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--texto-suave)' }}>
-                  En construcción
-                </div>
-              )}
-            </div>
-          ))}
+          {tarjetas.map(t => {
+            const cuerpo = (
+              <>
+                <div className="paso">{t.paso}</div>
+                <h3>{t.titulo}</h3>
+                <p>{t.desc}</p>
+                <div className={t.alerta && t.cifra > 0 ? 'cifra alerta' : 'cifra'}>{t.cifra}</div>
+                <div className="etiqueta">{t.etiqueta}</div>
+                {!t.listo && (
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--texto-suave)' }}>
+                    En construcción
+                  </div>
+                )}
+              </>
+            );
+            // Solo las tarjetas listas navegan; las demás quedan estáticas.
+            return t.listo ? (
+              <Link
+                key={t.titulo}
+                href={t.ruta}
+                className="tarjeta"
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
+                {cuerpo}
+              </Link>
+            ) : (
+              <div key={t.titulo} className="tarjeta" style={{ opacity: .75 }}>
+                {cuerpo}
+              </div>
+            );
+          })}
         </div>
       </main>
     </>
