@@ -67,7 +67,7 @@ export default function ProtegidoLayout({ children }) {
           position: "sticky",
           top: 0,
           zIndex: 10,
-          background: "var(--sigaf-verde)",
+          background: "var(--verde)",
           color: "#fff",
           display: "flex",
           alignItems: "center",

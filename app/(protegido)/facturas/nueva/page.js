@@ -350,7 +350,8 @@ export default function NuevaFacturaPage() {
         <button
           type="submit"
           disabled={cargando}
-          style={{ width: "100%", background: "var(--sigaf-verde)", color: "#fff", border: "none" }}
+          className="boton"
+          style={{ width: "100%" }}
         >
           {cargando ? "Guardando…" : "Guardar factura"}
         </button>
@@ -362,7 +363,7 @@ export default function NuevaFacturaPage() {
         </p>
       )}
       {mensaje && (
-        <p style={{ fontSize: 12, color: "var(--sigaf-error)", marginTop: 16 }}>
+        <p style={{ fontSize: 12, color: "var(--rojo)", marginTop: 16 }}>
           {mensaje}
         </p>
       )}
