@@ -82,9 +82,9 @@ export default function NuevaFacturaPage() {
 
       const { data: parts, error: errPart } = await supabase
         .from("partidas")
-        .select("id, cuenta_fiat, cuenta_prei, nombre")
+        .select("id, cuenta_prei, nombre")
         .eq("capitulo_id", cap.id)
-        .order("cuenta_fiat", { ascending: true });
+        .order("cuenta_prei", { ascending: true });
 
       if (!activo) return;
 
@@ -115,7 +115,7 @@ export default function NuevaFacturaPage() {
       const { data, error } = await supabase
         .from("contratos")
         .select(
-          "id, numero_interno, numero_ooad, adquisicion_servicio, proveedor_id, proveedores ( id, razon_social, no_proveedor )"
+          "id, numero_interno, adquisicion_servicio, proveedor_id, proveedores ( id, razon_social, no_proveedor )"
         )
         .eq("partida_id", partidaId)
         .order("numero_interno", { ascending: true });
@@ -270,7 +270,7 @@ export default function NuevaFacturaPage() {
           <option value="">Selecciona una partida…</option>
           {partidas.map((p) => (
             <option key={p.id} value={p.id}>
-              {[p.cuenta_fiat, p.nombre].filter(Boolean).join(" — ")}
+              {[p.cuenta_prei, p.nombre].filter(Boolean).join(" — ")}
             </option>
           ))}
         </select>
