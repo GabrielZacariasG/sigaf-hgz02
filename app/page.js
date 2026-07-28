@@ -38,15 +38,18 @@ export default function Portal() {
         }
       };
 
-      const [facturas, firmas, pedidos, cortes, contratos] = await Promise.all([
+      // 'enviadasOoad' cuenta solo las facturas que ya llegaron (o pasaron)
+      // la etapa de envío a OOAD; el total de la tabla va en 'facturas'.
+      const [facturas, enviadasOoad, firmas, pedidos, cortes, contratos] = await Promise.all([
         n('facturas'),
+        n('facturas', q => q.in('estatus_actual', ['enviada_ooad', 'en_tramite_ooad', 'gasto_reflejado'])),
         n('factura_paradas', q => q.is('fecha_regreso', null)),
         n('pedidos_recepcion', q => q.is('fecha_respuesta', null).is('cancelacion_confirmada', null)),
         n('ooad_cortes'),
         n('contratos'),
       ]);
 
-      setC({ facturas, firmas, pedidos, cortes, contratos });
+      setC({ facturas, enviadasOoad, firmas, pedidos, cortes, contratos });
       setCargando(false);
     })();
   }, [router]);
@@ -62,7 +65,7 @@ export default function Portal() {
     { paso: 'Paso 1', titulo: 'Ingreso de facturas', desc: 'Capturar las facturas recibidas del proveedor.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/facturas/nueva', listo: true },
     { paso: 'Paso 2', titulo: 'Circuito de firmas', desc: 'Validación del servicio, administración y dirección.', cifra: c.firmas, etiqueta: 'paradas sin regresar', ruta: '/firmas', listo: false },
     { paso: 'Paso 3', titulo: 'Pedido y recepción', desc: 'Solicitudes a Abastecimiento en espera de respuesta.', cifra: c.pedidos, etiqueta: 'sin respuesta', alerta: true, ruta: '/pedidos', listo: false },
-    { paso: 'Paso 4', titulo: 'Envío a OOAD', desc: 'Facturas enviadas y seguimiento del contra recibo.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/ooad', listo: false },
+    { paso: 'Paso 4', titulo: 'Envío a OOAD', desc: 'Facturas enviadas y seguimiento del contra recibo.', cifra: c.enviadasOoad, etiqueta: 'enviadas a OOAD', ruta: '/ooad', listo: false },
     { paso: 'Paso 5', titulo: 'Conciliación', desc: 'Cruce diario contra el reporte de disponibilidad.', cifra: c.cortes, etiqueta: 'cortes cargados', ruta: '/conciliacion', listo: false },
     { paso: 'Consulta', titulo: 'Catálogos', desc: 'Contratos, proveedores, cuentas y jefaturas.', cifra: c.contratos, etiqueta: 'contratos vigentes', ruta: '/catalogos', listo: false },
   ];
