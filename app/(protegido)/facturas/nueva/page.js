@@ -147,7 +147,6 @@ export default function NuevaFacturaPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setMensaje("");
-    setExito("");
 
     if (!capitulo || !partidaId || !contratoId || !proveedor) {
       setMensaje("Completa capítulo, partida, contrato y proveedor.");
