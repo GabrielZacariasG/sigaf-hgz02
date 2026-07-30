@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 
 // Etiqueta que se muestra en el formulario (campo fijo, no editable).
@@ -35,6 +36,7 @@ async function generarFolioIngreso(anio) {
 }
 
 export default function NuevaFacturaPage() {
+  const router = useRouter();
   const [capitulo, setCapitulo] = useState(null); // { id, nombre }
   const [partidas, setPartidas] = useState([]);
   const [contratos, setContratos] = useState([]);
@@ -50,7 +52,6 @@ export default function NuevaFacturaPage() {
 
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
-  const [exito, setExito] = useState(""); // folio_ingreso generado
 
   // 1) Al montar, resolvemos el capítulo "Servicios Integrales" y
   //    cargamos sus partidas.
@@ -146,7 +147,6 @@ export default function NuevaFacturaPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setMensaje("");
-    setExito("");
 
     if (!capitulo || !partidaId || !contratoId || !proveedor) {
       setMensaje("Completa capítulo, partida, contrato y proveedor.");
@@ -191,42 +191,37 @@ export default function NuevaFacturaPage() {
         return;
       }
 
-      // El año del folio y el año/mes asignado los tomamos del inicio del
-      // periodo. (SUPUESTO razonable; ajustable si el año debe ser el de
-      // captura.)
+      // El año del folio se toma del inicio del periodo. NO enviamos
+      // mes_asignado/anio_asignado: los calcula el trigger BEFORE INSERT
+      // (fn_calcular_mes_y_vigencia) por la regla de mayoría de días.
       const anio = new Date(periodoInicio + "T00:00:00").getFullYear();
-      const mes = new Date(periodoInicio + "T00:00:00").getMonth() + 1;
 
       const folioIngreso = await generarFolioIngreso(anio);
 
-      const { error } = await supabase.from("facturas").insert({
-        folio_ingreso: folioIngreso,
-        folio_proveedor: folioProveedor,
-        capitulo_id: capitulo.id,
-        partida_id: partidaId,
-        contrato_id: contratoId,
-        proveedor_id: proveedor.id,
-        periodo_inicio: periodoInicio,
-        periodo_fin: periodoFin,
-        anio_asignado: anio,
-        mes_asignado: mes,
-        importe_factura: importeNum,
-        estatus_actual: "capturada",
-        created_by: createdBy,
-      });
+      const { data: nueva, error } = await supabase
+        .from("facturas")
+        .insert({
+          folio_ingreso: folioIngreso,
+          folio_proveedor: folioProveedor,
+          capitulo_id: capitulo.id,
+          partida_id: partidaId,
+          contrato_id: contratoId,
+          proveedor_id: proveedor.id,
+          periodo_inicio: periodoInicio,
+          periodo_fin: periodoFin,
+          importe_factura: importeNum,
+          estatus_actual: "capturada",
+          created_by: createdBy,
+        })
+        .select("id")
+        .single();
 
       if (error) {
         setMensaje("No se pudo guardar la factura: " + error.message);
       } else {
-        setExito(folioIngreso);
-        // Limpiamos el formulario para una nueva captura.
-        setPartidaId("");
-        setContratoId("");
-        setProveedor(null);
-        setFolioProveedor("");
-        setPeriodoInicio("");
-        setPeriodoFin("");
-        setImporte("");
+        // Paso 2: capturar el detalle de servicios de esta factura.
+        router.push(`/facturas/${nueva.id}/detalle`);
+        return;
       }
     } catch (err) {
       setMensaje("Error al generar el folio o guardar: " + err.message);
@@ -357,11 +352,6 @@ export default function NuevaFacturaPage() {
         </button>
       </form>
 
-      {exito && (
-        <p style={{ fontSize: 13, color: "#085041", marginTop: 16 }}>
-          Factura capturada. Folio de ingreso: <strong>{exito}</strong>
-        </p>
-      )}
       {mensaje && (
         <p style={{ fontSize: 12, color: "var(--rojo)", marginTop: 16 }}>
           {mensaje}
