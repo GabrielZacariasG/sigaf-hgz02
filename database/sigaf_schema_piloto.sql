@@ -9,9 +9,10 @@
 --  - numero_interno de contrato NO es único por sí solo (se repite en
 --    renovaciones sin convención consistente de sufijo). Llave real:
 --    (numero_interno, vigencia_inicio).
---  - numero_ooad es la fuente de verdad de PeopleSoft; numero_interno
---    puede tener errores de captura y se corrige con uso real via la
---    cola de conciliación (ver ooad_import_filas.matched_factura_id).
+--  - numero_interno puede tener errores de captura; se corrige con uso
+--    real via la cola de conciliación (ver ooad_import_filas.matched_factura_id).
+--  - numero_ooad (formato PeopleSoft) se contempló en el diseño original
+--    pero NO se implementó en el esquema desplegado: la columna no existe.
 --  - Un mes por factura (regla de mayoría de días), NO reparto entre
 --    periodos. No existe tabla factura_periodos.
 --  - IVA es un selector a nivel factura (16% | 0%), no por línea.
@@ -35,7 +36,6 @@ create table capitulos (
 create table partidas (
     id              uuid primary key default gen_random_uuid(),
     capitulo_id     uuid not null references capitulos(id),
-    cuenta_fiat     text,
     cuenta_prei     text,
     nombre          text not null,
     unique (capitulo_id, cuenta_prei)
@@ -54,7 +54,6 @@ create table proveedores (
 create table contratos (
     id                      uuid primary key default gen_random_uuid(),
     numero_interno          text not null,      -- como lo captura el hospital hoy
-    numero_ooad             text,               -- formato PeopleSoft; se llena via conciliación
     proveedor_id            uuid not null references proveedores(id),
     partida_id              uuid not null references partidas(id),
     administrador_contrato  text,
@@ -69,7 +68,6 @@ create table contratos (
     check (vigencia_fin >= vigencia_inicio)
 );
 
-create index idx_contratos_numero_ooad on contratos (numero_ooad);
 create index idx_contratos_vigencia on contratos (vigencia_inicio, vigencia_fin);
 
 -- Catálogo de servicios y precios por contrato (ej. laboratorio IGSA)
@@ -250,7 +248,9 @@ alter table factura_detalle enable row level security;
 create policy facturas_select on facturas
     for select using (auth.uid() is not null);
 
--- Captura: AUO puede insertar
+-- Captura: AUO puede insertar.
+-- NOTA: sigaf_rls_completo.sql reescribe esta política para usar
+-- public.mi_rol() (fix de recursión infinita) y agrega facturas_update_auo.
 create policy facturas_insert_auo on facturas
     for insert with check (
         exists (
@@ -276,8 +276,7 @@ create policy ooad_select on ooad_import_filas
 --   1. Cargar catálogo de capitulos/partidas (ya extraído de
 --      Copia_de_CATALOGO_CAPITULOS.xlsx).
 --   2. Cargar los 18 contratos de Servicios Integrales
---      (CONTRATOS_SERVICIOS_INTEGRALES.xlsx) - numero_ooad queda NULL
---      hasta que llegue el listado "tal cual FINAT".
+--      (CONTRATOS_SERVICIOS_INTEGRALES.xlsx).
 --   3. Cargar los 217 servicios de IGSA con precio_unitario
 --      (PRUEBA_CONTRATO_IGSA.xlsx) como caso de prueba real, incluyendo
 --      la factura FVR-0203124 para validar el flujo completo.

@@ -37,6 +37,23 @@ returns boolean as $$
   );
 $$ language sql stable security definer;
 
+-- mi_rol(): devuelve el rol del usuario actual SIN disparar RLS sobre
+-- usuarios (security definer). Es la pieza que rompe la recursión infinita
+-- en políticas que necesitan consultar el rol. Se agregó como hotfix en
+-- producción; se documenta aquí para que los scripts reflejen el estado real.
+create or replace function public.mi_rol()
+returns public.rol_usuario
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select u.rol from public.usuarios u where u.auth_id = auth.uid() limit 1
+$$;
+
+revoke all on function public.mi_rol() from public;
+grant execute on function public.mi_rol() to authenticated;
+
 -- capitulos
 create policy capitulos_select on capitulos for select using (auth.uid() is not null);
 create policy capitulos_write on capitulos for all using (fn_es_admin()) with check (fn_es_admin());
@@ -68,10 +85,13 @@ create policy alertas_config_write on alertas_config for all using (fn_es_admin(
 
 create policy usuarios_select on usuarios for select using (auth.uid() is not null);
 
+-- Reescrita para usar mi_rol() en vez de un subquery directo sobre
+-- usuarios: ese subquery, en una política de la PROPIA tabla usuarios,
+-- causaba recursión infinita. Fix aplicado en producción.
 create policy usuarios_write on usuarios for all using (
-    exists (select 1 from usuarios u where u.auth_id = auth.uid() and u.rol = 'jefa_finanzas')
+    public.mi_rol() = 'jefa_finanzas'::rol_usuario
 ) with check (
-    exists (select 1 from usuarios u where u.auth_id = auth.uid() and u.rol = 'jefa_finanzas')
+    public.mi_rol() = 'jefa_finanzas'::rol_usuario
 );
 
 -- ---------------------------------------------------------------------
@@ -113,6 +133,26 @@ create policy ooad_lotes_write on ooad_import_lotes for all using (fn_es_admin()
 create policy historial_select on factura_estatus_historial for select using (auth.uid() is not null);
 
 alter function fn_registrar_historial_estatus() security definer;
+
+-- ---------------------------------------------------------------------
+-- 7. facturas: escritura por rol + fix de recursión
+--    - facturas_insert_auo se reescribe para usar mi_rol() (el subquery
+--      directo sobre usuarios causaba la recursión infinita).
+--    - facturas_update_auo es NUEVA: el paso 2 (detalle) necesita
+--      UPDATE facturas para fijar tasa_iva, y el trigger de recálculo
+--      (fn_recalcular_totales_factura) también hace UPDATE facturas
+--      corriendo como el usuario. Sin esta política ambos se bloquean.
+-- ---------------------------------------------------------------------
+
+drop policy if exists facturas_insert_auo on facturas;
+create policy facturas_insert_auo on facturas
+    for insert
+    with check ( public.mi_rol() = any (array['auo','jefe_presupuesto','jefa_finanzas']::rol_usuario[]) );
+
+create policy facturas_update_auo on facturas
+    for update
+    using      ( public.mi_rol() = any (array['auo','jefe_presupuesto','jefa_finanzas']::rol_usuario[]) )
+    with check ( public.mi_rol() = any (array['auo','jefe_presupuesto','jefa_finanzas']::rol_usuario[]) );
 
 -- =====================================================================
 -- Verificación sugerida después de correr esto:
