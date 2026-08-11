@@ -5,6 +5,19 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 
+const diasEntre = (desde) =>
+  Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 86400000));
+
+// ¿La factura está estancada en ese eje? (entró a su etapa actual hace más
+// días que el umbral de alertas_config para ese circuito/estatus).
+function ejeEstancado(hist, circuito, valor, umbralMap) {
+  const propias = hist.filter((h) => h.circuito === circuito && h.estatus === valor);
+  if (!propias.length) return false;
+  const entrada = propias.reduce((m, h) => (h.fecha > m ? h.fecha : m), propias[0].fecha);
+  const lim = umbralMap[`${circuito}:${valor}`];
+  return lim != null && diasEntre(entrada) > lim;
+}
+
 export default function Portal() {
   const router = useRouter();
   const [cargando, setCargando] = useState(true);
@@ -23,9 +36,7 @@ export default function Portal() {
         .single();
       setUsuario(u);
 
-      // Cuenta filas de una tabla. Si la tabla aún no existe (o hay
-      // cualquier otro error), devuelve 0 en vez de propagar la excepción,
-      // para que una tabla faltante no tumbe todo el panel.
+      // Cuenta filas de una tabla; 0 si falla (tabla faltante, etc.).
       const n = async (tabla, filtro) => {
         try {
           let q = supabase.from(tabla).select('*', { count: 'exact', head: true });
@@ -33,23 +44,47 @@ export default function Portal() {
           const { count, error } = await q;
           if (error) return 0;
           return count ?? 0;
-        } catch {
-          return 0;
-        }
+        } catch { return 0; }
       };
 
-      // 'enviadasOoad' cuenta solo las facturas que ya llegaron (o pasaron)
-      // la etapa de envío a OOAD; el total de la tabla va en 'facturas'.
-      const [facturas, enviadasOoad, firmas, pedidos, cortes, contratos] = await Promise.all([
+      // Seguimiento: facturas activas (no 'gasto_reflejado') y estancadas
+      // (cualquiera de los 3 ejes supera su umbral). Resiliente si el
+      // esquema de 3 ejes aún no se migró.
+      const seguimiento = async () => {
+        try {
+          const [rF, rA, rH] = await Promise.all([
+            supabase.from('facturas').select('id, estatus_general, estatus_firmas, estatus_pedido_recepcion'),
+            supabase.from('alertas_config').select('circuito, estatus, dias_umbral'),
+            supabase.from('factura_estatus_historial').select('factura_id, circuito, estatus, fecha'),
+          ]);
+          if (rF.error) return { activas: 0, estancadas: 0 };
+          const umbralMap = {};
+          (rA.data || []).forEach((a) => (umbralMap[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
+          const histByF = {};
+          (rH.data || []).forEach((h) => (histByF[h.factura_id] ||= []).push(h));
+
+          let activas = 0, estancadas = 0;
+          for (const f of rF.data || []) {
+            if (f.estatus_general !== 'gasto_reflejado') activas++;
+            const hist = histByF[f.id] || [];
+            const est =
+              ejeEstancado(hist, 'general', f.estatus_general, umbralMap) ||
+              ejeEstancado(hist, 'firmas', f.estatus_firmas, umbralMap) ||
+              ejeEstancado(hist, 'pedido_recepcion', f.estatus_pedido_recepcion, umbralMap);
+            if (est) estancadas++;
+          }
+          return { activas, estancadas };
+        } catch { return { activas: 0, estancadas: 0 }; }
+      };
+
+      const [facturas, contratos, cortes, seg] = await Promise.all([
         n('facturas'),
-        n('facturas', q => q.in('estatus_general', ['enviada_ooad', 'en_tramite_ooad', 'gasto_reflejado'])),
-        n('factura_paradas', q => q.is('fecha_regreso', null)),
-        n('pedidos_recepcion', q => q.is('fecha_respuesta', null).is('cancelacion_confirmada', null)),
-        n('ooad_cortes'),
         n('contratos'),
+        n('ooad_cortes'),
+        seguimiento(),
       ]);
 
-      setC({ facturas, enviadasOoad, firmas, pedidos, cortes, contratos });
+      setC({ facturas, contratos, cortes, activas: seg.activas, estancadas: seg.estancadas });
       setCargando(false);
     })();
   }, [router]);
@@ -62,12 +97,30 @@ export default function Portal() {
   if (cargando) return <p className="cargando">Cargando…</p>;
 
   const tarjetas = [
-    { paso: 'Paso 1', titulo: 'Ingreso de facturas', desc: 'Capturar las facturas recibidas del proveedor.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/facturas/nueva', listo: true },
-    { paso: 'Paso 2', titulo: 'Circuito de firmas', desc: 'Validación del servicio, administración y dirección.', cifra: c.firmas, etiqueta: 'paradas sin regresar', ruta: '/firmas', listo: false },
-    { paso: 'Paso 3', titulo: 'Pedido y recepción', desc: 'Solicitudes a Abastecimiento en espera de respuesta.', cifra: c.pedidos, etiqueta: 'sin respuesta', alerta: true, ruta: '/pedidos', listo: false },
-    { paso: 'Paso 4', titulo: 'Envío a OOAD', desc: 'Facturas enviadas y seguimiento del contra recibo.', cifra: c.enviadasOoad, etiqueta: 'enviadas a OOAD', ruta: '/ooad', listo: false },
-    { paso: 'Paso 5', titulo: 'Conciliación', desc: 'Cruce diario contra el reporte de disponibilidad.', cifra: c.cortes, etiqueta: 'cortes cargados', ruta: '/conciliacion', listo: false },
-    { paso: 'Consulta', titulo: 'Catálogos', desc: 'Contratos, proveedores, cuentas y jefaturas.', cifra: c.contratos, etiqueta: 'contratos vigentes', ruta: '/catalogos', listo: false },
+    {
+      paso: 'Paso 1', titulo: 'Ingreso de facturas',
+      desc: 'Capturar las facturas recibidas del proveedor.',
+      cifra: c.facturas, etiqueta: 'facturas capturadas',
+      ruta: '/facturas/nueva', listo: true,
+    },
+    {
+      paso: 'Paso 2', titulo: 'Seguimiento de facturas',
+      desc: 'Estatus general + circuitos de firmas y pedido-recepción, con alertas de estancamiento.',
+      cifra: c.estancadas, etiqueta: `estancada(s) · ${c.activas} en seguimiento`,
+      alerta: true, ruta: '/facturas', listo: true,
+    },
+    {
+      paso: 'Paso 3', titulo: 'Conciliación',
+      desc: 'Cruce contra el reporte de disponibilidad de OOAD.',
+      cifra: c.cortes, etiqueta: 'cortes cargados',
+      ruta: '/conciliacion', listo: false,
+    },
+    {
+      paso: 'Consulta', titulo: 'Catálogos',
+      desc: 'Contratos, proveedores, cuentas y jefaturas.',
+      cifra: c.contratos, etiqueta: 'contratos',
+      ruta: '/catalogos', listo: false,
+    },
   ];
 
   return (
@@ -105,14 +158,8 @@ export default function Portal() {
                 )}
               </>
             );
-            // Solo las tarjetas listas navegan; las demás quedan estáticas.
             return t.listo ? (
-              <Link
-                key={t.titulo}
-                href={t.ruta}
-                className="tarjeta"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-              >
+              <Link key={t.titulo} href={t.ruta} className="tarjeta" style={{ textDecoration: 'none', color: 'inherit' }}>
                 {cuerpo}
               </Link>
             ) : (
