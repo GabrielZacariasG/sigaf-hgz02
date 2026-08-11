@@ -83,6 +83,12 @@ export default function ProtegidoLayout({ children }) {
             </strong>
           </Link>
           <Link
+            href="/"
+            style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}
+          >
+            Panel
+          </Link>
+          <Link
             href="/facturas"
             style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}
           >
