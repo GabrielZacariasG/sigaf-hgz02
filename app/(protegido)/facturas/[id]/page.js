@@ -133,14 +133,32 @@ export default function FacturaEstatusPage() {
 
   async function cambiarEstatus() {
     setMensaje("");
+
+    // Defensa 1: exigir sesión válida antes de intentar. Sin sesión, el
+    // UPDATE saldría sin auth.uid() y RLS lo filtraría a 0 filas SIN error.
+    const { data: sesion } = await supabase.auth.getSession();
+    if (!sesion?.session) {
+      setMensaje("Tu sesión no es válida. Vuelve a iniciar sesión e inténtalo de nuevo.");
+      return;
+    }
+
     setGuardando(true);
     try {
-      const { error } = await supabase
+      // Defensa 2: .select() regresa las filas realmente actualizadas.
+      // Si RLS/sesión/permiso filtró la fila, `data` viene vacío (0 filas)
+      // aunque `error` sea null -> lo tratamos como fallo visible.
+      const { data, error } = await supabase
         .from("facturas")
         .update({ estatus_actual: nuevoEstatus })
-        .eq("id", facturaId);
+        .eq("id", facturaId)
+        .select("id, estatus_actual");
+
       if (error) {
         setMensaje("No se pudo cambiar el estatus: " + error.message);
+      } else if (!data || data.length === 0) {
+        setMensaje(
+          "El cambio NO se guardó (0 filas afectadas). Suele ser un problema de sesión o de permisos: recarga la página o vuelve a iniciar sesión e inténtalo de nuevo."
+        );
       } else {
         await cargar(); // refresca factura + historial (nueva entrada del trigger)
       }
@@ -219,11 +237,21 @@ export default function FacturaEstatusPage() {
       {/* Stepper */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "16px 18px", marginTop: 8 }}>
         {FLUJO.map((st, i) => {
-          const done = i < idxActual;
+          // "Registrada" = existe un renglón real en el historial para esta
+          // etapa (de verdad se pasó por ella). El ✓ ya NO depende de la
+          // posición respecto a la etapa actual.
+          const registrada = fechaEntrada[st] != null;
           const actual = i === idxActual;
-          const fecha = fechaEntrada[st];
+          const done = registrada && !actual; // etapa pasada y con registro real
+          const omitida = !registrada && i < idxActual; // "antes" de la actual pero nunca registrada = saltada
           const quien = historial.find((h) => h.estatus === st)?.usuarios?.nombre;
-          const color = actual ? "var(--verde)" : done ? "var(--verde-oscuro)" : "var(--borde)";
+          const color = actual
+            ? "var(--verde)"
+            : done
+            ? "var(--verde-oscuro)"
+            : omitida
+            ? "var(--ambar)"
+            : "var(--borde)";
           return (
             <div key={st} style={{ display: "flex", gap: 12, paddingBottom: i < FLUJO.length - 1 ? 14 : 0, position: "relative" }}>
               {/* línea vertical */}
@@ -231,17 +259,18 @@ export default function FacturaEstatusPage() {
                 <div style={{ position: "absolute", left: 9, top: 20, bottom: 0, width: 2, background: done ? "var(--verde-oscuro)" : "var(--borde)" }} />
               )}
               {/* punto */}
-              <div style={{ width: 20, height: 20, borderRadius: "50%", background: done || actual ? color : "var(--blanco)", border: `2px solid ${color}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, zIndex: 1 }}>
-                {done ? "✓" : ""}
+              <div style={{ width: 20, height: 20, borderRadius: "50%", background: done || actual ? color : "var(--blanco)", border: `2px solid ${color}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: done ? "#fff" : "var(--ambar)", fontSize: 12, fontWeight: 700, zIndex: 1 }}>
+                {done ? "✓" : omitida ? "!" : ""}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: actual ? 700 : 400, color: actual || done ? "var(--texto)" : "var(--texto-suave)" }}>
+                <div style={{ fontSize: 14, fontWeight: actual ? 700 : 400, color: actual || done ? "var(--texto)" : omitida ? "var(--ambar)" : "var(--texto-suave)" }}>
                   {ESTATUS_LABEL[st]}
                   {actual && <span style={{ fontSize: 11, color: "var(--verde)", marginLeft: 8 }}>● actual</span>}
+                  {omitida && <span style={{ fontSize: 11, color: "var(--ambar)", marginLeft: 8 }}>omitida (sin registro)</span>}
                 </div>
-                {fecha && (
+                {registrada && (
                   <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>
-                    {fechaCorta(fecha)}{quien ? ` · ${quien}` : ""}
+                    {fechaCorta(fechaEntrada[st])}{quien ? ` · ${quien}` : ""}
                   </div>
                 )}
               </div>
