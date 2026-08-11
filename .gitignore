@@ -2,3 +2,6 @@ node_modules
 .next
 .env.local
 .DS_Store
+
+# PDFs fuente de contratos (documentos pesados, no van al repo)
+contratos_pdf/
