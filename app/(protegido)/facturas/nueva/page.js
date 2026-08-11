@@ -210,7 +210,7 @@ export default function NuevaFacturaPage() {
           periodo_inicio: periodoInicio,
           periodo_fin: periodoFin,
           importe_factura: importeNum,
-          estatus_actual: "capturada",
+          estatus_general: "capturada",
           created_by: createdBy,
         })
         .select("id")

@@ -42,7 +42,7 @@ export default function Portal() {
       // la etapa de envío a OOAD; el total de la tabla va en 'facturas'.
       const [facturas, enviadasOoad, firmas, pedidos, cortes, contratos] = await Promise.all([
         n('facturas'),
-        n('facturas', q => q.in('estatus_actual', ['enviada_ooad', 'en_tramite_ooad', 'gasto_reflejado'])),
+        n('facturas', q => q.in('estatus_general', ['enviada_ooad', 'en_tramite_ooad', 'gasto_reflejado'])),
         n('factura_paradas', q => q.is('fecha_regreso', null)),
         n('pedidos_recepcion', q => q.is('fecha_respuesta', null).is('cancelacion_confirmada', null)),
         n('ooad_cortes'),
