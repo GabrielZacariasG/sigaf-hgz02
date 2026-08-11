@@ -21,7 +21,7 @@ const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
 const diasEntre = (desde) =>
-  Math.floor((Date.now() - new Date(desde).getTime()) / 86400000);
+  Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 86400000));
 
 export default function FacturasListaPage() {
   const [facturas, setFacturas] = useState([]);

@@ -39,7 +39,7 @@ const fechaCorta = (d) =>
   new Date(d).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
 const diasEntre = (desde) =>
-  Math.floor((Date.now() - new Date(desde).getTime()) / 86400000);
+  Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 86400000));
 
 export default function FacturaEstatusPage() {
   const facturaId = useParams().id;
