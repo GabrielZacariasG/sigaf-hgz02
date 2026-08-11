@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
 // Layout protegido: envuelve a todas las páginas del grupo (protegido).
@@ -75,9 +76,19 @@ export default function ProtegidoLayout({ children }) {
           padding: "12px 20px",
         }}
       >
-        <strong style={{ fontSize: 15, letterSpacing: 0.2 }}>
-          SIGAF · HGZ No. 02
-        </strong>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
+            <strong style={{ fontSize: 15, letterSpacing: 0.2 }}>
+              SIGAF · HGZ No. 02
+            </strong>
+          </Link>
+          <Link
+            href="/facturas"
+            style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}
+          >
+            Facturas
+          </Link>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 13, color: "rgba(255,255,255,0.9)" }}>
             {nombre}
@@ -95,7 +106,7 @@ export default function ProtegidoLayout({ children }) {
         </div>
       </header>
 
-      <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
+      <main style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
         {children}
       </main>
     </div>
