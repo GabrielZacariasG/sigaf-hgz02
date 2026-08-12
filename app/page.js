@@ -77,14 +77,14 @@ export default function Portal() {
         } catch { return { activas: 0, estancadas: 0 }; }
       };
 
-      const [facturas, contratos, cortes, seg] = await Promise.all([
+      const [facturas, contratos, cuentas, seg] = await Promise.all([
         n('facturas'),
         n('contratos'),
-        n('ooad_cortes'),
+        n('disponibilidad_presupuestal'),
         seguimiento(),
       ]);
 
-      setC({ facturas, contratos, cortes, activas: seg.activas, estancadas: seg.estancadas });
+      setC({ facturas, contratos, cuentas, activas: seg.activas, estancadas: seg.estancadas });
       setCargando(false);
     })();
   }, [router]);
@@ -110,10 +110,10 @@ export default function Portal() {
       alerta: true, ruta: '/facturas', listo: true,
     },
     {
-      paso: 'Paso 3', titulo: 'Conciliación',
-      desc: 'Cruce contra el reporte de disponibilidad de OOAD.',
-      cifra: c.cortes, etiqueta: 'cortes cargados',
-      ruta: '/conciliacion', listo: false,
+      paso: 'Paso 3', titulo: 'Disponibilidad presupuestal',
+      desc: 'Gasto real vs FINAT por cuenta, con partición pasivo / ejercicio corriente.',
+      cifra: c.cuentas, etiqueta: 'cuenta(s) con datos',
+      ruta: '/disponibilidad', listo: true,
     },
     {
       paso: 'Consulta', titulo: 'Catálogos',
