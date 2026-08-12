@@ -85,7 +85,7 @@ select v.folio_ingreso, v.folio_proveedor,
   pa.capitulo_id, c.partida_id, c.id, c.proveedor_id,
   v.periodo_inicio::date, v.periodo_fin::date, v.mes_asig, v.anio_asig, 0, v.importe,
   'gasto_reflejado','autorizada_admin_contrato','generado',
-  true, v.cr, v.tipo, v.num_pac
+  true, v.cr, v.tipo::tipo_entrega_enum, v.num_pac
 from (values
   ('HGZ2-INT-HIST-092', '63562143', '050GYR988T02024-001-00', '2025-11-14', '2025-11-14', 12, 2025, 8784, '452457', 'FARMACIA', null),
   ('HGZ2-INT-HIST-093', '63567488', '050GYR988T02024-001-00', '2025-10-26', '2025-11-13', 12, 2025, 190557.9, '459614', 'DOMICILIO', 29),
@@ -136,7 +136,7 @@ join facturas f on f.folio_ingreso = h.folio_ingreso;
 -- 7) Backfill de las 14 facturas de 51251013 ya migradas (Lote 1):
 --    tipo_entrega, num_pacientes, contra recibo, IVA 0 y periodo real.
 update facturas f
-set tipo_entrega    = v.tipo,
+set tipo_entrega    = v.tipo::tipo_entrega_enum,
     num_pacientes   = v.num_pac,
     cr_contrarecibo = v.cr,
     tasa_iva        = 0,
