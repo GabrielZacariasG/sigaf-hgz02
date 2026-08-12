@@ -15,7 +15,16 @@ alter table facturas add column if not exists tipo_entrega    text check (tipo_e
 alter table facturas add column if not exists num_pacientes   integer;
 
 -- 2) Tabla de disponibilidad presupuestal (volcado FINAT/dispo, recargable)
-create table if not exists disponibilidad_presupuestal (
+--    Recrear si existe vacía (una sesión previa pudo dejarla con otra forma).
+do $$ begin
+  if to_regclass('public.disponibilidad_presupuestal') is not null then
+    if (select count(*) from disponibilidad_presupuestal) > 0 then
+      raise exception 'disponibilidad_presupuestal ya tiene datos; no la recreo. Avisame para conciliar.';
+    end if;
+    drop table disponibilidad_presupuestal cascade;
+  end if;
+end $$;
+create table disponibilidad_presupuestal (
   id              uuid primary key default gen_random_uuid(),
   cuenta_prei     text not null,
   periodo         text not null,             -- ej. '2026' (ejercicio) o '2026M08'
@@ -38,7 +47,16 @@ do $$ begin
 end $$;
 
 -- 3) Tabla de ajustes de devengo (nunca es factura)
-create table if not exists ajustes_devengo (
+--    Recrear si existe vacía (una sesión previa la creó con otra forma).
+do $$ begin
+  if to_regclass('public.ajustes_devengo') is not null then
+    if (select count(*) from ajustes_devengo) > 0 then
+      raise exception 'ajustes_devengo ya tiene datos; no la recreo. Avisame para conciliar.';
+    end if;
+    drop table ajustes_devengo cascade;
+  end if;
+end $$;
+create table ajustes_devengo (
   id                uuid primary key default gen_random_uuid(),
   partida_id        uuid not null references partidas(id),
   contrato_id       uuid references contratos(id),
