@@ -297,7 +297,107 @@ documento o con lo reportado en sesiones anteriores.
 
 ---
 
-## 9. Principio general de trabajo con el usuario
+## 9. Mecanismo de disponibilidad presupuestal y conciliación (dispo → resumen → integrales)
+
+Descubierto al analizar el Excel histórico real (`historico/Copia de 00
+Cedula Gasto 2026 RESPALDO -.xlsx`). Documenta cómo funciona hoy la
+conciliación presupuestal manual, para diseñar su reemplazo en SIGAF.
+
+### 9.1 La cadena de fórmulas (as-is en Excel)
+
+```
+dispo  (reporte PeopleSoft "Disponibilidad Presupuestal", ID IMKK022;
+        el usuario lo pega COMPLETO cada día — es el volcado del día)
+  │  SUMIF / SUMIFS por Cuenta contable (col A) [+ Centro de Costo]
+  ▼
+resumen  (~733 fórmulas): por cada cuenta agrega desde dispo →
+   D=Presupuesto · E=Gasto · F=Comprometido · G=Precomprometido · H=Disponible
+  │  =resumen!E4x   (el "Gasto" ejercido según PeopleSoft, por cuenta)
+  ▼
+integrales  (cabecera de cada uno de los 11 bloques, filas 1-4):
+   J4 / AA4 / BF4 / …  = resumen!E4x         → gasto reflejado en dispo
+   fila 1 (K1, AB1, …) = Pagado(cédula) − resumen!E4x   → SALDO / diferencia
+   A1 = suma de los 11 saldos                → descuadre global del ejercicio
+   L1 = "270 error en carga"                 → anotación manual del descuadre
+```
+
+`integrales` **no** referencia `dispo` directamente: siempre pasa por
+`resumen`. Otras pestañas que sí consumen `dispo`: `pto` (~114 fórmulas),
+`resumen` (~733), `area médica`, `am`, `subrogados`.
+
+### 9.2 Conclusión clave para el diseño de SIGAF
+
+**Pantalla 5 (Conciliación con OOAD) y Pantalla 6 (Disponibilidad
+presupuestal) NO son dos pantallas independientes.** Comparten:
+
+- **El mismo modelo de datos base**: una tabla `disponibilidad_presupuestal`
+  recargable a diario (el volcado de PeopleSoft/dispo), con la misma
+  estructura de columnas del reporte oficial (ver 9.3).
+- **La misma lógica central**: comparar **lo pagado en SIGAF** (las
+  `facturas` con `estatus_general = 'gasto_reflejado'`) contra **lo que
+  refleja el reporte oficial de PeopleSoft** (columna Gasto de dispo),
+  **agregado por cuenta contable**, y **señalar cualquier diferencia**.
+
+El caso real del "$270 error en carga" (ver 9.5) es exactamente el tipo
+de diferencia que esta lógica debe detectar de forma automática, en vez
+de depender de una anotación manual en una celda.
+
+### 9.3 Estructura de la pestaña `dispo` (12 columnas)
+
+Reporte PeopleSoft IMKK022 (Dirección de Finanzas). Metadatos en filas
+1-8; encabezado en fila 9; datos desde la fila 10.
+
+| Col | Campo | | Col | Campo |
+|---|---|---|---|---|
+| A | Cuenta (contable) | | G | **Presupuesto** |
+| B | Uni. Explotación | | H | **Gasto** |
+| C | Centro Costo | | I | Comprometido |
+| D | Uni. Información | | J | Precomprometido |
+| E | Proyecto | | K | Disponible |
+| F | Periodo (`2026M08`) | | L | (vacía) |
+
+### 9.4 Mapeo cuenta contable ↔ centro de costo ↔ servicio ↔ contrato (11 bloques)
+
+Referencia para construir el modelo. Cada bloque de `integrales` = una
+cuenta contable × un centro de costo × un servicio (con uno o varios
+contratos/proveedores). "Gasto dispo" es la celda `resumen!E4x` que
+alimenta el saldo del bloque.
+
+| Bloque | Cuenta | C.Costo | Clave (DPA) | Servicio | Proveedor(es) principal(es) | Gasto dispo (resumen!E) | Saldo |
+|---|---|---|---|---|---|--:|--:|
+| 1 | 51251012 | 200217 | 42060317 | Soluciones | BAXTER / PISA | E42 = 5,371,235.62 | **−270 ⚠** |
+| 2 | 51251013 | 200217 | 42060318 | Soluciones | PISA | E43 = 1,824,055.78 | 0 |
+| 3 | 51331013 | 200205 | 42060417 | Laboratorio + banco de sangre | IGSA | E44 = 15,216,267.91 | 0 |
+| 4 | 51331014 | 200227 | 42060418 | Hemodiálisis intramuros | REACTIVOS Y QUÍMICOS | E45 = 11,000,901.76 | 0 |
+| 5 | 51331015 | 200219 | 42060419 | Cirugía mínima invasiva | INTERMET | E46 = 4,926,734.60 | 0 |
+| 6 | 51331017 | 200207 | 42060422 | Digitalización e imagen | RELIABLE DE MÉXICO | E47 = 3,066,730.28 | 0 |
+| 7 | 51331020 | 200223 | 42060425 | Banco de sangre | BIODIST | E49 = 917,742.23 | 0 |
+| 8 | 51331002 | 200227 | 42061604 | Hemodiálisis extramuros (subrogado) | (contrato N09825-108) | E51 = 11,715,976.80 | 0 |
+| 9 | 51331024 | 200263 | 42062114 | Mezclas | PRODUCTOS HOSPITALARIOS | E52 = 352,079.72 | 0 |
+| 10 | 51321003 | 200217 | — | (varios menores) | PRO OMNIMEDIC / GRUPO EMEQUR | E48 = 0.00 | 0 |
+| 11 | (vacío) | 200223 | 42060430 | — | — | E50 = 0.00 | 0 |
+
+Notas de la cabecera: PASIVO = arrastre de periodos anteriores (suma de
+renglones específicos, por bloque); B4 trae precio unitario por sesión
+(`397 × 1.16`); B5 usa tabuladores `T10`/`T15`; B7 aplica un 8%
+(`CT3 × 8%`); B3 marca "Vigencia". Un mismo bloque agrupa varios
+contratos (ver `database/sigaf_migracion_lote1_integrales.sql` y la
+clasificación A/B/C para el detalle contrato por contrato).
+
+### 9.5 Pendiente sin resolver: "$270 error en carga" (bloque 1)
+
+El bloque 1 (cuenta **51251012**, soluciones BAXTER/PISA) tiene un
+descuadre real de **−$270.00** entre lo pagado en la cédula
+(5,370,965.62) y el gasto reflejado en dispo (5,371,235.62), anotado a
+mano como `"270 error en carga"` en la celda `L1`. Es la **única**
+desviación del ejercicio (el global `A1` = −$270). **Queda como pendiente
+de investigación** — no se corrige ahora; se registra aquí para
+retomarlo cuando se construya la conciliación y se tenga el histórico
+completo cargado.
+
+---
+
+## 10. Principio general de trabajo con el usuario
 
 Gabriel **no es una persona de sistemas**. Prefiere:
 - Explicaciones directas, sin jerga sin explicar.
