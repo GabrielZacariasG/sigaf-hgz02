@@ -14,17 +14,8 @@ alter table facturas add column if not exists cr_contrarecibo text;
 alter table facturas add column if not exists tipo_entrega    text check (tipo_entrega in ('DOMICILIO','FARMACIA'));
 alter table facturas add column if not exists num_pacientes   integer;
 
--- 2) Tabla de disponibilidad presupuestal (volcado FINAT/dispo, recargable)
---    Recrear si existe vacía (una sesión previa pudo dejarla con otra forma).
-do $$ begin
-  if to_regclass('public.disponibilidad_presupuestal') is not null then
-    if (select count(*) from disponibilidad_presupuestal) > 0 then
-      raise exception 'disponibilidad_presupuestal ya tiene datos; no la recreo. Avisame para conciliar.';
-    end if;
-    drop table disponibilidad_presupuestal cascade;
-  end if;
-end $$;
-create table disponibilidad_presupuestal (
+-- 2) Tabla de disponibilidad presupuestal (no existía; se crea)
+create table if not exists disponibilidad_presupuestal (
   id              uuid primary key default gen_random_uuid(),
   cuenta_prei     text not null,
   periodo         text not null,             -- ej. '2026' (ejercicio) o '2026M08'
@@ -46,27 +37,9 @@ do $$ begin
   end if;
 end $$;
 
--- 3) Tabla de ajustes de devengo (nunca es factura)
---    Recrear si existe vacía (una sesión previa la creó con otra forma).
-do $$ begin
-  if to_regclass('public.ajustes_devengo') is not null then
-    if (select count(*) from ajustes_devengo) > 0 then
-      raise exception 'ajustes_devengo ya tiene datos; no la recreo. Avisame para conciliar.';
-    end if;
-    drop table ajustes_devengo cascade;
-  end if;
-end $$;
-create table ajustes_devengo (
-  id                uuid primary key default gen_random_uuid(),
-  partida_id        uuid not null references partidas(id),
-  contrato_id       uuid references contratos(id),
-  descripcion       text,
-  importe           numeric(14,2) not null,
-  mes_presupuestal  integer not null check (mes_presupuestal between 1 and 12),
-  anio_presupuestal integer not null,
-  origen            text,
-  created_at        timestamptz not null default now()
-);
+-- 3) ajustes_devengo YA EXISTE (creada por la otra sesión con sus columnas:
+--    contrato_id, mes_presupuestal, anio_presupuestal, importe, valor_unitario,
+--    unidades, motivo). No se recrea; solo se asegura RLS de lectura.
 alter table ajustes_devengo enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where tablename='ajustes_devengo' and policyname='deveng_select') then
@@ -179,13 +152,16 @@ from (values
 join contratos c on c.numero_interno = v.contrato
 where f.folio_proveedor = v.folio_proveedor and f.contrato_id = c.id;
 
--- 8) Devengo (no es factura)
-insert into ajustes_devengo (partida_id, contrato_id, descripcion, importe, mes_presupuestal, anio_presupuestal, origen)
-select (select partida_id from contratos where numero_interno='050GYR988T001025-022-00' limit 1),
-       (select id from contratos where numero_interno='050GYR988T01525-001-00' limit 1),
-       'Devengo cédula 2026 (4 unidades x 13,922.37)', 55689.48, 7, 2026,
-       'Cédula 00 - bloque integrales, cuenta 51251013'
-where not exists (select 1 from ajustes_devengo where descripcion = 'Devengo cédula 2026 (4 unidades x 13,922.37)');
+-- 8) Devengo (no es factura). Adaptado a las columnas reales de la tabla
+--    existente; idempotente (solo inserta si aún no está).
+insert into ajustes_devengo (contrato_id, mes_presupuestal, anio_presupuestal, importe, valor_unitario, unidades, motivo)
+select (select id from contratos where numero_interno='050GYR988T01525-001-00' limit 1),
+       7, 2026, 55689.48, 13922.37, 4, 'Devengo cedula 2026 (cuenta 51251013)'
+where not exists (
+  select 1 from ajustes_devengo
+  where contrato_id = (select id from contratos where numero_interno='050GYR988T01525-001-00' limit 1)
+    and importe = 55689.48 and mes_presupuestal = 7 and anio_presupuestal = 2026
+);
 
 -- 9) Disponibilidad FINAT de la cuenta (del reporte dispo)
 insert into disponibilidad_presupuestal (cuenta_prei, periodo, presupuesto, gasto, comprometido, precomprometido, disponible)

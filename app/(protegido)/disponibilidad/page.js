@@ -37,7 +37,7 @@ export default function DisponibilidadPage() {
           "id, folio_ingreso, folio_proveedor, importe_factura, es_pasivo, mes_presupuestal, anio_presupuestal, tipo_entrega, num_pacientes, cr_contrarecibo, periodo_inicio, periodo_fin, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno, vigencia_inicio, vigencia_fin )"
         ).eq("partida_id", rP.data.id),
         supabase.from("disponibilidad_presupuestal").select("*").eq("cuenta_prei", CUENTA).eq("periodo", PERIODO).maybeSingle(),
-        supabase.from("ajustes_devengo").select("importe").eq("partida_id", rP.data.id),
+        supabase.from("ajustes_devengo").select("importe, contratos!inner(partida_id)").eq("contratos.partida_id", rP.data.id),
       ]);
 
       if (rF.error) { setError("No se pudieron leer las facturas: " + rF.error.message); setCargando(false); return; }
