@@ -55,7 +55,7 @@ insert into facturas
    estatus_general, estatus_firmas, estatus_pedido_recepcion, es_pasivo, cr_contrarecibo)
 select v.folio_ingreso, v.folio_proveedor, pa.capitulo_id, c.partida_id, c.id, c.proveedor_id,
   v.periodo_inicio::date, v.periodo_fin::date, v.mes_asig, v.anio_asig, 0.16, v.importe,
-  v.gen, v.fir, v.ped, v.es_pasivo, v.cr
+  v.gen::estatus_general, v.fir::estatus_firmas, v.ped::estatus_pedido_recepcion, v.es_pasivo, v.cr
 from (values
   ('HGZ2-INT-HIST-099', 'EF572881', '050GYR988T00425-001-00', '2025-10-26', '2025-11-25', 3, 2026, 263582.36, 'gasto_reflejado', 'autorizada_admin_contrato', 'generado', true, '453972'),
   ('HGZ2-INT-HIST-100', 'EF575658', '050GYR988T00425-001-00', '2025-11-26', '2025-12-25', 3, 2026, 258689.88, 'gasto_reflejado', 'autorizada_admin_contrato', 'generado', true, '453993'),
