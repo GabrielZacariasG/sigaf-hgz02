@@ -28,7 +28,7 @@ export default function DisponibilidadPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setError("Sesión no iniciada."); setCargando(false); return; }
 
-      const rP = await supabase.from("partidas").select("id, cuenta_prei, nombre").eq("cuenta_prei", CUENTA).maybeSingle();
+      const rP = await supabase.from("partidas").select("id, cuenta_finat, nombre").eq("cuenta_finat", CUENTA).maybeSingle();
       if (rP.error || !rP.data) { setError("No se encontró la partida " + CUENTA + ". ¿Corriste el SQL de la Fase 2?"); setCargando(false); return; }
       setPartida(rP.data);
 
