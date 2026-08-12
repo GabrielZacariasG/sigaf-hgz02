@@ -158,9 +158,10 @@ insert into ajustes_devengo (contrato_id, mes_presupuestal, anio_presupuestal, i
 select (select id from contratos where numero_interno='050GYR988T01525-001-00' limit 1),
        7, 2026, 55689.48, 13922.37, 4, 'Devengo cedula 2026 (cuenta 51251013)'
 where not exists (
-  select 1 from ajustes_devengo
-  where contrato_id = (select id from contratos where numero_interno='050GYR988T01525-001-00' limit 1)
-    and importe = 55689.48 and mes_presupuestal = 7 and anio_presupuestal = 2026
+  select 1 from ajustes_devengo ad
+  join contratos c2 on c2.id = ad.contrato_id
+  join partidas  p2 on p2.id = c2.partida_id
+  where p2.cuenta_prei = '51251013' and ad.importe = 55689.48
 );
 
 -- 9) Disponibilidad FINAT de la cuenta (del reporte dispo)
