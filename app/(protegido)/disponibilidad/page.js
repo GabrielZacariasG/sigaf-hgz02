@@ -19,7 +19,7 @@ export default function DisponibilidadIndexPage() {
 
       const [rF, rD] = await Promise.all([
         supabase.from("facturas").select(
-          "importe_factura, es_pasivo, cr_contrarecibo, partida_id, partidas ( id, cuenta_finat, nombre )"
+          "importe_factura, es_pasivo, estatus_general, partida_id, partidas ( id, cuenta_finat, nombre )"
         ),
         supabase.from("disponibilidad_presupuestal").select("cuenta_prei, presupuesto, disponible, periodo"),
       ]);
@@ -35,7 +35,7 @@ export default function DisponibilidadIndexPage() {
         const c = (map[p.id] ||= { id: p.id, cuenta: p.cuenta_finat, nombre: p.nombre, n: 0, gasto: 0, pasivo: 0, reflejado: 0 });
         c.n++; c.gasto += Number(f.importe_factura || 0);
         if (f.es_pasivo) c.pasivo += Number(f.importe_factura || 0);
-        if (f.cr_contrarecibo) c.reflejado += Number(f.importe_factura || 0);
+        if (f.estatus_general === "gasto_reflejado") c.reflejado += Number(f.importe_factura || 0);
       }
       const filas = Object.values(map).map((c) => {
         const d = c.cuenta ? dispByCuenta[c.cuenta] : null;

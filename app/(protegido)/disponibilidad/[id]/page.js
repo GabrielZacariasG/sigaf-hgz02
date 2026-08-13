@@ -52,20 +52,20 @@ export default function DetalleCuentaPage() {
   const gastoTotal = gastoFacturas + devengo;
   const pasivo = facturas.filter((f) => f.es_pasivo).reduce((a, f) => a + Number(f.importe_factura || 0), 0);
   const gasto2026 = gastoTotal - pasivo;
-  const reflejado = facturas.filter((f) => f.cr_contrarecibo).reduce((a, f) => a + Number(f.importe_factura || 0), 0);
+  const esReflejada = (f) => f.estatus_general === "gasto_reflejado";
+  const reflejado = facturas.filter(esReflejada).reduce((a, f) => a + Number(f.importe_factura || 0), 0);
   const finat = disp ? Number(disp.gasto || 0) : null;
   const enTramite = gastoTotal - reflejado;
-  const facturaSinCr = facturas.filter((f) => !f.cr_contrarecibo).reduce((a, f) => a + Number(f.importe_factura || 0), 0);
 
   const porContrato = {};
   for (const f of facturas) {
     const num = f.contratos?.numero_interno || "—";
     const c = (porContrato[num] ||= { num, vig_ini: f.contratos?.vigencia_inicio, vig_fin: f.contratos?.vigencia_fin, n: 0, gasto: 0, reflejado: 0 });
     c.n++; c.gasto += Number(f.importe_factura || 0);
-    if (f.cr_contrarecibo) c.reflejado += Number(f.importe_factura || 0);
+    if (esReflejada(f)) c.reflejado += Number(f.importe_factura || 0);
   }
   const contratos = Object.values(porContrato).sort((a, b) => b.gasto - a.gasto);
-  const sinReflejar = facturas.filter((f) => !f.cr_contrarecibo);
+  const sinReflejar = facturas.filter((f) => !esReflejada(f));
 
   const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "16px 18px" };
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "1px solid var(--borde)", whiteSpace: "nowrap" };
@@ -120,7 +120,7 @@ export default function DetalleCuentaPage() {
         <Row k="Diferencia (en trámite)" v={money(finat != null ? gastoTotal - finat : enTramite)} bold col="var(--rojo)" />
         <div style={{ marginTop: 10, fontSize: 12, color: "var(--texto-suave)" }}>Explicación de la diferencia:</div>
         <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12 }}>
-          {sinReflejar.map((f) => (<li key={f.id}>Factura {f.folio_proveedor} sin contra recibo: {money(f.importe_factura)}</li>))}
+          {sinReflejar.map((f) => (<li key={f.id}>Factura {f.folio_proveedor} aún no reflejada en FINAT: {money(f.importe_factura)}</li>))}
           {devengo > 0 && <li>Devengo (no es factura): {money(devengo)}</li>}
         </ul>
       </div>
@@ -136,7 +136,7 @@ export default function DetalleCuentaPage() {
             </tr></thead>
             <tbody>
               {facturas.slice().sort((a, b) => (a.periodo_fin || "").localeCompare(b.periodo_fin || "")).map((f) => (
-                <tr key={f.id} style={!f.cr_contrarecibo ? { background: "#fef2f2" } : {}}>
+                <tr key={f.id} style={f.estatus_general !== "gasto_reflejado" ? { background: "#fef2f2" } : {}}>
                   <td style={td}>{f.folio_proveedor}</td>
                   <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
                   <td style={td}>{f.tipo_entrega === "FARMACIA" ? badge("Farmacia", "#eef2ff", "#3730a3") : (f.tipo_entrega || "—")}</td>
@@ -156,7 +156,7 @@ export default function DetalleCuentaPage() {
       </div>
 
       <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 12 }}>
-        Renglones en rojo: facturas sin contra recibo (aún no reflejadas en FINAT). Todos los totales se calculan con <code>SUM()</code> sobre las filas mostradas, sin rangos fijos.
+        Renglones en rojo: facturas aún no reflejadas en FINAT (estatus distinto de gasto reflejado). Todos los totales se calculan con <code>SUM()</code> sobre las filas mostradas, sin rangos fijos.
       </p>
     </div>
   );
