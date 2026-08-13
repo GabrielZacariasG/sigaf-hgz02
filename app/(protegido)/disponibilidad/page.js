@@ -32,10 +32,11 @@ export default function DisponibilidadIndexPage() {
       for (const f of rF.data || []) {
         const p = f.partidas;
         if (!p) continue;
-        const c = (map[p.id] ||= { id: p.id, cuenta: p.cuenta_finat, nombre: p.nombre, n: 0, gasto: 0, pasivo: 0, reflejado: 0 });
+        const c = (map[p.id] ||= { id: p.id, cuenta: p.cuenta_finat, nombre: p.nombre, n: 0, gasto: 0, pasivo: 0, reflejado: 0, nEnTramite: 0 });
         c.n++; c.gasto += Number(f.importe_factura || 0);
         if (f.es_pasivo) c.pasivo += Number(f.importe_factura || 0);
         if (f.estatus_general === "gasto_reflejado") c.reflejado += Number(f.importe_factura || 0);
+        else c.nEnTramite++;
       }
       const filas = Object.values(map).map((c) => {
         const d = c.cuenta ? dispByCuenta[c.cuenta] : null;
@@ -54,6 +55,17 @@ export default function DisponibilidadIndexPage() {
 
   const totGasto = cuentas.reduce((a, c) => a + c.gasto, 0);
   const totPasivo = cuentas.reduce((a, c) => a + c.pasivo, 0);
+  const totPresupuesto = cuentas.reduce((a, c) => a + (c.presupuesto || 0), 0);
+  const totDisponible = cuentas.reduce((a, c) => a + (c.disponible || 0), 0);
+  const totReflejado = cuentas.reduce((a, c) => a + c.reflejado, 0);
+  const totFacturas = cuentas.reduce((a, c) => a + c.n, 0);
+  const totEnTramite = totGasto - totReflejado;
+  const nEnTramite = cuentas.reduce((a, c) => a + (c.nEnTramite || 0), 0);
+  const pctEjercido = totPresupuesto > 0 ? Math.round((totGasto / totPresupuesto) * 1000) / 10 : null;
+
+  const kpi = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px" };
+  const kNum = { fontSize: 20, fontWeight: 700 };
+  const kLbl = { fontSize: 12, color: "var(--texto-suave)" };
 
   return (
     <div>
@@ -66,6 +78,22 @@ export default function DisponibilidadIndexPage() {
       </div>
 
       {error && <p style={{ color: "var(--rojo)", fontSize: 13, marginTop: 12 }}>{error}</p>}
+
+      {cuentas.length > 0 && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 16 }}>
+            <div style={kpi}><div style={kLbl}>Presupuesto 2026</div><div style={kNum}>{money(totPresupuesto)}</div></div>
+            <div style={kpi}><div style={kLbl}>Gasto total</div><div style={kNum}>{money(totGasto)}</div>{pctEjercido != null && <div style={{ ...kLbl, marginTop: 3 }}>{pctEjercido}% ejercido</div>}</div>
+            <div style={kpi}><div style={kLbl}>Pasivo (periodo anterior)</div><div style={{ ...kNum, color: "#B45309" }}>{money(totPasivo)}</div></div>
+            <div style={kpi}><div style={kLbl}>Disponible</div><div style={{ ...kNum, color: "var(--verde)" }}>{money(totDisponible)}</div></div>
+            <div style={kpi}><div style={kLbl}>En trámite (aún no en FINAT)</div><div style={{ ...kNum, color: totEnTramite > 0 ? "var(--rojo)" : "inherit" }}>{money(totEnTramite)}</div><div style={{ ...kLbl, marginTop: 3 }}>{nEnTramite} factura(s)</div></div>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
+            {totFacturas} facturas en {cuentas.length} cuentas de Servicios Integrales. El <strong>pasivo</strong> es gasto de
+            periodos anteriores cubierto con presupuesto 2026 — clasificado por la marca real de cada factura, no por rangos fijos.
+          </p>
+        </>
+      )}
 
       {cuentas.length === 0 ? (
         <p style={{ color: "var(--texto-suave)", marginTop: 16 }}>Aún no hay facturas cargadas por cuenta.</p>
