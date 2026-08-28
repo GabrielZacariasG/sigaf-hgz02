@@ -6,7 +6,10 @@ import { supabase } from "../../../lib/supabaseClient";
 
 const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
-const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales"]);
+// Capítulos que se controlan por PRESUPUESTO de cuenta (compra vía PREI: Integrales,
+// Cuadro Básico) — llevan CR y circuito de pedido. El resto (Área Médica, Subrogados)
+// se controla por saldo de contrato.
+const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales", "Cuadro Básico"]);
 
 // Lee TODAS las facturas paginando (Supabase limita a 1000 filas por consulta).
 async function leerTodasLasFacturas() {
