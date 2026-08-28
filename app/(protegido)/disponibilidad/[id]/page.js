@@ -12,7 +12,7 @@ const MESES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep"
 const mesAnio = (m, a) => (m && a ? `${MESES[m]} ${a}` : "—");
 // Integrales y Cuadro Básico se controlan por presupuesto de cuenta (compra vía PREI,
 // con CR); Área Médica y Subrogados por saldo de contrato.
-const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales", "Cuadro Básico"]);
+const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales", "Cuadro Básico", "Compra Emergente"]);
 
 export default function DetalleCuentaPage() {
   const { id } = useParams();

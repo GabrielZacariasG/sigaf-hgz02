@@ -9,7 +9,7 @@ const money = (n) =>
 // Capítulos que se controlan por PRESUPUESTO de cuenta (compra vía PREI: Integrales,
 // Cuadro Básico) — llevan CR y circuito de pedido. El resto (Área Médica, Subrogados)
 // se controla por saldo de contrato.
-const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales", "Cuadro Básico"]);
+const CAP_INTEGRALES = new Set(["Servicios Integrales", "Integrales", "Cuadro Básico", "Compra Emergente"]);
 
 // Lee TODAS las facturas paginando (Supabase limita a 1000 filas por consulta).
 async function leerTodasLasFacturas() {
@@ -75,7 +75,7 @@ export default function DisponibilidadIndexPage() {
         }
 
         // Orden de capítulos: Integrales primero, luego alfabético
-        const orden = { "Servicios Integrales": 0, "Integrales": 0, "Área Médica": 1, "Subrogados": 2 };
+        const orden = { "Servicios Integrales": 0, "Integrales": 0, "Area Medica Ctas": 1, "Área Médica": 1, "Capitulo De Subrogados": 2, "Subrogados": 2, "Compra Emergente": 3, "Cuadro Básico": 3, "Servicios Generales": 4 };
         const lista = Object.values(capMap).map((cap) => {
           const cuentas = Object.values(cap.cuentasMap).map((c) => {
             const d = c.cuenta ? dispByCuenta[c.cuenta] : null;
