@@ -177,6 +177,39 @@ export default function DetalleFacturaPage() {
     );
   }
 
+  // Contratos sin catálogo de servicios (Área Médica, Subrogados, Cuadro Básico
+  // en su mayoría): la factura ya quedó registrada con su importe en el paso 1.
+  // No se valida cantidad × precio; se registra por importe.
+  if (servicios.length === 0) {
+    return (
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
+        <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: 0 }}>Paso 2 de 2</p>
+        <h1 style={{ fontSize: 22, margin: "2px 0 4px" }}>Factura registrada</h1>
+        <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0", fontSize: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div><strong>Folio de ingreso:</strong> {factura.folio_ingreso}</div>
+          <div><strong>Folio proveedor:</strong> {factura.folio_proveedor}</div>
+          <div><strong>Contrato:</strong> {factura.contratos?.numero_interno} — {factura.contratos?.adquisicion_servicio}</div>
+          <div><strong>Importe:</strong> {money(factura.importe_factura)}</div>
+        </div>
+        {factura.vigencia_alerta === "sin_vigencia" && (
+          <div style={{ background: "var(--rojo-claro)", color: "var(--rojo)", padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+            ⚠️ El periodo de la factura cae <strong>fuera de la vigencia</strong> del contrato.
+          </div>
+        )}
+        <div style={{ background: "var(--verde-claro)", color: "var(--verde-oscuro)", padding: "12px 16px", borderRadius: 8, fontSize: 13 }}>
+          ✓ Este contrato no tiene catálogo de servicios con precio, así que la factura se
+          <strong> registra por importe</strong> (sin desglose cantidad × precio). Ya quedó guardada.
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button className="boton" onClick={() => router.push(`/facturas/${facturaId}`)}>Ver factura</button>
+          <button className="boton secundario" onClick={() => router.push("/facturas/nueva")}>Capturar otra</button>
+          <button className="boton secundario" onClick={() => router.push("/")}>Ir al panel</button>
+        </div>
+        {mensaje && <p style={{ fontSize: 13, color: "var(--rojo)", marginTop: 14 }}>{mensaje}</p>}
+      </div>
+    );
+  }
+
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "1px solid var(--borde)" };
   const td = { padding: "6px 10px", borderBottom: "1px solid var(--borde)", fontSize: 14 };
 
