@@ -226,23 +226,23 @@ export default function DetalleFacturaPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ fontSize: 15, margin: 0 }}>Desglose por servicio <span style={{ fontSize: 12, color: "var(--texto-suave)", fontWeight: 400 }}>(opcional)</span></h2>
             <div style={{ fontSize: 13 }}>
-              Suma: <strong>{money(sumaServicios)}</strong>{" "}
+              Suma (con IVA): <strong>{money(sumaServicios)}</strong>{" "}
               {sumaServicios > 0 && (
                 <button className="boton secundario" style={{ padding: "4px 10px", fontSize: 12 }}
-                  onClick={() => { setResultado(null); setSubtotal(String(Math.round(sumaServicios * 100) / 100)); }}>
-                  Usar como subtotal
+                  onClick={() => { const t = parseFloat(tasaIva) || 0; setResultado(null); setSubtotal(String(Math.round((sumaServicios / (1 + t)) * 100) / 100)); }}>
+                  Calcular subtotal (÷ IVA)
                 </button>
               )}
             </div>
           </div>
-          {/* Validación 2: la suma del desglose debe cuadrar con el subtotal capturado */}
+          {/* Validación 2: la suma del desglose (precios CON IVA) debe cuadrar con el TOTAL */}
           {sumaServicios > 0 && (
             <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, fontSize: 13,
-              background: Math.abs(sumaServicios - calc.sub) <= TOLERANCIA ? "var(--verde-claro)" : "var(--rojo-claro)",
-              color: Math.abs(sumaServicios - calc.sub) <= TOLERANCIA ? "var(--verde-oscuro)" : "var(--rojo)" }}>
-              {Math.abs(sumaServicios - calc.sub) <= TOLERANCIA
-                ? `✓ La suma del desglose (${money(sumaServicios)}) coincide con el subtotal capturado.`
-                : `✗ La suma del desglose (${money(sumaServicios)}) difiere del subtotal capturado (${money(calc.sub)}) por ${money(sumaServicios - calc.sub)}.`}
+              background: Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA ? "var(--verde-claro)" : "var(--rojo-claro)",
+              color: Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA ? "var(--verde-oscuro)" : "var(--rojo)" }}>
+              {Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA
+                ? `✓ La suma del desglose (${money(sumaServicios)}) coincide con el TOTAL de la factura.`
+                : `✗ La suma del desglose (${money(sumaServicios)}) difiere del TOTAL de la factura (${money(calc.totalFactura)}) por ${money(sumaServicios - calc.totalFactura)}.`}
             </div>
           )}
           <input type="text" placeholder="Buscar servicio…" value={filtro} onChange={(e) => setFiltro(e.target.value)}
@@ -278,7 +278,7 @@ export default function DetalleFacturaPage() {
             </div>
           </div>
           <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>
-            Llena cantidades y usa "Usar como subtotal" para pasar la suma arriba. Los precios del catálogo son <strong>antes de IVA</strong>.
+            Los precios del catálogo <strong>ya incluyen IVA</strong>, por eso la suma del desglose cuadra con el <strong>TOTAL</strong> de la factura (no con el subtotal). El botón "Calcular subtotal" saca el subtotal dividiendo la suma entre 1.16.
           </p>
         </div>
       )}
