@@ -158,7 +158,17 @@ export default function ConciliarPage() {
       const wb = XLSX.read(buf, { type: "array" });
       const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
       const meta = analizarReporte(grid);
-      if (!meta) { setError(`"${file.name}": no reconocí el formato (falta columna Comprobante/Factura).`); e.target.value = ""; return; }
+      if (!meta) {
+        // ¿es el reporte de disponibilidad? (va en otra pantalla)
+        const esDispo = grid.slice(0, 15).some((row) => {
+          const t = (row || []).map((c) => String(c).trim().toLowerCase());
+          return t.includes("cuenta") && (t.includes("disponible") || t.includes("presupuesto"));
+        });
+        setError(esDispo
+          ? `"${file.name}" es el reporte de disponibilidad — ese va en Disponibilidad › Cargar, no aquí.`
+          : `"${file.name}": no reconocí el formato (falta columna Comprobante/Factura).`);
+        e.target.value = ""; return;
+      }
       const { hdr, col, tipo, tienePedRec } = meta;
 
       const matches = [], porConfirmar = []; let sinCruce = 0, ajenas = 0, gastoCruzado = 0, gastoPendiente = 0;
