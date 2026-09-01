@@ -43,8 +43,18 @@ export default function FacturasListaPage() {
   const [agrupar, setAgrupar] = useState("none");
   const [abiertos, setAbiertos] = useState({});
   const [sel, setSel] = useState({});         // facturaId -> bool (para enviar al servicio)
-  const [memo, setMemo] = useState(null);      // { filas, folio }
+  const [memo, setMemo] = useState(null);      // { grupos: [{ jefe, jefatura, filas, folio }] }
   const [enviando, setEnviando] = useState(false);
+  const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("jefe_proveedor").select("proveedor_id, jefes_servicio ( nombre, jefatura )");
+      const m = {};
+      (data || []).forEach((r) => { if (r.jefes_servicio) (m[r.proveedor_id] ||= []).push(r.jefes_servicio); });
+      setProvJefes(m);
+    })();
+  }, []);
 
   useEffect(() => {
     let activo = true;
@@ -150,12 +160,25 @@ export default function FacturasListaPage() {
 
   const enviarServicio = () => {
     if (!seleccionadas.length) return;
-    setMemo({ filas: seleccionadas, folio: `MEMO-FIN-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}` });
+    const g = new Map();
+    for (const f of seleccionadas) {
+      const jefes = provJefes[f.proveedor_id] || [];
+      if (!jefes.length) {
+        const k = "__sin__"; const grp = g.get(k) || { jefe: "Jefe(a) de Servicio correspondiente", jefatura: "(sin proveedor asignado)", filas: [] };
+        grp.filas.push(f); g.set(k, grp);
+      } else for (const j of jefes) {
+        const grp = g.get(j.nombre) || { jefe: j.nombre, jefatura: j.jefatura, filas: [] };
+        grp.filas.push(f); g.set(j.nombre, grp);
+      }
+    }
+    const base = `MEMO-FIN-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+    const grupos = [...g.values()].map((x, i) => ({ ...x, folio: `${base}-${i + 1}` }));
+    setMemo({ grupos });
   };
   const confirmarEnvio = async () => {
     setEnviando(true);
     try {
-      const ids = memo.filas.map((f) => f.id);
+      const ids = [...new Set(memo.grupos.flatMap((gr) => gr.filas.map((f) => f.id)))];
       for (let i = 0; i < ids.length; i += 25) {
         const lote = ids.slice(i, i + 25);
         await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
@@ -168,48 +191,55 @@ export default function FacturasListaPage() {
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
 
-  // ---- MEMORÁNDUM de envío al servicio (imprimible) ----
+  // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (imprimible limpio) ----
   if (memo) {
-    const total = memo.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
     const linea = { display: "grid", gridTemplateColumns: "90px 1fr", gap: 4, fontSize: 13.5 };
     const mH = { textAlign: "left", fontSize: 11.5, padding: "6px 10px", border: "1px solid #444", background: "#f0f0f0", textTransform: "uppercase", letterSpacing: 0.3 };
     const mD = { padding: "6px 10px", border: "1px solid #bbb", fontSize: 12.5 };
     return (
       <div>
-        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
           <button className="boton secundario" onClick={() => setMemo(null)}>← Volver</button>
-          <button className="boton secundario" onClick={() => window.print()}>Imprimir / PDF</button>
+          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.grupos.length} memo(s) · un jefe por hoja</span>
         </div>
-        <div style={{ background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "44px 52px", maxWidth: 840, margin: "0 auto", lineHeight: 1.5 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 10 }}>
-            <div><div style={{ fontWeight: 800, fontSize: 15 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 11, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
-            <div style={{ textAlign: "right", fontSize: 12 }}><div style={{ fontWeight: 700, letterSpacing: 1 }}>MEMORÁNDUM</div><div>{memo.folio}</div></div>
-          </div>
-          <div style={{ marginTop: 22, display: "grid", gap: 5 }}>
-            <div style={linea}><span style={{ color: "#666" }}>Para:</span><strong>Jefe(a) de Servicio correspondiente</strong></div>
-            <div style={linea}><span style={{ color: "#666" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
-            <div style={linea}><span style={{ color: "#666" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
-            <div style={linea}><span style={{ color: "#666" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
-          </div>
-          <p style={{ marginTop: 20, textAlign: "justify", fontSize: 14 }}>
-            Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
-            el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
-          </p>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-            <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
-            <tbody>
-              {memo.filas.map((f) => (
-                <tr key={f.id}><td style={mD}>{f.folio_proveedor}</td><td style={mD}>{f.prov}</td><td style={mD}>{f.contrato}</td><td style={mD}>{f.periodo_inicio ?? "—"} → {f.periodo_fin ?? "—"}</td><td style={{ ...mD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
-              ))}
-              <tr><td style={mD} colSpan={4}><strong>Total ({memo.filas.length} factura{memo.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700 }}>{money(total)}</td></tr>
-            </tbody>
-          </table>
-          <p style={{ marginTop: 26, fontWeight: 700 }}>ATENTAMENTE</p>
-          <p style={{ fontSize: 12, fontStyle: "italic", color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
-          <div style={{ marginTop: 40, textAlign: "center" }}>_________________________________________<br /><strong>Lic. Nayeli Alonso Orozco</strong><br />Jefa del Departamento de Finanzas · HGZ No. 2</div>
+        <div className="hoja">
+          {memo.grupos.map((g, gi) => {
+            const total = g.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+            return (
+              <div key={gi} style={{ background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "44px 52px", maxWidth: 840, margin: "0 auto 18px", lineHeight: 1.5, breakAfter: "page" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 10 }}>
+                  <div><div style={{ fontWeight: 800, fontSize: 15 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 11, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
+                  <div style={{ textAlign: "right", fontSize: 12 }}><div style={{ fontWeight: 700, letterSpacing: 1 }}>MEMORÁNDUM</div><div>{g.folio}</div></div>
+                </div>
+                <div style={{ marginTop: 22, display: "grid", gap: 5 }}>
+                  <div style={linea}><span style={{ color: "#666" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
+                  <div style={linea}><span style={{ color: "#666" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
+                  <div style={linea}><span style={{ color: "#666" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
+                  <div style={linea}><span style={{ color: "#666" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
+                </div>
+                <p style={{ marginTop: 20, textAlign: "justify", fontSize: 14 }}>
+                  Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
+                  el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
+                </p>
+                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+                  <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
+                  <tbody>
+                    {g.filas.map((f) => (
+                      <tr key={f.id}><td style={mD}>{f.folio_proveedor}</td><td style={mD}>{f.prov}</td><td style={mD}>{f.contrato}</td><td style={mD}>{f.periodo_inicio ?? "—"} → {f.periodo_fin ?? "—"}</td><td style={{ ...mD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                    ))}
+                    <tr><td style={mD} colSpan={4}><strong>Total ({g.filas.length} factura{g.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700 }}>{money(total)}</td></tr>
+                  </tbody>
+                </table>
+                <p style={{ marginTop: 26, fontWeight: 700 }}>ATENTAMENTE</p>
+                <p style={{ fontSize: 12, fontStyle: "italic", color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
+                <div style={{ marginTop: 40, textAlign: "center" }}>_________________________________________<br /><strong>Lic. Nayeli Alonso Orozco</strong><br />Jefa del Departamento de Finanzas · HGZ No. 2</div>
+              </div>
+            );
+          })}
         </div>
-        <style>{`@media print { .no-print { display:none } body { background:#fff } }`}</style>
+        <style>{`@media print { body * { visibility: hidden !important; } .hoja, .hoja * { visibility: visible !important; } .hoja { position: absolute; left: 0; top: 0; width: 100%; } .no-print { display: none !important; } }`}</style>
       </div>
     );
   }

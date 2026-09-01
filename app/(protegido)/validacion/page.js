@@ -137,7 +137,7 @@ export default function ValidacionServicioPage() {
           <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
           {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Seleccionaste varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
-        <div style={doc}>
+        <div className="hoja" style={doc}>
           {/* Membrete */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #7a1737", paddingBottom: 8 }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>Gobierno de México · IMSS<br /><span style={{ fontWeight: 400, fontSize: 11 }}>Instituto Mexicano del Seguro Social</span></div>
@@ -198,7 +198,7 @@ export default function ValidacionServicioPage() {
             <div style={{ marginTop: 14, color: "#555" }}>Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.</div>
           </div>
         </div>
-        <style>{`@media print { .no-print { display:none } body { background:#fff } }`}</style>
+        <style>{`@media print { body * { visibility: hidden !important; } .hoja, .hoja * { visibility: visible !important; } .hoja { position: absolute; left: 0; top: 0; width: 100%; } .no-print { display: none !important; } }`}</style>
       </div>
     );
   }
