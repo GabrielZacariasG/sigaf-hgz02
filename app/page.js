@@ -33,8 +33,10 @@ export default function Portal() {
       try {
         const email = (session.user?.email || '').toLowerCase();
         if (email) {
-          const { data: js } = await supabase.from('jefes_servicio').select('id').eq('email', email).eq('activo', true).maybeSingle();
-          if (js) { router.replace('/validacion'); return; }
+          const matricula = email.includes('@') ? email.split('@')[0] : email;
+          const { data: js } = await supabase.from('jefes_servicio').select('id')
+            .or(`email.eq.${email},matricula.eq.${matricula}`).eq('activo', true).limit(1);
+          if (js && js.length) { router.replace('/validacion'); return; }
         }
       } catch { /* si la tabla no existe aún, seguir normal */ }
 

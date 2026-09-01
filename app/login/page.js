@@ -15,12 +15,12 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setCargando(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: correo.trim(),
-      password: clave,
-    });
+    // Acepta correo o matrícula. Si no trae "@", es matrícula → correo interno.
+    const id = correo.trim();
+    const email = id.includes('@') ? id : `${id.replace(/\s+/g, '')}@hgz02.sigaf.mx`;
+    const { error } = await supabase.auth.signInWithPassword({ email, password: clave });
     if (error) {
-      setError('Correo o contraseña incorrectos.');
+      setError('Usuario/matrícula o contraseña incorrectos.');
       setCargando(false);
       return;
     }
@@ -41,13 +41,13 @@ export default function Login() {
         {error && <div className="aviso error">{error}</div>}
 
         <div className="campo">
-          <label htmlFor="correo">Correo institucional</label>
+          <label htmlFor="correo">Correo o matrícula</label>
           <input
             id="correo"
-            type="email"
+            type="text"
             value={correo}
             onChange={(e) => setCorreo(e.target.value)}
-            placeholder="nombre.apellido@imss.gob.mx"
+            placeholder="matrícula  ó  nombre.apellido@imss.gob.mx"
             required
             autoComplete="username"
           />

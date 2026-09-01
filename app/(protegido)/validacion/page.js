@@ -28,7 +28,7 @@ export default function ValidacionServicioPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const email = (session?.user?.email || "").toLowerCase();
       const [rJ, rF] = await Promise.all([
-        supabase.from("jefes_servicio").select("id, nombre, jefatura, email").eq("activo", true).order("nombre"),
+        supabase.from("jefes_servicio").select("id, nombre, jefatura, email, matricula").eq("activo", true).order("nombre"),
         supabase.from("facturas")
           .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno ), proveedores ( razon_social )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
@@ -37,8 +37,11 @@ export default function ValidacionServicioPage() {
       const lista = rJ.data || [];
       setJefes(lista);
       setFacturas(rF.data || []);
-      // Si quien inició sesión es un jefe (por correo), se bloquea a su vista.
-      const mio = lista.find((j) => j.email && j.email.toLowerCase() === email);
+      // Si quien inició sesión es un jefe (por correo o matrícula), se bloquea a su vista.
+      const matricula = email.includes("@") ? email.split("@")[0] : email;
+      const mio = lista.find((j) =>
+        (j.email && j.email.toLowerCase() === email) ||
+        (j.matricula && String(j.matricula).toLowerCase() === matricula));
       if (mio) { setJefeId(mio.id); setEsJefeSesion(true); }
       setCargando(false);
     })();
