@@ -72,7 +72,9 @@ export default function FacturasListaPage() {
         const fir = ejeInfo(hist, "firmas", FLUJO_FIRMAS, f.estatus_firmas, alertasMap);
         const generaPR = ["Integrales", "Servicios Integrales"].includes(f.capitulos?.nombre);
         const ped = ejeInfo(hist, "pedido_recepcion", FLUJO_PEDIDO, f.estatus_pedido_recepcion, alertasMap);
-        const estancada = gen.estancada || fir.estancada || (generaPR && ped.estancada);
+        // Una factura ya reflejada (pagada) está COMPLETADA: no puede estar estancada.
+        const completada = f.estatus_general === "gasto_reflejado";
+        const estancada = !completada && (gen.estancada || fir.estancada || (generaPR && ped.estancada));
         return {
           ...f, capNom: f.capitulos?.nombre || "—", prov: f.proveedores?.razon_social || "—",
           contrato: f.contratos?.numero_interno || "—", tieneCR: !!String(f.cr_contrarecibo ?? "").trim(),
