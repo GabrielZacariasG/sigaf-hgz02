@@ -116,6 +116,11 @@ export default function Portal() {
       ruta: '/disponibilidad', listo: true,
     },
     {
+      paso: 'Servicio', titulo: 'Validación del servicio',
+      desc: 'El jefe de servicio valida las facturas que se le enviaron y genera el oficio de cumplimiento/incumplimiento.',
+      cifra: c.facturas, etiqueta: 'facturas', ruta: '/validacion', listo: true,
+    },
+    {
       paso: 'Automatizar', titulo: 'Conciliar reportes',
       desc: 'Sube los reportes de OOAD/PREI y SIGAF rellena el comprobante, marca pagadas y avanza el estatus solo.',
       cifra: c.facturas, etiqueta: 'facturas a conciliar',
