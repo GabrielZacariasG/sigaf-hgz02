@@ -39,7 +39,7 @@ export default function FacturasListaPage() {
         supabase
           .from("facturas")
           .select(
-            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social )"
+            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
           ),
         supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
         supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha"),
@@ -63,9 +63,11 @@ export default function FacturasListaPage() {
         const hist = histPorFactura[f.id] || [];
         const gen = ejeInfo(hist, "general", FLUJO_GENERAL, f.estatus_general, alertasMap);
         const fir = ejeInfo(hist, "firmas", FLUJO_FIRMAS, f.estatus_firmas, alertasMap);
+        const generaPR = ["Integrales", "Servicios Integrales"].includes(f.capitulos?.nombre);
         const ped = ejeInfo(hist, "pedido_recepcion", FLUJO_PEDIDO, f.estatus_pedido_recepcion, alertasMap);
-        const estancada = gen.estancada || fir.estancada || ped.estancada;
-        return { ...f, gen, fir, ped, estancada };
+        // el pedido-recepción solo cuenta como estancado en capítulos que lo generan (Integrales)
+        const estancada = gen.estancada || fir.estancada || (generaPR && ped.estancada);
+        return { ...f, gen, fir, ped, generaPR, estancada };
       });
 
       filas.sort((a, b) => {
@@ -152,7 +154,7 @@ export default function FacturasListaPage() {
                       </div>
                     </td>
                     <td style={td}>{celdaCircuito(f.fir, LABEL_FIRMAS[f.estatus_firmas])}</td>
-                    <td style={td}>{celdaCircuito(f.ped, LABEL_PEDIDO[f.estatus_pedido_recepcion])}</td>
+                    <td style={td}>{f.generaPR ? celdaCircuito(f.ped, LABEL_PEDIDO[f.estatus_pedido_recepcion]) : <span style={{ color: "var(--texto-suave)", fontSize: 12 }}>no aplica</span>}</td>
                     <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
                     <td style={td}>
                       {f.validacion_ok === true ? (

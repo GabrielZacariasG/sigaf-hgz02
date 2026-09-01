@@ -114,7 +114,7 @@ export default function FacturaEstatusPage() {
   async function cargar() {
     const [rFac, rHist, rAlertas] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -181,7 +181,10 @@ export default function FacturaEstatusPage() {
     );
   }
 
-  const bloqueoOoad = selGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, factura.estatus_pedido_recepcion);
+  // Solo Integrales (PREI II, módulo de compras) genera pedido-recepción.
+  // Los demás capítulos (PREI I: Área Médica, Subrogados, Compra Emergente) no.
+  const generaPR = ["Integrales", "Servicios Integrales"].includes(factura.capitulos?.nombre);
+  const bloqueoOoad = selGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado");
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -218,15 +221,16 @@ export default function FacturaEstatusPage() {
       {/* Circuitos en paralelo */}
       <div style={{ display: "flex", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
         <Stepper titulo="Circuito de firmas" flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas} historial={historial} circuito="firmas" alertasMap={alertasMap} />
-        <Stepper titulo="Circuito de pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} historial={historial} circuito="pedido_recepcion" alertasMap={alertasMap} />
+        {generaPR && <Stepper titulo="Circuito de pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} historial={historial} circuito="pedido_recepcion" alertasMap={alertasMap} />}
       </div>
 
       {/* Controles de cambio (cualquier rol) */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", marginTop: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Cambiar estatus</div>
-        <Control label="General" flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general} sel={selGen} setSel={setSelGen} onGuardar={() => cambiar("estatus_general", selGen)} guardando={guardando === "estatus_general"} disabled={bloqueoOoad} hint={bloqueoOoad ? "Requiere firmas y pedido completos para enviar a OOAD" : ""} />
+        <Control label="General" flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general} sel={selGen} setSel={setSelGen} onGuardar={() => cambiar("estatus_general", selGen)} guardando={guardando === "estatus_general"} disabled={bloqueoOoad} hint={bloqueoOoad ? (generaPR ? "Requiere firmas y pedido completos para enviar a OOAD" : "Requiere firmas completas para enviar a OOAD") : ""} />
         <Control label="Circuito de firmas" flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas} sel={selFir} setSel={setSelFir} onGuardar={() => cambiar("estatus_firmas", selFir)} guardando={guardando === "estatus_firmas"} />
-        <Control label="Pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} sel={selPed} setSel={setSelPed} onGuardar={() => cambiar("estatus_pedido_recepcion", selPed)} guardando={guardando === "estatus_pedido_recepcion"} />
+        {generaPR && <Control label="Pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} sel={selPed} setSel={setSelPed} onGuardar={() => cambiar("estatus_pedido_recepcion", selPed)} guardando={guardando === "estatus_pedido_recepcion"} />}
+        {!generaPR && <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>Este capítulo no genera pedido-recepción (no aplica módulo de compras / PREI II).</p>}
         {mensaje && <p style={{ fontSize: 13, color: "var(--rojo)", marginTop: 10 }}>{mensaje}</p>}
       </div>
     </div>
