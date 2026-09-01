@@ -30,7 +30,7 @@ export default function ValidacionServicioPage() {
       const [rJ, rF] = await Promise.all([
         supabase.from("jefes_servicio").select("id, nombre, jefatura, email, matricula").eq("activo", true).order("nombre"),
         supabase.from("facturas")
-          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno ), proveedores ( razon_social )")
+          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
       ]);
       if (rJ.error) setMensaje("No pude cargar jefes: " + rJ.error.message + " (¿ya corriste sigaf_jefes_servicio.sql?)");
@@ -117,40 +117,88 @@ export default function ValidacionServicioPage() {
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "1px solid var(--borde)", whiteSpace: "nowrap" };
   const td = { padding: "8px 10px", borderBottom: "1px solid var(--borde)", fontSize: 13 };
 
-  // ---- Vista del OFICIO (borrador imprimible) ----
+  // ---- Vista del OFICIO (formato real, imprimible) ----
   if (oficio) {
-    const total = oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
     const esCum = oficio.dictamen === "cumplimiento";
+    const f0 = oficio.filas[0] || {};
+    const admin = f0.contratos?.administrador_contrato || "(administrador del contrato)";
+    const proveedor = f0.proveedores?.razon_social || "(proveedor)";
+    const servicio = f0.contratos?.adquisicion_servicio || "(servicio)";
+    const contratoNum = f0.contratos?.numero_interno || "(contrato)";
+    const variosProv = new Set(oficio.filas.map((f) => f.proveedor_id)).size > 1;
+    const doc = { background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "40px 48px", maxWidth: 820, margin: "0 auto", lineHeight: 1.55, fontSize: 14 };
+    const tblH = { textAlign: "left", fontSize: 12, padding: "6px 10px", border: "1px solid #444", background: "#f0f0f0" };
+    const tblD = { padding: "6px 10px", border: "1px solid #999", fontSize: 13 };
     return (
       <div>
-        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
           <button className="boton secundario" onClick={() => setOficio(null)}>← Volver</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / PDF</button>
           <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
-          <span style={{ fontSize: 12, color: "var(--ambar)", alignSelf: "center" }}>⚠️ BORRADOR — pendiente la plantilla oficial de tu oficina.</span>
+          {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Seleccionaste varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
-        <div style={{ ...card, maxWidth: 800, margin: "0 auto", lineHeight: 1.5 }}>
-          <div style={{ textAlign: "center", fontWeight: 700 }}>INSTITUTO MEXICANO DEL SEGURO SOCIAL</div>
-          <div style={{ textAlign: "center", fontSize: 13, color: "var(--texto-suave)" }}>Hospital General de Zona No. 02 · {oficio.jefe?.jefatura}</div>
-          <div style={{ textAlign: "right", marginTop: 16, fontSize: 13 }}>Oficio: <strong>{oficio.folio}</strong><br />Aguascalientes, Ags., a {hoy()}</div>
-          <h2 style={{ fontSize: 16, marginTop: 18 }}>Dictamen de {esCum ? "CUMPLIMIENTO" : "INCUMPLIMIENTO"}</h2>
-          <p style={{ fontSize: 14 }}>
-            El que suscribe, <strong>{oficio.jefe?.nombre}</strong>, Jefe(a) de {oficio.jefe?.jefatura}, hace constar el{" "}
-            <strong>{esCum ? "cumplimiento" : "incumplimiento"}</strong> del servicio/bienes amparados por las siguientes facturas:
-          </p>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 8 }}>
-            <thead><tr><th style={th}>Factura</th><th style={th}>Proveedor</th><th style={th}>Contrato</th><th style={th}>Periodo</th><th style={{ ...th, textAlign: "right" }}>Importe</th></tr></thead>
+        <div style={doc}>
+          {/* Membrete */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #7a1737", paddingBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>Gobierno de México · IMSS<br /><span style={{ fontWeight: 400, fontSize: 11 }}>Instituto Mexicano del Seguro Social</span></div>
+            <div style={{ fontSize: 11, textAlign: "right" }}>HGZ No. 2 · Jefatura de {oficio.jefe?.jefatura}</div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, fontSize: 13 }}>
+            <span>Of. N° <strong>{oficio.folio}</strong></span>
+            <span>Aguascalientes, Ags., a {hoy()}.</span>
+          </div>
+
+          {/* Destinatario: administrador del contrato */}
+          <div style={{ marginTop: 22 }}>
+            <div style={{ fontWeight: 700 }}>{admin}</div>
+            <div>Administrador del contrato {contratoNum}</div>
+            <div>Presente</div>
+          </div>
+
+          {/* Cuerpo */}
+          {esCum ? (
+            <p style={{ marginTop: 18, textAlign: "justify" }}>
+              Se adjunta al presente las siguientes facturas del proveedor <strong>{proveedor}</strong>, por concepto de pago de <strong>{servicio}</strong>.
+              Al respecto me permito informar que, a la fecha de la prestación de la presente factura, <strong>NO EXISTE INCUMPLIMIENTO</strong> del
+              contrato antes referido en ninguno de los términos y condiciones que amparan cada una de las cláusulas del mismo, ni penas
+              convencionales pendientes de aplicar al proveedor en cita.
+            </p>
+          ) : (
+            <p style={{ marginTop: 18, textAlign: "justify" }}>
+              Por medio del presente envío a Usted informe de las incidencias ocurridas en la prestación de <strong>{servicio}</strong> del proveedor{" "}
+              <strong>{proveedor}</strong>{f0.periodo_inicio ? `, durante el periodo del ${f0.periodo_inicio} al ${f0.periodo_fin}` : ""}; por
+              <strong> incumplimiento</strong> a las cláusulas de <em>Lugar, plazos y condiciones para la entrega de los bienes/servicios</em>, siendo procedente
+              la cláusula de <strong>Penas Convencionales</strong>. Motivo: <strong>{oficio.motivo}</strong>.
+            </p>
+          )}
+
+          {/* Tabla de facturas */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
+            <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
             <tbody>
               {oficio.filas.map((f) => (
-                <tr key={f.id}><td style={td}>{f.folio_proveedor}</td><td style={td}>{f.proveedores?.razon_social}</td><td style={td}>{f.contratos?.numero_interno}</td><td style={td}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
               ))}
-              <tr><td style={td} colSpan={4}><strong>Total</strong></td><td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{money(total)}</td></tr>
+              <tr><td style={tblD} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700 }}>{money(oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0))}</td></tr>
             </tbody>
           </table>
-          {!esCum && <p style={{ fontSize: 14, marginTop: 10 }}><strong>Motivo del incumplimiento:</strong> {oficio.motivo}</p>}
-          <div style={{ marginTop: 48, textAlign: "center", fontSize: 14 }}>___________________________________<br /><strong>{oficio.jefe?.nombre}</strong><br />Jefe(a) de {oficio.jefe?.jefatura}</div>
+
+          <p style={{ marginTop: 18 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
+          <p style={{ marginTop: 10, fontWeight: 700 }}>ATENTAMENTE</p>
+          <p style={{ fontSize: 12, fontStyle: "italic" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
+
+          {/* Firmas */}
+          <div style={{ marginTop: 40, textAlign: "center" }}>
+            _________________________________________<br />
+            <strong>{oficio.jefe?.nombre}</strong><br />
+            Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2
+          </div>
+          <div style={{ marginTop: 26, fontSize: 12 }}>
+            <div><strong>Autoriza:</strong> Subdirector Administrativo HGZ No. 2</div>
+            <div style={{ marginTop: 14, color: "#555" }}>Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.</div>
+          </div>
         </div>
-        <style>{`@media print { .no-print { display:none } }`}</style>
+        <style>{`@media print { .no-print { display:none } body { background:#fff } }`}</style>
       </div>
     );
   }
