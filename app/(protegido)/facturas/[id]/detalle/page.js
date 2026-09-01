@@ -18,7 +18,7 @@ export default function DetalleFacturaPage() {
   const [servicios, setServicios] = useState([]);
   const [cantidades, setCantidades] = useState({});
   const [subtotal, setSubtotal] = useState("");   // SUBTOTAL capturado (antes de IVA)
-  const [tasaIva, setTasaIva] = useState("0.16");  // 0.16 | 0
+  const [iva, setIva] = useState("");              // MONTO de IVA tal como viene en la factura (editable)
   const [filtro, setFiltro] = useState("");
 
   const [cargando, setCargando] = useState(true);
@@ -32,7 +32,7 @@ export default function DetalleFacturaPage() {
       const { data: fac, error: errFac } = await supabase
         .from("facturas")
         .select(
-          "id, folio_ingreso, folio_proveedor, contrato_id, importe_factura, tasa_iva, subtotal_calculado, vigencia_alerta, contratos ( numero_interno, adquisicion_servicio )"
+          "id, folio_ingreso, folio_proveedor, contrato_id, importe_factura, tasa_iva, subtotal_calculado, iva_calculado, vigencia_alerta, contratos ( numero_interno, adquisicion_servicio )"
         )
         .eq("id", facturaId)
         .single();
@@ -43,9 +43,12 @@ export default function DetalleFacturaPage() {
         return;
       }
       setFactura(fac);
-      if (fac.tasa_iva != null) setTasaIva(String(fac.tasa_iva));
       if (fac.subtotal_calculado != null && Number(fac.subtotal_calculado) > 0) {
         setSubtotal(String(fac.subtotal_calculado));
+        // IVA guardado, o el que se deriva del total menos el subtotal
+        const ivaGuardado = fac.iva_calculado != null ? Number(fac.iva_calculado)
+          : (Number(fac.importe_factura) || 0) - Number(fac.subtotal_calculado);
+        if (ivaGuardado >= 0) setIva(String(Math.round(ivaGuardado * 100) / 100));
       }
 
       const { data: servs } = await supabase
@@ -61,16 +64,16 @@ export default function DetalleFacturaPage() {
     return () => { activo = false; };
   }, [facturaId]);
 
-  // Validación principal: SUBTOTAL × (1+IVA) debe = TOTAL capturado.
+  // Validación principal: SUBTOTAL + IVA (montos de la factura) debe = TOTAL capturado.
   const calc = useMemo(() => {
-    const tasa = parseFloat(tasaIva) || 0;
     const sub = parseFloat(subtotal) || 0;
-    const iva = sub * tasa;
-    const total = sub + iva;
+    const ivaAmt = parseFloat(iva) || 0;
+    const total = sub + ivaAmt;
     const totalFactura = Number(factura?.importe_factura) || 0;
     const diferencia = total - totalFactura;
-    return { sub, iva, total, totalFactura, diferencia, ok: sub > 0 && Math.abs(diferencia) <= TOLERANCIA };
-  }, [subtotal, tasaIva, factura]);
+    const tasaImplicita = sub > 0 ? ivaAmt / sub : 0; // solo informativa (~0.16 o 0)
+    return { sub, iva: ivaAmt, total, totalFactura, diferencia, tasaImplicita, ok: sub > 0 && Math.abs(diferencia) <= TOLERANCIA };
+  }, [subtotal, iva, factura]);
 
   // Suma de servicios (opcional): ayuda a llenar el subtotal.
   const sumaServicios = useMemo(() => {
@@ -91,25 +94,25 @@ export default function DetalleFacturaPage() {
   async function guardar() {
     setMensaje(""); setResultado(null); setGuardando(true);
     try {
-      const tasa = parseFloat(tasaIva) || 0;
       const sub = parseFloat(subtotal);
       if (Number.isNaN(sub) || sub <= 0) { setMensaje("Captura el subtotal de la factura."); setGuardando(false); return; }
-      const iva = Math.round(sub * tasa * 100) / 100;
-      const total = Math.round((sub + iva) * 100) / 100;
+      const ivaAmt = Math.round((parseFloat(iva) || 0) * 100) / 100;
+      const total = Math.round((sub + ivaAmt) * 100) / 100;
+      const tasa = sub > 0 ? Math.round((ivaAmt / sub) * 10000) / 10000 : 0;
       const ok = Math.abs(total - (Number(factura.importe_factura) || 0)) <= TOLERANCIA;
 
       const { error } = await supabase
         .from("facturas")
         .update({
           subtotal_calculado: sub,
-          iva_calculado: iva,
+          iva_calculado: ivaAmt,
           total_calculado: total,
           tasa_iva: tasa,
           validacion_ok: ok,
         })
         .eq("id", facturaId);
       if (error) throw new Error("Al guardar: " + error.message);
-      setResultado({ subtotal_calculado: sub, iva_calculado: iva, total_calculado: total, validacion_ok: ok, diferencia: total - Number(factura.importe_factura) });
+      setResultado({ subtotal_calculado: sub, iva_calculado: ivaAmt, total_calculado: total, validacion_ok: ok, diferencia: total - Number(factura.importe_factura) });
     } catch (err) {
       setMensaje(err.message);
     } finally {
@@ -155,31 +158,39 @@ export default function DetalleFacturaPage() {
         </div>
       )}
 
-      {/* Captura del subtotal + validación */}
+      {/* Captura de subtotal + IVA (montos de la factura) + validación */}
       <div style={card}>
         <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>
-          Captura el SUBTOTAL de la factura (antes de IVA)
+          Captura el SUBTOTAL y el IVA tal como vienen en la factura
         </label>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>Subtotal (antes de IVA)</label>
             <input type="number" step="0.01" min="0" value={subtotal} placeholder="0.00"
               onChange={(e) => { setResultado(null); setSubtotal(e.target.value); }} style={bigInput} />
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--texto-suave)", marginRight: 6 }}>IVA:</label>
-            <select value={tasaIva} onChange={(e) => { setResultado(null); setTasaIva(e.target.value); }}
-              style={{ padding: "10px 12px", borderRadius: 6, border: "1px solid var(--borde)" }}>
-              <option value="0.16">16%</option>
-              <option value="0">No aplica (0%)</option>
-            </select>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>IVA (monto)</label>
+            <input type="number" step="0.01" min="0" value={iva} placeholder="0.00"
+              onChange={(e) => { setResultado(null); setIva(e.target.value); }} style={bigInput} />
           </div>
+        </div>
+        {/* Botones rápidos para llenar el IVA */}
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <button className="boton secundario" style={{ padding: "5px 10px", fontSize: 12 }}
+            onClick={() => { const s = parseFloat(subtotal) || 0; setResultado(null); setIva(String(Math.round(s * 0.16 * 100) / 100)); }}>IVA 16%</button>
+          <button className="boton secundario" style={{ padding: "5px 10px", fontSize: 12 }}
+            onClick={() => { setResultado(null); setIva("0"); }}>Sin IVA (0%)</button>
+          <button className="boton secundario" style={{ padding: "5px 10px", fontSize: 12 }}
+            onClick={() => { const s = parseFloat(subtotal) || 0; const t = Number(factura.importe_factura) || 0; setResultado(null); setIva(String(Math.round((t - s) * 100) / 100)); }}>
+            Ajustar al total (IVA = total − subtotal)</button>
         </div>
 
         {/* Cálculo en vivo */}
-        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 4, fontSize: 14, maxWidth: 380, marginLeft: "auto" }}>
-          <span style={{ color: "var(--texto-suave)" }}>Subtotal capturado</span>
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr auto", gap: 4, fontSize: 14, maxWidth: 400, marginLeft: "auto" }}>
+          <span style={{ color: "var(--texto-suave)" }}>Subtotal</span>
           <span style={{ textAlign: "right" }}>{money(calc.sub)}</span>
-          <span style={{ color: "var(--texto-suave)" }}>IVA ({(parseFloat(tasaIva) * 100).toFixed(0)}%)</span>
+          <span style={{ color: "var(--texto-suave)" }}>IVA{calc.sub > 0 ? ` (≈${(calc.tasaImplicita * 100).toFixed(1)}%)` : ""}</span>
           <span style={{ textAlign: "right" }}>{money(calc.iva)}</span>
           <span style={{ fontWeight: 700 }}>Total calculado</span>
           <span style={{ textAlign: "right", fontWeight: 700 }}>{money(calc.total)}</span>
@@ -189,12 +200,12 @@ export default function DetalleFacturaPage() {
 
         <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 8, fontSize: 13,
           background: calc.ok ? "var(--verde-claro)" : "var(--rojo-claro)",
-          color: calc.ok ? "var(--verde-oscuro)" : "var(--rojo)", maxWidth: 380, marginLeft: "auto" }}>
+          color: calc.ok ? "var(--verde-oscuro)" : "var(--rojo)", maxWidth: 400, marginLeft: "auto" }}>
           {calc.sub <= 0
-            ? "Captura el subtotal para validar."
+            ? "Captura el subtotal (y el IVA) para validar."
             : calc.ok
               ? `✓ Cuadra: subtotal + IVA = ${money(calc.total)} (diferencia ${money(calc.diferencia)}).`
-              : `✗ No cuadra: diferencia de ${money(calc.diferencia)} contra el total capturado.`}
+              : `✗ No cuadra por ${money(calc.diferencia)}. Si es redondeo del CFDI, usa "Ajustar al total".`}
         </div>
       </div>
 
@@ -229,8 +240,8 @@ export default function DetalleFacturaPage() {
               Suma (con IVA): <strong>{money(sumaServicios)}</strong>{" "}
               {sumaServicios > 0 && (
                 <button className="boton secundario" style={{ padding: "4px 10px", fontSize: 12 }}
-                  onClick={() => { const t = parseFloat(tasaIva) || 0; setResultado(null); setSubtotal(String(Math.round((sumaServicios / (1 + t)) * 100) / 100)); }}>
-                  Calcular subtotal (÷ IVA)
+                  onClick={() => { setResultado(null); const sub = Math.round((sumaServicios / 1.16) * 100) / 100; setSubtotal(String(sub)); setIva(String(Math.round((sumaServicios - sub) * 100) / 100)); }}>
+                  Desglosar subtotal + IVA (÷ 1.16)
                 </button>
               )}
             </div>
