@@ -116,6 +116,12 @@ export default function Portal() {
       ruta: '/disponibilidad', listo: true,
     },
     {
+      paso: 'Automatizar', titulo: 'Conciliar reportes',
+      desc: 'Sube los reportes de OOAD/PREI y SIGAF rellena el comprobante, marca pagadas y avanza el estatus solo.',
+      cifra: c.facturas, etiqueta: 'facturas a conciliar',
+      ruta: '/conciliar', listo: true,
+    },
+    {
       paso: 'Consulta', titulo: 'Catálogos',
       desc: 'Contratos, proveedores, cuentas y jefaturas.',
       cifra: c.contratos, etiqueta: 'contratos',
