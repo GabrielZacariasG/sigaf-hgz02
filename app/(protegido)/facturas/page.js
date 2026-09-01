@@ -49,13 +49,22 @@ export default function FacturasListaPage() {
 
   useEffect(() => {
     (async () => {
-      const [jp, js] = await Promise.all([
+      const [jp, js, pr] = await Promise.all([
         supabase.from("jefe_proveedor").select("proveedor_id, jefe_id"),
         supabase.from("jefes_servicio").select("id, nombre, jefatura"),
+        supabase.from("proveedores").select("id, razon_social"),
       ]);
       const jmap = {}; (js.data || []).forEach((j) => (jmap[j.id] = j));
-      const m = {};
-      (jp.data || []).forEach((r) => { const j = jmap[r.jefe_id]; if (j) (m[r.proveedor_id] ||= []).push({ nombre: j.nombre, jefatura: j.jefatura }); });
+      const pmap = {}; (pr.data || []).forEach((p) => (pmap[p.id] = p.razon_social));
+      const nk = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, ""); // clave por nombre (robusta a duplicados)
+      const m = {}; // razonNormalizada -> [{nombre, jefatura}]
+      (jp.data || []).forEach((r) => {
+        const j = jmap[r.jefe_id]; const rz = pmap[r.proveedor_id];
+        if (!j || !rz) return;
+        const k = nk(rz);
+        const arr = (m[k] ||= []);
+        if (!arr.some((x) => x.nombre === j.nombre)) arr.push({ nombre: j.nombre, jefatura: j.jefatura });
+      });
       setProvJefes(m);
     })();
   }, []);
@@ -165,8 +174,9 @@ export default function FacturasListaPage() {
   const enviarServicio = () => {
     if (!seleccionadas.length) return;
     const g = new Map();
+    const nk = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     for (const f of seleccionadas) {
-      const jefes = provJefes[f.proveedor_id] || [];
+      const jefes = provJefes[nk(f.prov)] || [];
       if (!jefes.length) {
         const k = "__sin__"; const grp = g.get(k) || { jefe: "Jefe(a) de Servicio correspondiente", jefatura: "(sin proveedor asignado)", filas: [] };
         grp.filas.push(f); g.set(k, grp);
