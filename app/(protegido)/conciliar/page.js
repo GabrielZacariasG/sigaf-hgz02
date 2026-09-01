@@ -92,7 +92,7 @@ export default function ConciliarPage() {
         if (!data || data.length < 1000) break;
         desde += 1000;
       }
-      const idx = { porFactura: new Map(), porCompr: new Map(), porImporte: new Map(), lista: todas };
+      const idx = { porFactura: new Map(), porCompr: new Map(), porImporte: new Map(), provSet: new Set(), contratoSet: new Set(), lista: todas };
       for (const f of todas) {
         const nf = normFactura(f.folio_proveedor);
         if (nf.length >= 3) { if (!idx.porFactura.has(nf)) idx.porFactura.set(nf, []); idx.porFactura.get(nf).push(f); }
@@ -100,6 +100,10 @@ export default function ConciliarPage() {
         if (cr.length >= 4) idx.porCompr.set(cr, f);
         const ic = cents(f.importe_factura);
         if (ic != null) { if (!idx.porImporte.has(ic)) idx.porImporte.set(ic, []); idx.porImporte.get(ic).push(f); }
+        const p = normProv(f.proveedores?.razon_social).slice(0, 8);
+        if (p.length >= 5) idx.provSet.add(p);
+        const c = normContrato(f.contratos?.numero_interno);
+        if (c.length >= 8) idx.contratoSet.add(c);
       }
       setFacturas(idx);
       setReportes([]); setConfirmados({});
@@ -108,37 +112,39 @@ export default function ConciliarPage() {
     setCargando(false);
   };
 
-  // intenta casar exacto; si no, devuelve candidatos por importe (+proveedor)
+  // intenta casar exacto; si no, sugiere candidatos DEL MISMO PROVEEDOR por importe
   const casar = (idx, row, col) => {
     const compr = String(row[col.comprobante] ?? "").replace(/[^0-9]/g, "");
     if (compr.length >= 4 && idx.porCompr.has(compr)) return { f: idx.porCompr.get(compr), via: "comprobante" };
     const nf = normFactura(row[col.factura]);
     const cont = col.contrato >= 0 ? normContrato(row[col.contrato]) : "";
     const imp = cents(row[col.importe]);
+    const prov = normProv(row[col.provNom]).slice(0, 8);
+    const provOurs = prov.length >= 5 && idx.provSet.has(prov);
+    const contOurs = cont.length >= 8 && [...idx.contratoSet].some((c) => c.includes(cont) || cont.includes(c));
+    // renglón ajeno (nómina / otra unidad): ni proveedor ni contrato nuestros → se ignora
+    if (!provOurs && !contOurs) return { ajena: true };
+
+    const mismoProv = (f) => normProv(f.proveedores?.razon_social).slice(0, 8) === prov;
     const cands = nf.length >= 3 ? (idx.porFactura.get(nf) || []) : [];
     if (cands.length) {
       let filtrados = cands;
       if (cont.length >= 8) {
         const porC = cands.filter((f) => { const c = normContrato(f.contratos?.numero_interno); return c && (c.includes(cont) || cont.includes(c)); });
         if (porC.length) filtrados = porC;
+      } else if (provOurs) {
+        const porP = filtrados.filter(mismoProv); // sin contrato, exigir mismo proveedor
+        if (porP.length) filtrados = porP;
       }
       if (filtrados.length > 1 && imp != null) {
         const porI = filtrados.filter((f) => cents(f.importe_factura) === imp);
         if (porI.length) filtrados = porI;
       }
-      if (filtrados.length === 1) return { f: filtrados[0], via: cont ? "contrato+factura" : "factura" };
+      if (filtrados.length === 1) return { f: filtrados[0], via: cont ? "contrato+factura" : "factura+prov" };
     }
-    // sugerencias por importe exacto (para confirmar a mano)
-    let sugeridos = imp != null ? (idx.porImporte.get(imp) || []) : [];
-    // priorizar mismo proveedor y sin CR aún
-    const prov = normProv(row[col.provNom]);
-    sugeridos = [...sugeridos].sort((a, b) => {
-      const pa = prov && normProv(a.proveedores?.razon_social).slice(0, 8) === prov.slice(0, 8) ? 1 : 0;
-      const pb = prov && normProv(b.proveedores?.razon_social).slice(0, 8) === prov.slice(0, 8) ? 1 : 0;
-      const sa = String(a.cr_contrarecibo ?? "").trim() ? 0 : 1;
-      const sb = String(b.cr_contrarecibo ?? "").trim() ? 0 : 1;
-      return (pb - pa) || (sb - sa);
-    }).slice(0, 6);
+    // sugerencias: MISMO proveedor + MISMO importe (sin CR primero)
+    let sugeridos = imp != null ? (idx.porImporte.get(imp) || []).filter(mismoProv) : [];
+    sugeridos = [...sugeridos].sort((a, b) => (String(a.cr_contrarecibo ?? "").trim() ? 1 : 0) - (String(b.cr_contrarecibo ?? "").trim() ? 1 : 0)).slice(0, 6);
     return { f: null, sugeridos, cand: cands.length };
   };
 
@@ -155,7 +161,7 @@ export default function ConciliarPage() {
       if (!meta) { setError(`"${file.name}": no reconocí el formato (falta columna Comprobante/Factura).`); e.target.value = ""; return; }
       const { hdr, col, tipo, tienePedRec } = meta;
 
-      const matches = [], porConfirmar = []; let sinCruce = 0, gastoCruzado = 0, gastoPendiente = 0;
+      const matches = [], porConfirmar = []; let sinCruce = 0, ajenas = 0, gastoCruzado = 0, gastoPendiente = 0;
       const vistos = new Set();
       const idBase = file.name.replace(/\W+/g, "") + "_";
       for (let r = hdr + 1; r < grid.length; r++) {
@@ -165,6 +171,7 @@ export default function ConciliarPage() {
         if (!fTxt && !cTxt) continue;
         const imp = cents(row[col.importe]) ?? 0;
         const res = casar(facturas, row, col);
+        if (res.ajena) { ajenas++; continue; }              // nómina / otra unidad → se ignora
         if (res.f) {
           if (vistos.has(res.f.id)) continue;
           const cambios = calcularCambios(res.f, row, col, tipo, tienePedRec);
@@ -178,7 +185,7 @@ export default function ConciliarPage() {
           gastoPendiente += imp / 100;
         } else { sinCruce++; gastoPendiente += imp / 100; }
       }
-      setReportes((prev) => [...prev, { nombre: file.name, tipo, tienePedRec, matches, porConfirmar, sinCruce, gastoCruzado, gastoPendiente }]);
+      setReportes((prev) => [...prev, { nombre: file.name, tipo, tienePedRec, matches, porConfirmar, sinCruce, ajenas, gastoCruzado, gastoPendiente }]);
     } catch (err) { setError("No pude leer el archivo: " + err.message); }
     e.target.value = "";
   };
@@ -274,6 +281,7 @@ export default function ConciliarPage() {
                 <span style={{ color: "var(--verde)", fontWeight: 600 }}>{rep.matches.length} automáticas</span>
                 {" · "}<span>{rep.porConfirmar.length} por confirmar</span>
                 {" · "}<span style={{ color: "var(--texto-suave)" }}>{rep.sinCruce} sin cruce</span>
+                {" · "}<span style={{ color: "var(--texto-suave)" }}>{rep.ajenas} de otras unidades (ignoradas)</span>
                 {"  —  "}<span style={{ color: "var(--texto-suave)" }}>cruzado {money(rep.gastoCruzado)} · pendiente {money(rep.gastoPendiente)}</span>
               </div>
 
