@@ -126,79 +126,91 @@ export default function ValidacionServicioPage() {
     const servicio = f0.contratos?.adquisicion_servicio || "(servicio)";
     const contratoNum = f0.contratos?.numero_interno || "(contrato)";
     const variosProv = new Set(oficio.filas.map((f) => f.proveedor_id)).size > 1;
-    const doc = { background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "40px 48px", maxWidth: 820, margin: "0 auto", lineHeight: 1.55, fontSize: 14 };
-    const tblH = { textAlign: "left", fontSize: 12, padding: "6px 10px", border: "1px solid #444", background: "#f0f0f0" };
-    const tblD = { padding: "6px 10px", border: "1px solid #999", fontSize: 13 };
+    const tblH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
+    const tblD = { padding: "8px 12px", borderBottom: "1px solid #ddd", fontSize: 13 };
+    const tot = oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
     return (
       <div>
-        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
           <button className="boton secundario" onClick={() => setOficio(null)}>← Volver</button>
-          <button className="boton secundario" onClick={() => window.print()}>Imprimir / PDF</button>
+          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
-          {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Seleccionaste varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
+          {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
-        <div className="hoja" style={doc}>
-          {/* Membrete */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #7a1737", paddingBottom: 8 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Gobierno de México · IMSS<br /><span style={{ fontWeight: 400, fontSize: 11 }}>Instituto Mexicano del Seguro Social</span></div>
-            <div style={{ fontSize: 11, textAlign: "right" }}>HGZ No. 2 · Jefatura de {oficio.jefe?.jefatura}</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, fontSize: 13 }}>
-            <span>Of. N° <strong>{oficio.folio}</strong></span>
-            <span>Aguascalientes, Ags., a {hoy()}.</span>
-          </div>
-
-          {/* Destinatario: administrador del contrato */}
-          <div style={{ marginTop: 22 }}>
-            <div style={{ fontWeight: 700 }}>{admin}</div>
-            <div>Administrador del contrato {contratoNum}</div>
-            <div>Presente</div>
-          </div>
-
-          {/* Cuerpo */}
-          {esCum ? (
-            <p style={{ marginTop: 18, textAlign: "justify" }}>
-              Se adjunta al presente las siguientes facturas del proveedor <strong>{proveedor}</strong>, por concepto de pago de <strong>{servicio}</strong>.
-              Al respecto me permito informar que, a la fecha de la prestación de la presente factura, <strong>NO EXISTE INCUMPLIMIENTO</strong> del
-              contrato antes referido en ninguno de los términos y condiciones que amparan cada una de las cláusulas del mismo, ni penas
-              convencionales pendientes de aplicar al proveedor en cita.
-            </p>
-          ) : (
-            <p style={{ marginTop: 18, textAlign: "justify" }}>
-              Por medio del presente envío a Usted informe de las incidencias ocurridas en la prestación de <strong>{servicio}</strong> del proveedor{" "}
-              <strong>{proveedor}</strong>{f0.periodo_inicio ? `, durante el periodo del ${f0.periodo_inicio} al ${f0.periodo_fin}` : ""}; por
-              <strong> incumplimiento</strong> a las cláusulas de <em>Lugar, plazos y condiciones para la entrega de los bienes/servicios</em>, siendo procedente
-              la cláusula de <strong>Penas Convencionales</strong>. Motivo: <strong>{oficio.motivo}</strong>.
-            </p>
-          )}
-
-          {/* Tabla de facturas */}
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
-            <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
-            <tbody>
-              {oficio.filas.map((f) => (
-                <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
-              ))}
-              <tr><td style={tblD} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700 }}>{money(oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0))}</td></tr>
-            </tbody>
-          </table>
-
-          <p style={{ marginTop: 18 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
-          <p style={{ marginTop: 10, fontWeight: 700 }}>ATENTAMENTE</p>
-          <p style={{ fontSize: 12, fontStyle: "italic" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
-
-          {/* Firmas */}
-          <div style={{ marginTop: 40, textAlign: "center" }}>
-            _________________________________________<br />
-            <strong>{oficio.jefe?.nombre}</strong><br />
-            Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2
-          </div>
-          <div style={{ marginTop: 26, fontSize: 12 }}>
-            <div><strong>Autoriza:</strong> Subdirector Administrativo HGZ No. 2</div>
-            <div style={{ marginTop: 14, color: "#555" }}>Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.</div>
+        <div className="hoja">
+          <div className="doc-hoja">
+            <div>
+              {/* Membrete */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 12 }}>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>Gobierno de México · IMSS<br /><span style={{ fontWeight: 400, fontSize: 12, color: "#555" }}>Instituto Mexicano del Seguro Social</span></div>
+                <div style={{ fontSize: 12, textAlign: "right", color: "#555" }}>HGZ No. 2<br />Jefatura de {oficio.jefe?.jefatura}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 26, fontSize: 13.5 }}>
+                <span>Of. N° <strong>{oficio.folio}</strong></span>
+                <span>Aguascalientes, Ags., a {hoy()}.</span>
+              </div>
+              {/* Destinatario */}
+              <div style={{ marginTop: 28 }}>
+                <div style={{ fontWeight: 700 }}>{admin}</div>
+                <div>Administrador del contrato {contratoNum}</div>
+                <div>P r e s e n t e</div>
+              </div>
+              {/* Cuerpo */}
+              {esCum ? (
+                <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
+                  Se adjunta al presente las siguientes facturas del proveedor <strong>{proveedor}</strong>, por concepto de pago de <strong>{servicio}</strong>.
+                  Al respecto me permito informar que, a la fecha de la prestación de la presente factura, <strong>NO EXISTE INCUMPLIMIENTO</strong> del
+                  contrato antes referido en ninguno de los términos y condiciones que amparan cada una de las cláusulas del mismo, ni penas
+                  convencionales pendientes de aplicar al proveedor en cita.
+                </p>
+              ) : (
+                <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
+                  Por medio del presente envío a Usted informe de las incidencias ocurridas en la prestación de <strong>{servicio}</strong> del proveedor{" "}
+                  <strong>{proveedor}</strong>{f0.periodo_inicio ? `, durante el periodo del ${f0.periodo_inicio} al ${f0.periodo_fin}` : ""}; por
+                  <strong> incumplimiento</strong> a las cláusulas de <em>Lugar, plazos y condiciones para la entrega de los bienes/servicios</em>, siendo procedente
+                  la cláusula de <strong>Penas Convencionales</strong>. Motivo: <strong>{oficio.motivo}</strong>.
+                </p>
+              )}
+              {/* Tabla */}
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
+                <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
+                <tbody>
+                  {oficio.filas.map((f) => (
+                    <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                  ))}
+                  <tr><td style={{ ...tblD, borderTop: "2px solid #333", borderBottom: "2px solid #333" }} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>{money(tot)}</td></tr>
+                </tbody>
+              </table>
+              <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
+            </div>
+            {/* Firmas al fondo */}
+            <div style={{ marginTop: "auto", paddingTop: 40 }}>
+              <div style={{ textAlign: "center", fontWeight: 700 }}>ATENTAMENTE</div>
+              <div style={{ textAlign: "center", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ borderTop: "1px solid #333", width: 340, margin: "0 auto", paddingTop: 6 }}>
+                  <strong>{oficio.jefe?.nombre}</strong><br />
+                  <span style={{ fontSize: 13, color: "#444" }}>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</span>
+                </div>
+              </div>
+              <div style={{ marginTop: 28, fontSize: 11.5, color: "#555" }}>
+                <div><strong>Autoriza:</strong> Subdirector Administrativo HGZ No. 2</div>
+                <div style={{ marginTop: 10 }}>Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.</div>
+              </div>
+            </div>
           </div>
         </div>
-        <style>{`@media print { body * { visibility: hidden !important; } .hoja, .hoja * { visibility: visible !important; } .hoja { position: absolute; left: 0; top: 0; width: 100%; } .no-print { display: none !important; } }`}</style>
+        <style>{`
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:2.2cm 2.4cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; line-height:1.55; }
+          @page { size: letter; margin: 0; }
+          @media print {
+            body * { visibility: hidden !important; }
+            .hoja, .hoja * { visibility: visible !important; }
+            .hoja { position:absolute; left:0; top:0; width:100%; }
+            .no-print { display:none !important; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:100vh; }
+          }
+        `}</style>
       </div>
     );
   }

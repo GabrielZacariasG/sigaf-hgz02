@@ -205,55 +205,73 @@ export default function FacturasListaPage() {
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
 
-  // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (imprimible limpio) ----
+  // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (hoja carta, limpio) ----
   if (memo) {
-    const linea = { display: "grid", gridTemplateColumns: "90px 1fr", gap: 4, fontSize: 13.5 };
-    const mH = { textAlign: "left", fontSize: 11.5, padding: "6px 10px", border: "1px solid #444", background: "#f0f0f0", textTransform: "uppercase", letterSpacing: 0.3 };
-    const mD = { padding: "6px 10px", border: "1px solid #bbb", fontSize: 12.5 };
+    const linea = { display: "grid", gridTemplateColumns: "80px 1fr", gap: 6, fontSize: 14 };
+    const mH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
+    const mD = { padding: "8px 12px", borderBottom: "1px solid #ddd", fontSize: 13 };
     return (
       <div>
-        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
           <button className="boton secundario" onClick={() => setMemo(null)}>← Volver</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>
-          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.grupos.length} memo(s) · un jefe por hoja</span>
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.grupos.length} memo(s) · un jefe por hoja carta</span>
         </div>
         <div className="hoja">
           {memo.grupos.map((g, gi) => {
             const total = g.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
-              <div key={gi} style={{ background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "44px 52px", maxWidth: 840, margin: "0 auto 18px", lineHeight: 1.5, breakAfter: "page" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 10 }}>
-                  <div><div style={{ fontWeight: 800, fontSize: 15 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 11, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
-                  <div style={{ textAlign: "right", fontSize: 12 }}><div style={{ fontWeight: 700, letterSpacing: 1 }}>MEMORÁNDUM</div><div>{g.folio}</div></div>
+              <div key={gi} className="doc-hoja">
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 12 }}>
+                    <div><div style={{ fontWeight: 800, fontSize: 17 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 12, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
+                    <div style={{ textAlign: "right", fontSize: 13 }}><div style={{ fontWeight: 700, letterSpacing: 1.5 }}>MEMORÁNDUM</div><div style={{ color: "#555" }}>{g.folio}</div></div>
+                  </div>
+                  <div style={{ marginTop: 30, display: "grid", gap: 7 }}>
+                    <div style={linea}><span style={{ color: "#777" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
+                    <div style={linea}><span style={{ color: "#777" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
+                    <div style={linea}><span style={{ color: "#777" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
+                    <div style={linea}><span style={{ color: "#777" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
+                  </div>
+                  <p style={{ marginTop: 30, textAlign: "justify", fontSize: 15, lineHeight: 1.7 }}>
+                    Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
+                    el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
+                  </p>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
+                    <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
+                    <tbody>
+                      {g.filas.map((f) => (
+                        <tr key={f.id}><td style={mD}>{f.folio_proveedor}</td><td style={mD}>{f.prov}</td><td style={mD}>{f.contrato}</td><td style={mD}>{f.periodo_inicio ?? "—"} → {f.periodo_fin ?? "—"}</td><td style={{ ...mD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                      ))}
+                      <tr><td style={{ ...mD, borderBottom: "2px solid #333", borderTop: "2px solid #333" }} colSpan={4}><strong>Total ({g.filas.length} factura{g.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700, borderBottom: "2px solid #333", borderTop: "2px solid #333" }}>{money(total)}</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{ marginTop: 22, display: "grid", gap: 5 }}>
-                  <div style={linea}><span style={{ color: "#666" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
-                  <div style={linea}><span style={{ color: "#666" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
-                  <div style={linea}><span style={{ color: "#666" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
-                  <div style={linea}><span style={{ color: "#666" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
+                {/* firma al fondo de la hoja */}
+                <div style={{ marginTop: "auto", paddingTop: 40, textAlign: "center" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>ATENTAMENTE</div>
+                  <div style={{ fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 56 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+                  <div style={{ borderTop: "1px solid #333", width: 320, margin: "0 auto", paddingTop: 6 }}>
+                    <strong>Lic. Nayeli Alonso Orozco</strong><br />
+                    <span style={{ fontSize: 13, color: "#444" }}>Jefa del Departamento de Finanzas · HGZ No. 2</span>
+                  </div>
                 </div>
-                <p style={{ marginTop: 20, textAlign: "justify", fontSize: 14 }}>
-                  Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
-                  el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
-                </p>
-                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-                  <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
-                  <tbody>
-                    {g.filas.map((f) => (
-                      <tr key={f.id}><td style={mD}>{f.folio_proveedor}</td><td style={mD}>{f.prov}</td><td style={mD}>{f.contrato}</td><td style={mD}>{f.periodo_inicio ?? "—"} → {f.periodo_fin ?? "—"}</td><td style={{ ...mD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
-                    ))}
-                    <tr><td style={mD} colSpan={4}><strong>Total ({g.filas.length} factura{g.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700 }}>{money(total)}</td></tr>
-                  </tbody>
-                </table>
-                <p style={{ marginTop: 26, fontWeight: 700 }}>ATENTAMENTE</p>
-                <p style={{ fontSize: 12, fontStyle: "italic", color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
-                <div style={{ marginTop: 40, textAlign: "center" }}>_________________________________________<br /><strong>Lic. Nayeli Alonso Orozco</strong><br />Jefa del Departamento de Finanzas · HGZ No. 2</div>
               </div>
             );
           })}
         </div>
-        <style>{`@media print { body * { visibility: hidden !important; } .hoja, .hoja * { visibility: visible !important; } .hoja { position: absolute; left: 0; top: 0; width: 100%; } .no-print { display: none !important; } }`}</style>
+        <style>{`
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:2.2cm 2.4cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; break-after:page; }
+          @page { size: letter; margin: 0; }
+          @media print {
+            body * { visibility: hidden !important; }
+            .hoja, .hoja * { visibility: visible !important; }
+            .hoja { position:absolute; left:0; top:0; width:100%; }
+            .no-print { display:none !important; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:100vh; }
+          }
+        `}</style>
       </div>
     );
   }
