@@ -49,9 +49,13 @@ export default function FacturasListaPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("jefe_proveedor").select("proveedor_id, jefes_servicio ( nombre, jefatura )");
+      const [jp, js] = await Promise.all([
+        supabase.from("jefe_proveedor").select("proveedor_id, jefe_id"),
+        supabase.from("jefes_servicio").select("id, nombre, jefatura"),
+      ]);
+      const jmap = {}; (js.data || []).forEach((j) => (jmap[j.id] = j));
       const m = {};
-      (data || []).forEach((r) => { if (r.jefes_servicio) (m[r.proveedor_id] ||= []).push(r.jefes_servicio); });
+      (jp.data || []).forEach((r) => { const j = jmap[r.jefe_id]; if (j) (m[r.proveedor_id] ||= []).push({ nombre: j.nombre, jefatura: j.jefatura }); });
       setProvJefes(m);
     })();
   }, []);
