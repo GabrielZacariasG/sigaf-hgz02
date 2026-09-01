@@ -21,18 +21,25 @@ export default function ValidacionServicioPage() {
   const [motivo, setMotivo] = useState("");
   const [oficio, setOficio] = useState(null); // { jefe, dictamen, motivo, filas, folio }
   const [guardando, setGuardando] = useState(false);
+  const [esJefeSesion, setEsJefeSesion] = useState(false); // el usuario logueado ES un jefe (bloquea a él)
 
   useEffect(() => {
     (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = (session?.user?.email || "").toLowerCase();
       const [rJ, rF] = await Promise.all([
-        supabase.from("jefes_servicio").select("id, nombre, jefatura").eq("activo", true).order("nombre"),
+        supabase.from("jefes_servicio").select("id, nombre, jefatura, email").eq("activo", true).order("nombre"),
         supabase.from("facturas")
           .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno ), proveedores ( razon_social )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
       ]);
       if (rJ.error) setMensaje("No pude cargar jefes: " + rJ.error.message + " (¿ya corriste sigaf_jefes_servicio.sql?)");
-      setJefes(rJ.data || []);
+      const lista = rJ.data || [];
+      setJefes(lista);
       setFacturas(rF.data || []);
+      // Si quien inició sesión es un jefe (por correo), se bloquea a su vista.
+      const mio = lista.find((j) => j.email && j.email.toLowerCase() === email);
+      if (mio) { setJefeId(mio.id); setEsJefeSesion(true); }
       setCargando(false);
     })();
   }, []);
@@ -154,13 +161,22 @@ export default function ValidacionServicioPage() {
         selecciona una o varias y <strong>genera el oficio de cumplimiento o incumplimiento</strong>.
       </p>
 
-      <div style={{ ...card, marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <label style={{ fontSize: 13, fontWeight: 600 }}>Jefe de servicio:</label>
-        <select value={jefeId} onChange={(e) => { setJefeId(e.target.value); setSel({}); }} style={{ ...inp, minWidth: 280 }}>
-          <option value="">— Elige —</option>
-          {jefes.map((j) => <option key={j.id} value={j.id}>{j.nombre} · {j.jefatura}</option>)}
-        </select>
-      </div>
+      {esJefeSesion ? (
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Sesión de:</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{jefe?.nombre}</div>
+          <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Jefatura de {jefe?.jefatura}</div>
+        </div>
+      ) : (
+        <div style={{ ...card, marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Jefe de servicio:</label>
+          <select value={jefeId} onChange={(e) => { setJefeId(e.target.value); setSel({}); }} style={{ ...inp, minWidth: 280 }}>
+            <option value="">— Elige —</option>
+            {jefes.map((j) => <option key={j.id} value={j.id}>{j.nombre} · {j.jefatura}</option>)}
+          </select>
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>(vista de Presupuesto; cada jefe entra con su propio usuario y ve solo lo suyo)</span>
+        </div>
+      )}
 
       {mensaje && <p style={{ fontSize: 13, color: mensaje.startsWith("Oficio") ? "var(--verde)" : "var(--rojo)", marginTop: 10, fontWeight: 600 }}>{mensaje}</p>}
 

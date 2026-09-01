@@ -29,6 +29,15 @@ export default function Portal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.replace('/login'); return; }
 
+      // Si quien entra es un jefe de servicio (por correo), va directo a su panel de validación.
+      try {
+        const email = (session.user?.email || '').toLowerCase();
+        if (email) {
+          const { data: js } = await supabase.from('jefes_servicio').select('id').eq('email', email).eq('activo', true).maybeSingle();
+          if (js) { router.replace('/validacion'); return; }
+        }
+      } catch { /* si la tabla no existe aún, seguir normal */ }
+
       const { data: u } = await supabase
         .from('usuarios')
         .select('nombre, rol')
