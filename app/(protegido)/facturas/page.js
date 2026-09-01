@@ -42,6 +42,9 @@ export default function FacturasListaPage() {
   const [ocultarCompl, setOcultarCompl] = useState(false);
   const [agrupar, setAgrupar] = useState("none");
   const [abiertos, setAbiertos] = useState({});
+  const [sel, setSel] = useState({});         // facturaId -> bool (para enviar al servicio)
+  const [memo, setMemo] = useState(null);      // { filas, folio }
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -142,8 +145,74 @@ export default function FacturasListaPage() {
 
   const hayFiltro = fEstatus || fCapitulo || busqueda || fProv || fContrato || soloCR || soloEstancadas || soloDiscrep || ocultarCompl;
   const montoFiltrado = useMemo(() => filtradas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0), [filtradas]);
+  const seleccionadas = useMemo(() => filtradas.filter((f) => sel[f.id]), [filtradas, sel]);
+  const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
+
+  const enviarServicio = () => {
+    if (!seleccionadas.length) return;
+    setMemo({ filas: seleccionadas, folio: `MEMO-FIN-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}` });
+  };
+  const confirmarEnvio = async () => {
+    setEnviando(true);
+    try {
+      const ids = memo.filas.map((f) => f.id);
+      for (let i = 0; i < ids.length; i += 25) {
+        const lote = ids.slice(i, i + 25);
+        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
+      }
+      setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
+      setSel({}); setMemo(null);
+    } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
+    setEnviando(false);
+  };
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
+
+  // ---- MEMORÁNDUM de envío al servicio (imprimible) ----
+  if (memo) {
+    const total = memo.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+    const linea = { display: "grid", gridTemplateColumns: "90px 1fr", gap: 4, fontSize: 13.5 };
+    const mH = { textAlign: "left", fontSize: 11.5, padding: "6px 10px", border: "1px solid #444", background: "#f0f0f0", textTransform: "uppercase", letterSpacing: 0.3 };
+    const mD = { padding: "6px 10px", border: "1px solid #bbb", fontSize: 12.5 };
+    return (
+      <div>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+          <button className="boton secundario" onClick={() => setMemo(null)}>← Volver</button>
+          <button className="boton secundario" onClick={() => window.print()}>Imprimir / PDF</button>
+          <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>
+        </div>
+        <div style={{ background: "#fff", color: "#111", border: "1px solid var(--borde)", borderRadius: 6, padding: "44px 52px", maxWidth: 840, margin: "0 auto", lineHeight: 1.5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 10 }}>
+            <div><div style={{ fontWeight: 800, fontSize: 15 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 11, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
+            <div style={{ textAlign: "right", fontSize: 12 }}><div style={{ fontWeight: 700, letterSpacing: 1 }}>MEMORÁNDUM</div><div>{memo.folio}</div></div>
+          </div>
+          <div style={{ marginTop: 22, display: "grid", gap: 5 }}>
+            <div style={linea}><span style={{ color: "#666" }}>Para:</span><strong>Jefe(a) de Servicio correspondiente</strong></div>
+            <div style={linea}><span style={{ color: "#666" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
+            <div style={linea}><span style={{ color: "#666" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
+            <div style={linea}><span style={{ color: "#666" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
+          </div>
+          <p style={{ marginTop: 20, textAlign: "justify", fontSize: 14 }}>
+            Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
+            el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
+          </p>
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+            <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
+            <tbody>
+              {memo.filas.map((f) => (
+                <tr key={f.id}><td style={mD}>{f.folio_proveedor}</td><td style={mD}>{f.prov}</td><td style={mD}>{f.contrato}</td><td style={mD}>{f.periodo_inicio ?? "—"} → {f.periodo_fin ?? "—"}</td><td style={{ ...mD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+              ))}
+              <tr><td style={mD} colSpan={4}><strong>Total ({memo.filas.length} factura{memo.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700 }}>{money(total)}</td></tr>
+            </tbody>
+          </table>
+          <p style={{ marginTop: 26, fontWeight: 700 }}>ATENTAMENTE</p>
+          <p style={{ fontSize: 12, fontStyle: "italic", color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</p>
+          <div style={{ marginTop: 40, textAlign: "center" }}>_________________________________________<br /><strong>Lic. Nayeli Alonso Orozco</strong><br />Jefa del Departamento de Finanzas · HGZ No. 2</div>
+        </div>
+        <style>{`@media print { .no-print { display:none } body { background:#fff } }`}</style>
+      </div>
+    );
+  }
 
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "9px 12px", borderBottom: "1px solid var(--borde)", whiteSpace: "nowrap" };
   const td = { padding: "9px 12px", borderBottom: "1px solid var(--borde)", fontSize: 14, verticalAlign: "top" };
@@ -167,13 +236,15 @@ export default function FacturasListaPage() {
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>
+            <th style={{ ...th, width: 30 }}></th>
             <th style={th}>Folio / CR</th><th style={th}>Proveedor</th><th style={th}>Contrato</th>
             <th style={th}>General</th><th style={th}>Firmas</th><th style={th}>Pedido-recep.</th>
             <th style={{ ...th, textAlign: "right" }}>Importe</th><th style={th}>Valid.</th>
           </tr></thead>
           <tbody>
             {filas.map((f) => (
-              <tr key={f.id} style={f.estancada ? { background: "var(--rojo-claro)" } : f.estatus_general === "gasto_reflejado" ? { opacity: 0.72 } : {}}>
+              <tr key={f.id} style={sel[f.id] ? { background: "var(--verde-claro)" } : f.estancada ? { background: "var(--rojo-claro)" } : f.estatus_general === "gasto_reflejado" ? { opacity: 0.72 } : {}}>
+                <td style={{ ...td, textAlign: "center" }}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggleSel(f.id)} /></td>
                 <td style={td}>
                   <Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)", fontWeight: 600 }}>{f.folio_ingreso}</Link>
                   <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}{f.tieneCR ? <span style={{ color: "var(--verde-oscuro)" }}> · CR {f.cr_contrarecibo}</span> : ""}</div>
@@ -264,7 +335,16 @@ export default function FacturasListaPage() {
         {hayFiltro && <button className="boton secundario" onClick={() => { setFEstatus(null); setFCapitulo(null); setBusqueda(""); setFProv(""); setFContrato(""); setSoloCR(false); setSoloEstancadas(false); setSoloDiscrep(false); setOcultarCompl(false); }}>Limpiar</button>}
       </div>
 
-      <div style={{ marginTop: 14, fontSize: 14, fontWeight: 700 }}>{filtradas.length} factura(s) · {money(montoFiltrado)}</div>
+      <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>{filtradas.length} factura(s) · {money(montoFiltrado)}</span>
+        {seleccionadas.length > 0 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{seleccionadas.length} seleccionada(s)</span>
+            <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
+            <button className="boton" onClick={enviarServicio}>Enviar al servicio →</button>
+          </div>
+        )}
+      </div>
 
       {filtradas.length === 0 ? (
         <p style={{ color: "var(--texto-suave)", fontSize: 13, marginTop: 8 }}>Ninguna factura con estos filtros. <Link href="/facturas/nueva">Capturar una</Link>.</p>
