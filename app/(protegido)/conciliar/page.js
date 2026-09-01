@@ -25,6 +25,7 @@ const SLOTS = [
   { id: "comp_int", n: "3", titulo: "Comprobantes — Integrales", hint: "N_AP_IMSS_1011 …  ·  pendientes de pago (PREI II)", tipo: "reporte" },
   { id: "pagos_gen", n: "4", titulo: "Pagos — general", hint: "pagosun … .xlsx   o   N_AP_IMSS_4002", tipo: "reporte" },
   { id: "pagos_int", n: "5", titulo: "Pagos — Integrales", hint: "N_AP_IMSS_4007 …  ·  pagado + pedido/recepción (PREI II)", tipo: "reporte" },
+  { id: "pedrec", n: "6", titulo: "Pedido-Recepción (Integrales)", hint: "N_AP_IMSS_1013 …  ·  recepciones sin comprobante (guía por importe)", tipo: "reporte" },
 ];
 
 function findCol(H, pred) { for (let j = 0; j < H.length; j++) { const h = String(H[j] ?? "").trim().toLowerCase(); if (h && pred(h)) return j; } return -1; }
@@ -33,10 +34,25 @@ function analizarReporte(grid) {
   let hdr = -1;
   for (let r = 0; r < Math.min(grid.length, 15); r++) {
     const row = (grid[r] || []).map((c) => String(c).trim().toLowerCase());
-    if (row.includes("comprobante") || row.includes("factura")) { hdr = r; break; }
+    if (row.includes("comprobante") || row.includes("factura") ||
+        (row.some((h) => h.includes("no. pedido")) && row.some((h) => h.includes("contrato imss")))) { hdr = r; break; }
   }
   if (hdr < 0) return null;
   const H = grid[hdr] || [];
+  // 1013: recepciones sin comprobante (no trae Factura ni Comprobante, sí Pedido + Contrato + Importe Merc)
+  const hasFactura = findCol(H, (h) => h === "factura") >= 0;
+  const hasCompr = findCol(H, (h) => h === "comprobante") >= 0;
+  const hasPedido = findCol(H, (h) => h.includes("no. pedido")) >= 0;
+  if (!hasFactura && !hasCompr && hasPedido) {
+    return { hdr, tipo: "pedrec", col: {
+      pedido: findCol(H, (h) => h.includes("no. pedido")),
+      recepcion: findCol(H, (h) => h.includes("nota recep")),
+      contrato: findCol(H, (h) => h.includes("contrato imss")),
+      importe: findCol(H, (h) => h.includes("importe merc")),
+      provNom: findCol(H, (h) => h.includes("nombre") && h.includes("prov")),
+      fecha: findCol(H, (h) => h.includes("fecha recep")),
+    } };
+  }
   const col = {
     comprobante: findCol(H, (h) => h === "comprobante"),
     factura: findCol(H, (h) => h === "factura"),
@@ -114,14 +130,15 @@ export default function ConciliarPage() {
       if (!data || data.length < 1000) break;
       desde += 1000;
     }
-    const idx = { porFactura: new Map(), porCompr: new Map(), porImporte: new Map(), provSet: new Set(), contratoSet: new Set(), lista: todas };
+    const idx = { porFactura: new Map(), porCompr: new Map(), porImporte: new Map(), porContrato: new Map(), provSet: new Set(), contratoSet: new Set(), lista: todas };
     for (const f of todas) {
       const nf = normFactura(f.folio_proveedor);
       if (nf.length >= 3) { if (!idx.porFactura.has(nf)) idx.porFactura.set(nf, []); idx.porFactura.get(nf).push(f); }
       const cr = String(f.cr_contrarecibo ?? "").replace(/[^0-9]/g, ""); if (cr.length >= 4) idx.porCompr.set(cr, f);
       const ic = cents(f.importe_factura); if (ic != null) { if (!idx.porImporte.has(ic)) idx.porImporte.set(ic, []); idx.porImporte.get(ic).push(f); }
       const p = normProv(f.proveedores?.razon_social).slice(0, 8); if (p.length >= 5) idx.provSet.add(p);
-      const c = normContrato(f.contratos?.numero_interno); if (c.length >= 8) idx.contratoSet.add(c);
+      const c = normContrato(f.contratos?.numero_interno);
+      if (c.length >= 8) { idx.contratoSet.add(c); if (!idx.porContrato.has(c)) idx.porContrato.set(c, []); idx.porContrato.get(c).push(f); }
     }
     return idx;
   };
@@ -155,6 +172,42 @@ export default function ConciliarPage() {
 
         const meta = analizarReporte(grid);
         if (!meta) { salida.reportes.push({ slot: slot.titulo, nombre: file.name, err: "No reconocí el formato (falta Comprobante/Factura)." }); continue; }
+
+        // ---- 1013: Pedido-Recepción (agrega por pedido, sugiere por cercanía de importe) ----
+        if (meta.tipo === "pedrec") {
+          const { hdr, col } = meta;
+          const pedidos = new Map(); // pedido -> {cont, suma(cents), prov, fecha, recep}
+          for (let r = hdr + 1; r < grid.length; r++) {
+            const row = grid[r] || [];
+            const ped = String(row[col.pedido] ?? "").trim(); if (!ped) continue;
+            const cont = normContrato(row[col.contrato]);
+            const p = pedidos.get(ped) || { cont, suma: 0, prov: String(row[col.provNom] ?? "").trim(), fecha: String(row[col.fecha] ?? "").trim(), recep: String(row[col.recepcion] ?? "").trim() };
+            p.suma += cents(row[col.importe]) ?? 0; pedidos.set(ped, p);
+          }
+          let sugeridos = 0, sinFactura = 0, ajenos = 0;
+          for (const [ped, p] of pedidos) {
+            // contrato nuestro (match por inclusión)
+            let key = null;
+            if (p.cont.length >= 8) for (const c of idx.porContrato.keys()) { if (c.includes(p.cont) || p.cont.includes(c)) { key = c; break; } }
+            if (!key) { ajenos++; continue; }
+            // facturas de ese contrato pendientes de pedido-recepción, por cercanía de importe
+            const cands = (idx.porContrato.get(key) || [])
+              .filter((f) => ORD_PED.generado > (ORD_PED[f.estatus_pedido_recepcion] ?? 0))
+              .map((f) => ({ f, d: Math.abs((cents(f.importe_factura) ?? 0) - p.suma) }))
+              .sort((a, b) => a.d - b.d).slice(0, 6);
+            if (!cands.length) { sinFactura++; continue; }
+            sugeridos++;
+            salida.porConfirmar.push({
+              key: slot.id + "_" + ped, slot: slot.titulo, esPedRec: true,
+              compr: "", facturaTxt: `Pedido ${ped.replace(/^0+/, "")} · rec ${p.recep.replace(/^0+/, "")}`,
+              provTxt: p.prov, importe: p.suma / 100,
+              candidatos: cands.map(({ f }) => ({ id: f.id, f, cambios: { estatus_pedido_recepcion: "generado" } })),
+            });
+          }
+          salida.reportes.push({ slot: slot.titulo, nombre: file.name, esPedRec: true, pedidos: pedidos.size, sugeridos, sinFactura, ajenos });
+          continue;
+        }
+
         const { hdr, col, tipo, tienePedRec } = meta;
         let auto = 0, porConf = 0, sinCruce = 0, ajenas = 0, cruzado = 0, pend = 0;
         const vistos = new Set();
@@ -283,7 +336,13 @@ export default function ConciliarPage() {
                 <strong style={{ fontSize: 14 }}>{r.slot}</strong>
                 <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{r.nombre}</span>
               </div>
-              {r.err ? <div style={{ color: "var(--rojo)", fontSize: 13, marginTop: 4 }}>{r.err}</div> : (
+              {r.err ? <div style={{ color: "var(--rojo)", fontSize: 13, marginTop: 4 }}>{r.err}</div> : r.esPedRec ? (
+                <div style={{ fontSize: 13, marginTop: 6 }}>
+                  <span style={{ color: "var(--verde)", fontWeight: 600 }}>{r.sugeridos} pedidos con factura sugerida</span>
+                  {" · "}<span style={{ color: "var(--texto-suave)" }}>{r.sinFactura} sin factura capturada · {r.ajenos} de otras unidades</span>
+                  {"  ("}{r.pedidos}{" pedidos en el reporte)"}
+                </div>
+              ) : (
                 <div style={{ fontSize: 13, marginTop: 6 }}>
                   <span style={{ color: "var(--verde)", fontWeight: 600 }}>{r.auto} automáticas</span>
                   {" · "}{r.porConf} por confirmar{" · "}<span style={{ color: "var(--texto-suave)" }}>{r.sinCruce} sin cruce · {r.ajenas} de otras unidades</span>
@@ -299,7 +358,8 @@ export default function ConciliarPage() {
               {res.porConfirmar.slice(0, 80).map((pc) => (
                 <div key={pc.key} style={{ borderTop: "1px solid var(--borde)", padding: "8px 0" }}>
                   <div style={{ fontSize: 13 }}>
-                    <strong>{money(pc.importe)}</strong> · {pc.slot} · factura <em>{pc.facturaTxt || "—"}</em>{pc.compr && <> · comprobante <em>{pc.compr}</em></>} · {pc.provTxt.slice(0, 28)}
+                    <strong>{money(pc.importe)}</strong> · {pc.slot} · {pc.esPedRec ? <em>{pc.facturaTxt}</em> : <>factura <em>{pc.facturaTxt || "—"}</em></>}{pc.compr && <> · comprobante <em>{pc.compr}</em></>} · {pc.provTxt.slice(0, 28)}
+                    {pc.esPedRec && <span style={{ color: "var(--texto-suave)" }}> — marca pedido-recepción generado</span>}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                     {pc.candidatos.map((c) => {
