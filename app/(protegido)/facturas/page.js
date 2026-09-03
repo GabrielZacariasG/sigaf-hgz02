@@ -44,6 +44,7 @@ export default function FacturasListaPage() {
   const [abiertos, setAbiertos] = useState({});
   const [sel, setSel] = useState({});         // facturaId -> bool (para enviar al servicio)
   const [memo, setMemo] = useState(null);      // { grupos: [{ jefe, jefatura, filas, folio }] }
+  const [oficio, setOficio] = useState(null);  // { tipo:'pago'|'devolucion', docs:[{ prov?, filas, folio, motivo? }] }
   const [enviando, setEnviando] = useState(false);
   const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
 
@@ -51,7 +52,7 @@ export default function FacturasListaPage() {
     (async () => {
       const [jp, js, pr] = await Promise.all([
         supabase.from("jefe_proveedor").select("proveedor_id, jefe_id"),
-        supabase.from("jefes_servicio").select("id, nombre, jefatura"),
+        supabase.from("jefes_servicio").select("id, nombre, jefatura, cargo"),
         supabase.from("proveedores").select("id, razon_social"),
       ]);
       const jmap = {}; (js.data || []).forEach((j) => (jmap[j.id] = j));
@@ -63,7 +64,7 @@ export default function FacturasListaPage() {
         if (!j || !rz) return;
         const k = nk(rz);
         const arr = (m[k] ||= []);
-        if (!arr.some((x) => x.nombre === j.nombre)) arr.push({ nombre: j.nombre, jefatura: j.jefatura });
+        if (!arr.some((x) => x.nombre === j.nombre)) arr.push({ nombre: [j.cargo, j.nombre].filter(Boolean).join(" "), jefatura: j.jefatura });
       });
       setProvJefes(m);
     })();
@@ -76,7 +77,7 @@ export default function FacturasListaPage() {
       for (;;) {
         const [rFac, a, h] = await Promise.all([
           supabase.from("facturas").select(
-            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei )"
           ).range(desde, desde + 999),
           desde === 0 ? supabase.from("alertas_config").select("circuito, estatus, dias_umbral") : Promise.resolve({ data: rAlertas }),
           desde === 0 ? supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha") : Promise.resolve({ data: rHist }),
@@ -104,6 +105,7 @@ export default function FacturasListaPage() {
         return {
           ...f, capNom: f.capitulos?.nombre || "—", prov: f.proveedores?.razon_social || "—",
           contrato: f.contratos?.numero_interno || "—", tieneCR: !!String(f.cr_contrarecibo ?? "").trim(),
+          pp: f.partidas?.cuenta_prei || "—",
           gen, fir, ped, generaPR, estancada,
         };
       });
@@ -171,7 +173,7 @@ export default function FacturasListaPage() {
   const seleccionadas = useMemo(() => filtradas.filter((f) => sel[f.id]), [filtradas, sel]);
   const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
 
-  const enviarServicio = () => {
+  const enviarServicio = async () => {
     if (!seleccionadas.length) return;
     const g = new Map();
     const nk = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -185,13 +187,21 @@ export default function FacturasListaPage() {
         grp.filas.push(f); g.set(j.nombre, grp);
       }
     }
-    const base = `MEMO-FIN-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-    const grupos = [...g.values()].map((x, i) => ({ ...x, folio: `${base}-${i + 1}` }));
+    const anio = new Date().getFullYear();
+    let consec = await proximoConsec("envio_servicio", anio);
+    const grupos = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "envio_servicio", anio, consecutivo: c, folio: fmtFolio("envio_servicio", c, anio) }; });
     setMemo({ grupos });
   };
   const confirmarEnvio = async () => {
     setEnviando(true);
     try {
+      for (const gr of memo.grupos) {
+        await supabase.from("oficios").insert({
+          tipo: "envio_servicio", folio: gr.folio, anio: gr.anio, consecutivo: gr.consecutivo,
+          destinatario: gr.jefe, total: gr.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0),
+          factura_ids: gr.filas.map((f) => f.id),
+        });
+      }
       const ids = [...new Set(memo.grupos.flatMap((gr) => gr.filas.map((f) => f.id)))];
       for (let i = 0; i < ids.length; i += 25) {
         const lote = ids.slice(i, i + 25);
@@ -203,7 +213,164 @@ export default function FacturasListaPage() {
     setEnviando(false);
   };
 
+  // ---- Oficios (envío a pago OOAD / devolución / envío a servicio), firma de la jefa ----
+  // Folio automático: SIGAF-EP-0001/2026, SIGAF-DP-0001/2026, SIGAF-ES-0001/2026
+  const OFICIO_COD = { envio_pago: "EP", devolucion: "DP", envio_servicio: "ES" };
+  const fmtFolio = (tipoDb, consec, anio) =>
+    `SIGAF-${OFICIO_COD[tipoDb]}-${String(consec).padStart(4, "0")}/${anio}`;
+  const proximoConsec = async (tipoDb, anio) => {
+    const { data } = await supabase.from("oficios").select("consecutivo").eq("tipo", tipoDb).eq("anio", anio).order("consecutivo", { ascending: false }).limit(1);
+    return (data?.[0]?.consecutivo || 0) + 1;
+  };
+  const enviarOOAD = async () => {
+    if (!seleccionadas.length) return;
+    const anio = new Date().getFullYear();
+    const consec = await proximoConsec("envio_pago", anio);
+    setOficio({ tipo: "pago", docs: [{ filas: [...seleccionadas], tipoDb: "envio_pago", anio, consecutivo: consec, folio: fmtFolio("envio_pago", consec, anio) }] });
+  };
+  const devolverProveedor = async () => {
+    if (!seleccionadas.length) return;
+    const g = new Map();
+    for (const f of seleccionadas) { const grp = g.get(f.prov) || { prov: f.prov, filas: [] }; grp.filas.push(f); g.set(f.prov, grp); }
+    const anio = new Date().getFullYear();
+    let consec = await proximoConsec("devolucion", anio);
+    const docs = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "devolucion", anio, consecutivo: c, folio: fmtFolio("devolucion", c, anio), motivo: "" }; });
+    setOficio({ tipo: "devolucion", docs });
+  };
+  const setDoc = (i, campo, val) => setOficio((o) => ({ ...o, docs: o.docs.map((d, idx) => (idx === i ? { ...d, [campo]: val } : d)) }));
+  const confirmarOficio = async () => {
+    setEnviando(true);
+    try {
+      const patchBase = oficio.tipo === "pago"
+        ? { estatus_general: "en_tramite_ooad" }
+        : { estatus_general: "devuelta_proveedor", fecha_devolucion: new Date().toISOString() };
+      for (const d of oficio.docs) {
+        const totalDoc = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+        const dest = oficio.tipo === "pago" ? "Mtra. Farlyn Isabel Hernández Arias (Depto. Presupuesto, Contabilidad y Erogaciones)" : d.prov;
+        await supabase.from("oficios").insert({ tipo: d.tipoDb, folio: d.folio, anio: d.anio, consecutivo: d.consecutivo, destinatario: dest, total: totalDoc, factura_ids: d.filas.map((f) => f.id), motivo: d.motivo || null });
+        const ids = d.filas.map((f) => f.id);
+        const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null } : patchBase;
+        for (let i = 0; i < ids.length; i += 25) {
+          const lote = ids.slice(i, i + 25);
+          await Promise.all(lote.map((id) => supabase.from("facturas").update(patch).eq("id", id)));
+        }
+      }
+      const allIds = new Set(oficio.docs.flatMap((d) => d.filas.map((f) => f.id)));
+      setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
+      setSel({}); setOficio(null);
+    } catch (e) { setMensaje("No se pudo aplicar: " + e.message); }
+    setEnviando(false);
+  };
+
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
+
+  // ---- OFICIO(s) en hoja membretada (envío a pago / devolución) ----
+  if (oficio) {
+    const esPago = oficio.tipo === "pago";
+    const hoy = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+    const fFact = (f) => (f.periodo_fin ? new Date(f.periodo_fin + "T00:00:00").toLocaleDateString("es-MX") : "—");
+    const inp = { padding: "9px 12px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14 };
+    const oTh = { fontSize: 11, textAlign: "left", padding: "5px 7px", border: "1px solid #333", background: "#f2f2f2", fontWeight: 700 };
+    const oTd = { fontSize: 11, padding: "4px 7px", border: "1px solid #333" };
+    const cajaTd = { border: "1px solid #333", padding: "4px 8px", fontSize: 12.5, verticalAlign: "top" };
+    return (
+      <div>
+        <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="boton secundario" onClick={() => setOficio(null)}>← Volver</button>
+          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+          <button className="boton" onClick={confirmarOficio} disabled={enviando}>
+            {enviando ? "Aplicando…" : esPago ? "Confirmar envío a OOAD" : "Confirmar devolución"}
+          </button>
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{oficio.docs.length} oficio(s) · hoja membretada</span>
+        </div>
+        {/* Controles editables (no se imprimen) */}
+        <div className="no-print" style={{ display: "grid", gap: 10, marginBottom: 14 }}>
+          {oficio.docs.map((d, i) => (
+            <div key={i} style={{ border: "1px solid var(--borde)", borderRadius: 6, padding: 10, display: "grid", gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Oficio {i + 1}{d.prov ? ` · ${d.prov}` : ""} ({d.filas.length} factura{d.filas.length !== 1 ? "s" : ""})</div>
+              <div style={{ fontSize: 12 }}>No. de oficio (automático): <strong>{d.folio}</strong></div>
+              {!esPago && (
+                <label style={{ fontSize: 12 }}>Causa de la devolución:
+                  <textarea value={d.motivo} onChange={(e) => setDoc(i, "motivo", e.target.value)} rows={2} placeholder="Ej. La factura 21100 cobra 42 jamón y 19 pechuga, debiendo ser 47 jamón y 14 pechuga…" style={{ ...inp, width: "100%", display: "block", marginTop: 4 }} />
+                </label>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="hoja">
+          {oficio.docs.map((d, di) => {
+            const total = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+            return (
+              <div key={di} className="doc-oficio">
+                <div className="of-cuerpo">
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.2, lineHeight: 1.35, color: "#333" }}>
+                    ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />HOSPITAL GENERAL DE ZONA NO. 02<br />DEPARTAMENTO DE FINANZAS
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
+                    <tbody>
+                      <tr>
+                        <td style={cajaTd}><strong>Para:</strong>&nbsp;{esPago ? "Mtra. Farlyn Isabel Hernández Arias" : "A QUIEN CORRESPONDA"}<br />
+                          <span style={{ paddingLeft: 34 }}>{esPago ? "Departamento de Presupuesto, Contabilidad y Erogaciones" : d.prov}</span></td>
+                      </tr>
+                      <tr><td style={cajaTd}><strong>De:</strong>&nbsp;L.A. Nayeli Alonso Orozco<br /><span style={{ paddingLeft: 26 }}>Jefa del Departamento de Finanzas del HGZ No. 02</span></td></tr>
+                      <tr><td style={cajaTd}><strong>Lugar:</strong>&nbsp;Aguascalientes, Aguascalientes&nbsp;&nbsp;&nbsp;<strong>Fecha:</strong>&nbsp;{hoy}</td></tr>
+                      <tr><td style={cajaTd}><strong>Asunto:</strong>&nbsp;&nbsp;&nbsp;&nbsp;OFICIO NO. {d.folio}</td></tr>
+                    </tbody>
+                  </table>
+                  <p style={{ marginTop: 18, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
+                    {esPago
+                      ? "Por medio del presente envío a usted, facturas para trámite de pago, mismas que a continuación se relacionan:"
+                      : "Por medio del presente se devuelven a usted las siguientes facturas para su corrección, mismas que a continuación se relacionan:"}
+                  </p>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+                    <thead><tr><th style={oTh}>P.P.</th><th style={oTh}>Fecha Fact.</th><th style={oTh}>Folio</th><th style={{ ...oTh, textAlign: "right" }}>Importe</th><th style={oTh}>Proveedor</th></tr></thead>
+                    <tbody>
+                      {d.filas.map((f) => (
+                        <tr key={f.id}><td style={oTd}>{f.pp}</td><td style={oTd}>{fFact(f)}</td><td style={oTd}>{f.folio_proveedor}</td><td style={{ ...oTd, textAlign: "right" }}>{money(f.importe_factura)}</td><td style={oTd}>{f.prov}</td></tr>
+                      ))}
+                      <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={3}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
+                    </tbody>
+                  </table>
+                  {esPago ? (
+                    <p style={{ marginTop: 14, fontSize: 12.5, fontWeight: 700 }}>SE ENVÍAN LAS SIGUIENTES FACTURAS PARA SU DEBIDO PAGO.</p>
+                  ) : (
+                    <p style={{ marginTop: 14, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}><strong>Motivo de la devolución:</strong> {d.motivo || "____________________________________________"}</p>
+                  )}
+                  <p style={{ marginTop: 14, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
+                    Lo anterior para su trámite correspondiente, sin otro particular de momento, me despido enviando un cordial saludo.
+                  </p>
+                  <div style={{ marginTop: 40, textAlign: "left" }}>
+                    <div style={{ fontWeight: 700, letterSpacing: 3 }}>ATENTAMENTE</div>
+                    <div style={{ fontStyle: "italic", fontSize: 12, color: "#444" }}>&ldquo;SEGURIDAD Y SOLIDARIDAD SOCIAL&rdquo;</div>
+                    <div style={{ marginTop: 56 }}>
+                      <strong>L.A. Nayeli Alonso Orozco</strong><br />
+                      <span style={{ fontSize: 12.5 }}>Jefa del Departamento de Finanzas del HGZ No. 02</span>
+                    </div>
+                    <div style={{ marginTop: 18, fontSize: 12 }}>c.c.p. Expediente</div>
+                    <div style={{ marginTop: 10, fontSize: 10.5, color: "#666" }}>NAO / gdr</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <style>{`
+          .doc-oficio { position:relative; background:#fff url('/membrete.png') no-repeat; background-size:100% 100%;
+            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; border:1px solid var(--borde); border-radius:4px;
+            -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .of-cuerpo { padding:3.7cm 2.3cm 3cm 2.3cm; color:#111; }
+          @page { size: letter; margin: 0; }
+          @media print {
+            body * { visibility: hidden !important; }
+            .hoja, .hoja * { visibility: visible !important; }
+            .no-print { display:none !important; }
+            .doc-oficio { border:none !important; margin:0 !important; border-radius:0 !important; }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
 
   // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (hoja carta, limpio) ----
   if (memo) {
@@ -230,7 +397,7 @@ export default function FacturasListaPage() {
                   </div>
                   <div style={{ marginTop: 30, display: "grid", gap: 7 }}>
                     <div style={linea}><span style={{ color: "#777" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
-                    <div style={linea}><span style={{ color: "#777" }}>De:</span><span><strong>Lic. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
+                    <div style={linea}><span style={{ color: "#777" }}>De:</span><span><strong>L.A. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
                     <div style={linea}><span style={{ color: "#777" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
                     <div style={linea}><span style={{ color: "#777" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
                   </div>
@@ -253,7 +420,7 @@ export default function FacturasListaPage() {
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>ATENTAMENTE</div>
                   <div style={{ fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 56 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
                   <div style={{ borderTop: "1px solid #333", width: 320, margin: "0 auto", paddingTop: 6 }}>
-                    <strong>Lic. Nayeli Alonso Orozco</strong><br />
+                    <strong>L.A. Nayeli Alonso Orozco</strong><br />
                     <span style={{ fontSize: 13, color: "#444" }}>Jefa del Departamento de Finanzas · HGZ No. 2</span>
                   </div>
                 </div>
@@ -403,7 +570,9 @@ export default function FacturasListaPage() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{seleccionadas.length} seleccionada(s)</span>
             <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
-            <button className="boton" onClick={enviarServicio}>Enviar al servicio →</button>
+            <button className="boton secundario" onClick={enviarServicio}>Enviar al servicio →</button>
+            <button className="boton secundario" onClick={devolverProveedor}>Devolver al proveedor →</button>
+            <button className="boton" onClick={enviarOOAD}>Enviar a OOAD (pago) →</button>
           </div>
         )}
       </div>

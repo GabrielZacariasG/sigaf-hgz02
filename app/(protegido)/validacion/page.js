@@ -28,7 +28,7 @@ export default function ValidacionServicioPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const email = (session?.user?.email || "").toLowerCase();
       const [rJ, rF] = await Promise.all([
-        supabase.from("jefes_servicio").select("id, nombre, jefatura, email, matricula").eq("activo", true).order("nombre"),
+        supabase.from("jefes_servicio").select("id, nombre, jefatura, cargo, email, matricula").eq("activo", true).order("nombre"),
         supabase.from("facturas")
           .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
@@ -189,7 +189,7 @@ export default function ValidacionServicioPage() {
               <div style={{ textAlign: "center", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
               <div style={{ textAlign: "center" }}>
                 <div style={{ borderTop: "1px solid #333", width: 340, margin: "0 auto", paddingTop: 6 }}>
-                  <strong>{oficio.jefe?.nombre}</strong><br />
+                  <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</strong><br />
                   <span style={{ fontSize: 13, color: "#444" }}>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</span>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export default function ValidacionServicioPage() {
       {esJefeSesion ? (
         <div style={{ ...card, marginTop: 12 }}>
           <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Sesión de:</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{jefe?.nombre}</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{[jefe?.cargo, jefe?.nombre].filter(Boolean).join(" ")}</div>
           <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Jefatura de {jefe?.jefatura}</div>
         </div>
       ) : (
@@ -235,7 +235,7 @@ export default function ValidacionServicioPage() {
           <label style={{ fontSize: 13, fontWeight: 600 }}>Jefe de servicio:</label>
           <select value={jefeId} onChange={(e) => { setJefeId(e.target.value); setSel({}); }} style={{ ...inp, minWidth: 280 }}>
             <option value="">— Elige —</option>
-            {jefes.map((j) => <option key={j.id} value={j.id}>{j.nombre} · {j.jefatura}</option>)}
+            {jefes.map((j) => <option key={j.id} value={j.id}>{[j.cargo, j.nombre].filter(Boolean).join(" ")} · {j.jefatura}</option>)}
           </select>
           <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>(vista de Presupuesto; cada jefe entra con su propio usuario y ve solo lo suyo)</span>
         </div>

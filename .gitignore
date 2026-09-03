@@ -5,3 +5,4 @@ node_modules
 
 # PDFs fuente de contratos (documentos pesados, no van al repo)
 contratos_pdf/
+historico/

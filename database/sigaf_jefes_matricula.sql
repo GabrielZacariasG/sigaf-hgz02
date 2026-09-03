@@ -1,29 +1,27 @@
--- SIGAF · Jefes de servicio por MATRÍCULA (login con matrícula en vez de correo)
--- Convención: la cuenta de Supabase Auth se crea con correo interno
---   <matricula>@hgz02.sigaf.mx  y el jefe teclea solo su matrícula en el login.
+-- SIGAF · Matrículas reales de los jefes de servicio (login con matrícula).
+-- La cuenta de Supabase Auth se crea con correo interno <matricula>@hgz02.sigaf.mx
+-- y el jefe teclea SOLO su matrícula + contraseña.
 begin;
 
 alter table jefes_servicio add column if not exists matricula text;
 create unique index if not exists jefes_servicio_matricula_key on jefes_servicio (matricula) where matricula is not null;
 
--- Carga las matrículas reales de cada jefe (cámbialas por las verdaderas):
 update jefes_servicio set matricula = v.mat, email = lower(v.mat) || '@hgz02.sigaf.mx'
 from (values
-  ('DRA. EURIDICE GARCIA RONQUILLO',        '00000001'),
-  ('DR. ADRIAN MAXIMILIANO MARTELL IBARRA', '00000002'),
-  ('MARIAJOSE RUIZ RUVALCABA',              '00000003'),
-  ('JORGE NIEVES HERNANDEZ MORENO',         '00000004'),
-  ('ROBERTO MOISES DIAZ MARTINEZ',          '00000005'),
-  ('FERNANDO MORENO HERNANDEZ',             '00000006'),
-  ('ROXANA BARAJAS CALDERA',                '00000007'),
-  ('NOHEMI LILIANA MARQUEZ QUEZADA',        '00000008'),
-  ('HUGO ALEJANDRO ALVAREZ DIAZ',           '00000009'),
-  ('LIC. JUAN RAMON',                       '00000010')
+  ('DRA. EURIDICE GARCIA RONQUILLO',        '99011823'),
+  ('DR. ADRIAN MAXIMILIANO MARTELL IBARRA', '98231691'),
+  ('MARIAJOSE RUIZ RUVALCABA',              '99014477'),
+  ('ROBERTO MOISES DIAZ MARTINEZ',          '98010221'),
+  ('FERNANDO MORENO HERNANDEZ',             '99011733'),
+  ('ROXANA BARAJAS CALDERA',                '99017651'),
+  ('NOHEMI LILIANA MARQUEZ QUEZADA',        '991429651'),
+  ('HUGO ALEJANDRO ALVAREZ DIAZ',           '99011573')
+  -- Pendientes (no venían en la lista):
+  -- ('LIC. JUAN RAMON',                    '________'),
+  -- ('JORGE NIEVES HERNANDEZ MORENO',      '________')
 ) as v(nombre, mat)
 where jefes_servicio.nombre = v.nombre;
 
 commit;
 
--- Después: en Supabase → Authentication → Add user, crea cada cuenta con
--- email = <matricula>@hgz02.sigaf.mx  (Auto Confirm) y una contraseña temporal.
--- El jefe entra tecleando SOLO su matrícula + contraseña.
+-- Verifica:  select nombre, matricula, email from jefes_servicio order by nombre;

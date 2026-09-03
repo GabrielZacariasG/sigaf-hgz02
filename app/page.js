@@ -138,6 +138,12 @@ export default function Portal() {
       ruta: '/conciliar', listo: true,
     },
     {
+      paso: 'Consulta', titulo: 'Oficios emitidos',
+      desc: 'Busca por folio los oficios de envío a pago, devolución y envío a servicio ya generados.',
+      cifra: '🔎', etiqueta: 'buscar por folio',
+      ruta: '/oficios', listo: true,
+    },
+    {
       paso: 'Consulta', titulo: 'Catálogos',
       desc: 'Contratos, proveedores, cuentas y jefaturas.',
       cifra: c.contratos, etiqueta: 'contratos',
