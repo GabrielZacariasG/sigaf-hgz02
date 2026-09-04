@@ -184,7 +184,7 @@ export default function Portal() {
         </h1>
         <p className="subtitulo">
           {esAuo
-            ? 'Captura tus facturas y dales seguimiento. Eso es todo lo que necesitas aquí.'
+            ? 'Captura tus facturas y dales seguimiento.'
             : 'Seguimiento de facturas desde su ingreso en ventanilla hasta que se refleja el gasto.'}
         </p>
 
