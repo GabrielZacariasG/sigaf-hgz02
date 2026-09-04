@@ -151,6 +151,17 @@ export default function Portal() {
     },
   ];
 
+  // Rol AUO (ventanilla): panel simplificado, enfocado en capturar y dar
+  // seguimiento. Sin conciliación, catálogos ni disponibilidad presupuestal.
+  const esAuo = usuario?.rol === 'auo';
+  const AUO_VISIBLES = new Set([
+    'Ingreso de facturas',
+    'Seguimiento de facturas',
+    'Oficios emitidos',
+  ]);
+  const visibles = esAuo ? tarjetas.filter((t) => AUO_VISIBLES.has(t.titulo)) : tarjetas;
+  const primerNombre = (usuario?.nombre || '').split(' ')[0] || '';
+
   return (
     <>
       <header className="encabezado">
@@ -165,13 +176,31 @@ export default function Portal() {
       </header>
 
       <main className="contenedor">
-        <h1 className="titulo">Panel principal</h1>
+        <h1 className="titulo">
+          {esAuo ? `Hola, ${primerNombre} 👋` : 'Panel principal'}
+        </h1>
         <p className="subtitulo">
-          Seguimiento de facturas desde su ingreso en ventanilla hasta que se refleja el gasto.
+          {esAuo
+            ? 'Captura tus facturas y dales seguimiento. Eso es todo lo que necesitas aquí.'
+            : 'Seguimiento de facturas desde su ingreso en ventanilla hasta que se refleja el gasto.'}
         </p>
 
+        {esAuo && (
+          <Link
+            href="/facturas/nueva"
+            className="boton"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              fontSize: 16, padding: '14px 24px', textDecoration: 'none',
+              margin: '4px 0 22px',
+            }}
+          >
+            ＋ Capturar nueva factura
+          </Link>
+        )}
+
         <div className="rejilla">
-          {tarjetas.map(t => {
+          {visibles.map(t => {
             const cuerpo = (
               <>
                 <div className="paso">{t.paso}</div>
