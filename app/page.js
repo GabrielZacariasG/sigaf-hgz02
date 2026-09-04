@@ -154,8 +154,9 @@ export default function Portal() {
   // Rol AUO (ventanilla): panel simplificado, enfocado en capturar y dar
   // seguimiento. Sin conciliación, catálogos ni disponibilidad presupuestal.
   const esAuo = usuario?.rol === 'auo';
+  // El "Ingreso de facturas" ya está cubierto por el botón grande "Capturar
+  // nueva factura", así que solo quedan estas dos tarjetas.
   const AUO_VISIBLES = new Set([
-    'Ingreso de facturas',
     'Seguimiento de facturas',
     'Oficios emitidos',
   ]);
