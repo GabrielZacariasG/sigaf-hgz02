@@ -161,7 +161,9 @@ export default function Portal() {
     'Oficios emitidos',
   ]);
   const visibles = esAuo ? tarjetas.filter((t) => AUO_VISIBLES.has(t.titulo)) : tarjetas;
-  const primerNombre = (usuario?.nombre || '').split(' ')[0] || '';
+  // Saludo de bienvenida según la hora (sin el nombre de la cuenta).
+  const hora = new Date().getHours();
+  const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
 
   return (
     <>
@@ -178,7 +180,7 @@ export default function Portal() {
 
       <main className="contenedor">
         <h1 className="titulo">
-          {esAuo ? `Hola, ${primerNombre} 👋` : 'Panel principal'}
+          {esAuo ? `${saludo} 👋` : 'Panel principal'}
         </h1>
         <p className="subtitulo">
           {esAuo
