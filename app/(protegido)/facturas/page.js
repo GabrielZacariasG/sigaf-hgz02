@@ -77,7 +77,7 @@ export default function FacturasListaPage() {
       for (;;) {
         const [rFac, a, h] = await Promise.all([
           supabase.from("facturas").select(
-            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei )"
+            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
           ).range(desde, desde + 999),
           desde === 0 ? supabase.from("alertas_config").select("circuito, estatus, dias_umbral") : Promise.resolve({ data: rAlertas }),
           desde === 0 ? supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha") : Promise.resolve({ data: rHist }),
@@ -105,7 +105,7 @@ export default function FacturasListaPage() {
         return {
           ...f, capNom: f.capitulos?.nombre || "—", prov: f.proveedores?.razon_social || "—",
           contrato: f.contratos?.numero_interno || "—", tieneCR: !!String(f.cr_contrarecibo ?? "").trim(),
-          pp: f.partidas?.cuenta_prei || "—",
+          pp: f.partidas?.cuenta_finat || f.partidas?.cuenta_prei || "—",
           gen, fir, ped, generaPR, estancada,
         };
       });
@@ -315,12 +315,12 @@ export default function FacturasListaPage() {
                       : "Por medio del presente se devuelven a usted las siguientes facturas para su corrección, mismas que a continuación se relacionan:"}
                   </p>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-                    <thead><tr><th style={oTh}>P.P.</th><th style={oTh}>Fecha Fact.</th><th style={oTh}>Folio</th><th style={{ ...oTh, textAlign: "right" }}>Importe</th><th style={oTh}>Proveedor</th></tr></thead>
+                    <thead><tr><th style={oTh}>Cuenta (P.P.)</th><th style={oTh}>Contrato</th><th style={oTh}>Fecha Fact.</th><th style={oTh}>Folio</th><th style={{ ...oTh, textAlign: "right" }}>Importe</th><th style={oTh}>Proveedor</th></tr></thead>
                     <tbody>
                       {d.filas.map((f) => (
-                        <tr key={f.id}><td style={oTd}>{f.pp}</td><td style={oTd}>{fFact(f)}</td><td style={oTd}>{f.folio_proveedor}</td><td style={{ ...oTd, textAlign: "right" }}>{money(f.importe_factura)}</td><td style={oTd}>{f.prov}</td></tr>
+                        <tr key={f.id}><td style={oTd}>{f.pp}</td><td style={oTd}>{f.contrato}</td><td style={oTd}>{fFact(f)}</td><td style={oTd}>{f.folio_proveedor}</td><td style={{ ...oTd, textAlign: "right" }}>{money(f.importe_factura)}</td><td style={oTd}>{f.prov}</td></tr>
                       ))}
-                      <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={3}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
+                      <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={4}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
                     </tbody>
                   </table>
                   {esPago ? (
