@@ -128,6 +128,8 @@ export default function ValidacionServicioPage() {
     const variosProv = new Set(oficio.filas.map((f) => f.proveedor_id)).size > 1;
     const tblH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
     const tblD = { padding: "8px 12px", borderBottom: "1px solid #ddd", fontSize: 13 };
+    const actTh = { border: "1px solid #333", padding: "5px 8px", fontSize: 11.5, fontWeight: 700, textAlign: "left" };
+    const actTd = { border: "1px solid #333", padding: "12px 8px", fontSize: 11.5, verticalAlign: "top" };
     const tot = oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
     return (
       <div>
@@ -141,14 +143,22 @@ export default function ValidacionServicioPage() {
           <div className="doc-hoja">
             <img src="/membrete.png" alt="" className="membrete-bg" />
             <div>
-              {/* Datos en lista (sin borde) — formato unificado */}
-              <div style={{ marginTop: 14, fontSize: 13.5, lineHeight: 1.6 }}>
-                <div style={{ padding: "2px 0" }}><strong>Para:</strong> {admin} — Administrador del contrato {contratoNum}</div>
-                <div style={{ padding: "2px 0" }}><strong>De:</strong> DR. Yamid Brajin Sánchez Rodríguez — Director del HGZ No. 2</div>
-                <div style={{ padding: "2px 0" }}><strong>Lugar y Fecha:</strong> Aguascalientes, Ags., a {hoy()}.</div>
-                <div style={{ padding: "2px 0" }}><strong>No. de Oficio:</strong> {oficio.folio}</div>
+              {/* Encabezado institucional (arriba a la izquierda) */}
+              <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222", marginTop: 6 }}>
+                ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
+                HOSPITAL GENERAL DE ZONA NO. 2
               </div>
-              <div style={{ marginTop: 14 }}>P r e s e n t e</div>
+              {/* Of. N° y fecha — arriba a la derecha (no amontonados a la izquierda) */}
+              <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
+                <div>Of. N° <strong>{oficio.folio}</strong></div>
+                <div>Aguascalientes, Ags., a {hoy()}.</div>
+              </div>
+              {/* Destinatario */}
+              <div style={{ marginTop: 8, fontSize: 14 }}>
+                <div style={{ fontWeight: 700 }}>{admin}</div>
+                <div>Administrador del contrato {contratoNum}</div>
+                <div style={{ marginTop: 16 }}>Presente</div>
+              </div>
               {/* Cuerpo */}
               {esCum ? (
                 <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
@@ -177,31 +187,39 @@ export default function ValidacionServicioPage() {
               </table>
               <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
             </div>
-            {/* Firmas al fondo: firma el Director; rubrican el Jefe de Servicio y el Subdirector Administrativo */}
-            <div style={{ marginTop: "auto", paddingTop: 40 }}>
-              <div style={{ textAlign: "left", fontWeight: 700 }}>ATENTAMENTE</div>
-              <div style={{ textAlign: "left", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
-              {/* Firma principal: Director del Hospital */}
-              <div style={{ textAlign: "left" }}>
-                <div style={{ borderTop: "1px solid #333", width: 360, margin: "0", paddingTop: 6 }}>
-                  <strong>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</strong><br />
-                  <span style={{ fontSize: 13, color: "#444" }}>Director del Hospital General de Zona No. 2</span>
-                </div>
+            {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
+            <div style={{ marginTop: "auto", paddingTop: 32 }}>
+              <div style={{ fontWeight: 700 }}>Atentamente:</div>
+              <div style={{ marginTop: 64 }}>
+                <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
+                <div style={{ fontSize: 12.5, color: "#333" }}>Auxiliar en la Administración del contrato número {contratoNum}</div>
               </div>
-              {/* Rúbricas pequeñas: Validó (Jefe de Servicio) y Autoriza (Subdirector Administrativo) */}
-              <div style={{ display: "flex", gap: 60, marginTop: 40, fontSize: 11, color: "#444" }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: "#111" }}>Validó</div>
-                  <div>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</div>
-                  <div>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</div>
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, color: "#111" }}>Autoriza</div>
-                  <div>LIC. José Cortez González</div>
-                  <div>Subdirector Administrativo · HGZ No. 2</div>
-                </div>
-              </div>
-              <div style={{ marginTop: 26, fontSize: 11, color: "#555" }}>
+              {/* Autorizó (Subdirector Admvo.) y Validó (Jefe de Servicio) — nombres en chico, firma al margen */}
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 34 }}>
+                <thead>
+                  <tr>
+                    <th style={actTh}>Actividad</th>
+                    <th style={actTh}>Nombre del Servidor Público</th>
+                    <th style={actTh}>Cargo</th>
+                    <th style={{ ...actTh, width: 130 }}>Firma</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={actTd}>Autorizó</td>
+                    <td style={actTd}>Lic. José Cortez González</td>
+                    <td style={actTd}>Subdirector Administrativo</td>
+                    <td style={actTd}></td>
+                  </tr>
+                  <tr>
+                    <td style={actTd}>Validó</td>
+                    <td style={actTd}>{oficio.jefe?.nombre || "(jefe(a) de servicio)"}</td>
+                    <td style={actTd}>{oficio.jefe?.cargo || (oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio")}</td>
+                    <td style={actTd}></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style={{ marginTop: 20, fontSize: 11, color: "#555" }}>
                 Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
               </div>
             </div>
