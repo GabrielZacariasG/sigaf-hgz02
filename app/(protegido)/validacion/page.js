@@ -141,16 +141,14 @@ export default function ValidacionServicioPage() {
           <div className="doc-hoja">
             <img src="/membrete.png" alt="" className="membrete-bg" />
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 13.5 }}>
-                <span>Of. N° <strong>{oficio.folio}</strong></span>
-                <span>Aguascalientes, Ags., a {hoy()}.</span>
+              {/* Datos en lista (sin borde) — formato unificado */}
+              <div style={{ marginTop: 14, fontSize: 13.5, lineHeight: 1.6 }}>
+                <div style={{ padding: "2px 0" }}><strong>Para:</strong> {admin} — Administrador del contrato {contratoNum}</div>
+                <div style={{ padding: "2px 0" }}><strong>De:</strong> DR. Yamid Brajin Sánchez Rodríguez — Director del HGZ No. 2</div>
+                <div style={{ padding: "2px 0" }}><strong>Lugar y Fecha:</strong> Aguascalientes, Ags., a {hoy()}.</div>
+                <div style={{ padding: "2px 0" }}><strong>No. de Oficio:</strong> {oficio.folio}</div>
               </div>
-              {/* Destinatario */}
-              <div style={{ marginTop: 28 }}>
-                <div style={{ fontWeight: 700 }}>{admin}</div>
-                <div>Administrador del contrato {contratoNum}</div>
-                <div>P r e s e n t e</div>
-              </div>
+              <div style={{ marginTop: 14 }}>P r e s e n t e</div>
               {/* Cuerpo */}
               {esCum ? (
                 <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
@@ -181,11 +179,11 @@ export default function ValidacionServicioPage() {
             </div>
             {/* Firmas al fondo: firma el Director; rubrican el Jefe de Servicio y el Subdirector Administrativo */}
             <div style={{ marginTop: "auto", paddingTop: 40 }}>
-              <div style={{ textAlign: "center", fontWeight: 700 }}>ATENTAMENTE</div>
-              <div style={{ textAlign: "center", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+              <div style={{ textAlign: "left", fontWeight: 700 }}>ATENTAMENTE</div>
+              <div style={{ textAlign: "left", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
               {/* Firma principal: Director del Hospital */}
-              <div style={{ textAlign: "center" }}>
-                <div style={{ borderTop: "1px solid #333", width: 360, margin: "0 auto", paddingTop: 6 }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ borderTop: "1px solid #333", width: 360, margin: "0", paddingTop: 6 }}>
                   <strong>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</strong><br />
                   <span style={{ fontSize: 13, color: "#444" }}>Director del Hospital General de Zona No. 2</span>
                 </div>

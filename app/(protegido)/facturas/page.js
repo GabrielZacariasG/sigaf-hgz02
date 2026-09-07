@@ -272,7 +272,6 @@ export default function FacturasListaPage() {
     const inp = { padding: "9px 12px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14 };
     const oTh = { fontSize: 11, textAlign: "left", padding: "5px 7px", border: "1px solid #333", background: "#f2f2f2", fontWeight: 700 };
     const oTd = { fontSize: 11, padding: "4px 7px", border: "1px solid #333" };
-    const cajaTd = { border: "1px solid #333", padding: "4px 8px", fontSize: 12.5, verticalAlign: "top" };
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -304,20 +303,12 @@ export default function FacturasListaPage() {
               <div key={di} className="doc-oficio">
                 <img src="/membrete.png" alt="" className="membrete-bg" />
                 <div className="of-cuerpo">
-                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.2, lineHeight: 1.35, color: "#333" }}>
-                    ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />HOSPITAL GENERAL DE ZONA NO. 02<br />DEPARTAMENTO DE FINANZAS
+                  <div className="of-datos">
+                    <div><strong>Para:</strong> {esPago ? "Mtra. Farlyn Isabel Hernández Arias — Departamento de Presupuesto, Contabilidad y Erogaciones" : `A QUIEN CORRESPONDA — ${d.prov}`}</div>
+                    <div><strong>De:</strong> L.A. Nayeli Alonso Orozco — Jefa del Departamento de Finanzas del HGZ No. 02</div>
+                    <div><strong>Lugar y Fecha:</strong> Aguascalientes, Ags., a {hoy}</div>
+                    <div><strong>No. de Oficio:</strong> {d.folio}</div>
                   </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
-                    <tbody>
-                      <tr>
-                        <td style={cajaTd}><strong>Para:</strong>&nbsp;{esPago ? "Mtra. Farlyn Isabel Hernández Arias" : "A QUIEN CORRESPONDA"}<br />
-                          <span style={{ paddingLeft: 34 }}>{esPago ? "Departamento de Presupuesto, Contabilidad y Erogaciones" : d.prov}</span></td>
-                      </tr>
-                      <tr><td style={cajaTd}><strong>De:</strong>&nbsp;L.A. Nayeli Alonso Orozco<br /><span style={{ paddingLeft: 26 }}>Jefa del Departamento de Finanzas del HGZ No. 02</span></td></tr>
-                      <tr><td style={cajaTd}><strong>Lugar:</strong>&nbsp;Aguascalientes, Aguascalientes&nbsp;&nbsp;&nbsp;<strong>Fecha:</strong>&nbsp;{hoy}</td></tr>
-                      <tr><td style={cajaTd}><strong>Asunto:</strong>&nbsp;&nbsp;&nbsp;&nbsp;OFICIO NO. {d.folio}</td></tr>
-                    </tbody>
-                  </table>
                   <p style={{ marginTop: 18, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
                     {esPago
                       ? "Por medio del presente envío a usted, facturas para trámite de pago, mismas que a continuación se relacionan:"
@@ -362,6 +353,8 @@ export default function FacturasListaPage() {
           .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .of-cuerpo { position:relative; z-index:1; padding:3.7cm 2.3cm 3cm 2.3cm; color:#111; }
+          .of-datos { margin-top:14px; font-size:12.5px; line-height:1.6; }
+          .of-datos > div { padding:2px 0; }
           @page { size: letter; margin: 0; }
           @media print {
             body * { visibility: hidden !important; }
@@ -419,10 +412,10 @@ export default function FacturasListaPage() {
                   </table>
                 </div>
                 {/* firma al fondo de la hoja */}
-                <div style={{ marginTop: "auto", paddingTop: 40, textAlign: "center" }}>
+                <div style={{ marginTop: "auto", paddingTop: 40, textAlign: "left" }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>ATENTAMENTE</div>
                   <div style={{ fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 56 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
-                  <div style={{ borderTop: "1px solid #333", width: 320, margin: "0 auto", paddingTop: 6 }}>
+                  <div style={{ borderTop: "1px solid #333", width: 320, margin: "0", paddingTop: 6 }}>
                     <strong>L.A. Nayeli Alonso Orozco</strong><br />
                     <span style={{ fontSize: 13, color: "#444" }}>Jefa del Departamento de Finanzas · HGZ No. 2</span>
                   </div>
