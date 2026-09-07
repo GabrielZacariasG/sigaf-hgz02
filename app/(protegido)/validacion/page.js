@@ -141,110 +141,110 @@ export default function ValidacionServicioPage() {
         </div>
         <div className="hoja">
           <div className="doc-hoja">
-            <img src="/mem-encabezado.png" alt="" className="mem-h" />
-            <img src="/mem-pie.png" alt="" className="mem-f" />
-            <div>
-              {/* Encabezado institucional (arriba a la izquierda) */}
-              <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222", marginTop: 6 }}>
-                ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
-                HOSPITAL GENERAL DE ZONA NO. 2
-              </div>
-              {/* Of. N° y fecha — arriba a la derecha (no amontonados a la izquierda) */}
-              <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
-                <div>Of. N° <strong>{oficio.folio}</strong></div>
-                <div>Aguascalientes, Ags., a {hoy()}.</div>
-              </div>
-              {/* Destinatario */}
-              <div style={{ marginTop: 8, fontSize: 14 }}>
-                <div style={{ fontWeight: 700 }}>{admin}</div>
-                <div>Administrador del contrato {contratoNum}</div>
-                <div style={{ marginTop: 16 }}>Presente</div>
-              </div>
-              {/* Cuerpo */}
-              {esCum ? (
-                <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
-                  Se adjunta al presente las siguientes facturas del proveedor <strong>{proveedor}</strong>, por concepto de pago de <strong>{servicio}</strong>.
-                  Al respecto me permito informar que, a la fecha de la prestación de la presente factura, <strong>NO EXISTE INCUMPLIMIENTO</strong> del
-                  contrato antes referido en ninguno de los términos y condiciones que amparan cada una de las cláusulas del mismo, ni penas
-                  convencionales pendientes de aplicar al proveedor en cita.
-                </p>
-              ) : (
-                <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
-                  Por medio del presente envío a Usted informe de las incidencias ocurridas en la prestación de <strong>{servicio}</strong> del proveedor{" "}
-                  <strong>{proveedor}</strong>{f0.periodo_inicio ? `, durante el periodo del ${f0.periodo_inicio} al ${f0.periodo_fin}` : ""}; por
-                  <strong> incumplimiento</strong> a las cláusulas de <em>Lugar, plazos y condiciones para la entrega de los bienes/servicios</em>, siendo procedente
-                  la cláusula de <strong>Penas Convencionales</strong>. Motivo: <strong>{oficio.motivo}</strong>.
-                </p>
-              )}
-              {/* Tabla */}
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
-                <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
-                <tbody>
-                  {oficio.filas.map((f) => (
-                    <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
-                  ))}
-                  <tr><td style={{ ...tblD, borderTop: "2px solid #333", borderBottom: "2px solid #333" }} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>{money(tot)}</td></tr>
-                </tbody>
-              </table>
-              <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
-            </div>
-            {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
-            <div style={{ marginTop: 48 }}>
-              <div style={{ fontWeight: 700 }}>Atentamente:</div>
-              <div style={{ marginTop: 64 }}>
-                <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
-                <div style={{ fontSize: 12.5, color: "#333" }}>Auxiliar en la Administración del contrato número {contratoNum}</div>
-              </div>
-              {/* Autorizó (Subdirector Admvo.) y Validó (Jefe de Servicio) — nombres en chico, firma al margen */}
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 34 }}>
-                <thead>
-                  <tr>
-                    <th style={actTh}>Actividad</th>
-                    <th style={actTh}>Nombre del Servidor Público</th>
-                    <th style={actTh}>Cargo</th>
-                    <th style={{ ...actTh, width: 130 }}>Firma</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style={actTd}>Autorizó</td>
-                    <td style={actTd}>Lic. José Cortez González</td>
-                    <td style={actTd}>Subdirector Administrativo</td>
-                    <td style={actTd}></td>
-                  </tr>
-                  <tr>
-                    <td style={actTd}>Validó</td>
-                    <td style={actTd}>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "(jefe(a) de servicio)"}</td>
-                    <td style={actTd}>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio"}</td>
-                    <td style={actTd}></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div style={{ marginTop: 20, fontSize: 11, color: "#555" }}>
-                Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
-              </div>
-            </div>
+            <table className="wrap">
+              <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
+              <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
+              <tbody><tr><td className="cuerpo">
+                {/* Encabezado institucional (arriba a la izquierda) */}
+                <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
+                  ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
+                  HOSPITAL GENERAL DE ZONA NO. 2
+                </div>
+                {/* Of. N° y fecha — arriba a la derecha */}
+                <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
+                  <div>Of. N° <strong>{oficio.folio}</strong></div>
+                  <div>Aguascalientes, Ags., a {hoy()}.</div>
+                </div>
+                {/* Destinatario */}
+                <div style={{ marginTop: 8, fontSize: 14 }}>
+                  <div style={{ fontWeight: 700 }}>{admin}</div>
+                  <div>Administrador del contrato {contratoNum}</div>
+                  <div style={{ marginTop: 16 }}>Presente</div>
+                </div>
+                {/* Cuerpo */}
+                {esCum ? (
+                  <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
+                    Se adjunta al presente las siguientes facturas del proveedor <strong>{proveedor}</strong>, por concepto de pago de <strong>{servicio}</strong>.
+                    Al respecto me permito informar que, a la fecha de la prestación de la presente factura, <strong>NO EXISTE INCUMPLIMIENTO</strong> del
+                    contrato antes referido en ninguno de los términos y condiciones que amparan cada una de las cláusulas del mismo, ni penas
+                    convencionales pendientes de aplicar al proveedor en cita.
+                  </p>
+                ) : (
+                  <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
+                    Por medio del presente envío a Usted informe de las incidencias ocurridas en la prestación de <strong>{servicio}</strong> del proveedor{" "}
+                    <strong>{proveedor}</strong>{f0.periodo_inicio ? `, durante el periodo del ${f0.periodo_inicio} al ${f0.periodo_fin}` : ""}; por
+                    <strong> incumplimiento</strong> a las cláusulas de <em>Lugar, plazos y condiciones para la entrega de los bienes/servicios</em>, siendo procedente
+                    la cláusula de <strong>Penas Convencionales</strong>. Motivo: <strong>{oficio.motivo}</strong>.
+                  </p>
+                )}
+                {/* Tabla de facturas */}
+                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
+                  <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
+                  <tbody>
+                    {oficio.filas.map((f) => (
+                      <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                    ))}
+                    <tr><td style={{ ...tblD, borderTop: "2px solid #333", borderBottom: "2px solid #333" }} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>{money(tot)}</td></tr>
+                  </tbody>
+                </table>
+                <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
+                {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
+                <div style={{ marginTop: 48 }}>
+                  <div style={{ fontWeight: 700 }}>Atentamente:</div>
+                  <div style={{ marginTop: 64 }}>
+                    <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
+                    <div style={{ fontSize: 12.5, color: "#333" }}>Auxiliar en la Administración del contrato número {contratoNum}</div>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 34 }}>
+                    <thead>
+                      <tr>
+                        <th style={actTh}>Actividad</th>
+                        <th style={actTh}>Nombre del Servidor Público</th>
+                        <th style={actTh}>Cargo</th>
+                        <th style={{ ...actTh, width: 130 }}>Firma</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={actTd}>Autorizó</td>
+                        <td style={actTd}>Lic. José Cortez González</td>
+                        <td style={actTd}>Subdirector Administrativo</td>
+                        <td style={actTd}></td>
+                      </tr>
+                      <tr>
+                        <td style={actTd}>Validó</td>
+                        <td style={actTd}>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "(jefe(a) de servicio)"}</td>
+                        <td style={actTd}>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio"}</td>
+                        <td style={actTd}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div style={{ marginTop: 20, fontSize: 11, color: "#555" }}>
+                    Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
+                  </div>
+                </div>
+              </td></tr></tbody>
+            </table>
           </div>
         </div>
         <style>{`
-          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:4.7cm 2.3cm 4.3cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete partido: encabezado arriba y pie abajo (se repiten por hoja al imprimir) */
-          .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .mem-h { top:0; }
-          .mem-f { display:none; }
-          .doc-hoja > *:not(.mem-h):not(.mem-f) { position:relative; z-index:1; }
-          .doc-hoja tr { break-inside:avoid; }
-          @page { size: letter; margin: 0; }
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
+          .wrap { width:100%; border-collapse:collapse; }
+          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .thc, .tfc { padding:0; }
+          .cuerpo { vertical-align:top; padding:0.5cm 0.8cm; }
+          /* Solo las tablas internas (facturas, autorizó/validó) evitan cortar renglones; la tabla .wrap SÍ debe poder pasar de hoja */
+          .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
+          @page { size: letter; margin: 0.8cm 1.2cm; }
           @media print {
-            /* Márgenes verticales por hoja; laterales van como padding del contenido (para que el membrete salga de borde a borde) */
-            @page { size: letter; margin: 4.7cm 0 4.3cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 2.3cm !important; }
-            .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
-            .mem-f { display:block !important; position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
+            thead { display:table-header-group; }
+            tfoot { display:table-footer-group; }
           }
         `}</style>
       </div>

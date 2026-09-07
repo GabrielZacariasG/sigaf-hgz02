@@ -297,13 +297,15 @@ export default function FacturasListaPage() {
           ))}
         </div>
         <div className="hoja">
+          {/* oficio de pago/devolución — membrete por hoja (thead/tfoot) */}
           {oficio.docs.map((d, di) => {
             const total = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
               <div key={di} className="doc-oficio">
-                <img src="/mem-encabezado.png" alt="" className="mem-h" />
-                <img src="/mem-pie.png" alt="" className="mem-f" />
-                <div className="of-cuerpo">
+                <table className="wrap">
+                  <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
+                  <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
+                  <tbody><tr><td className="of-cuerpo">
                   <div className="of-datos">
                     <div><strong>Para:</strong> {esPago ? "Mtra. Farlyn Isabel Hernández Arias — Departamento de Presupuesto, Contabilidad y Erogaciones" : `A QUIEN CORRESPONDA — ${d.prov}`}</div>
                     <div><strong>De:</strong> L.A. Nayeli Alonso Orozco — Jefa del Departamento de Finanzas del HGZ No. 02</div>
@@ -342,35 +344,32 @@ export default function FacturasListaPage() {
                     <div style={{ marginTop: 18, fontSize: 12 }}>c.c.p. Expediente</div>
                     <div style={{ marginTop: 10, fontSize: 10.5, color: "#666" }}>NAO / gdr</div>
                   </div>
-                </div>
+                  </td></tr></tbody>
+                </table>
               </div>
             );
           })}
         </div>
         <style>{`
-          .doc-oficio { position:relative; background:#fff;
-            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; border:1px solid var(--borde); border-radius:4px;
+          .doc-oficio { background:#fff;
+            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete partido: encabezado arriba y pie abajo (se repiten por hoja al imprimir) */
-          .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none;
-            -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .mem-h { top:0; }
-          .mem-f { display:none; }
-          .of-cuerpo { position:relative; z-index:1; padding:4.7cm 2.3cm 4.3cm 2.3cm; color:#111; }
-          .doc-oficio tr { break-inside:avoid; }
+          /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
+          .wrap { width:100%; border-collapse:collapse; }
+          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .thc, .tfc { padding:0; }
+          .of-cuerpo { vertical-align:top; padding:0.5cm 0.8cm; color:#111; }
+          .doc-oficio table:not(.wrap) tr { break-inside:avoid; }
           .of-datos { margin-top:14px; font-size:12.5px; line-height:1.6; }
           .of-datos > div { padding:2px 0; }
-          @page { size: letter; margin: 0; }
+          @page { size: letter; margin: 0.8cm 1.2cm; }
           @media print {
-            /* Márgenes verticales por hoja; laterales como padding (membrete de borde a borde) */
-            @page { size: letter; margin: 4.7cm 0 4.3cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .no-print { display:none !important; }
-            .doc-oficio { border:none !important; margin:0 !important; border-radius:0 !important; min-height:0 !important; }
-            .of-cuerpo { padding:0 2.3cm !important; }
-            .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
-            .mem-f { display:block !important; position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
+            .doc-oficio { border:none !important; margin:0 !important; border-radius:0 !important; min-height:0 !important; padding:0 !important; }
+            thead { display:table-header-group; }
+            tfoot { display:table-footer-group; }
           }
         `}</style>
       </div>
@@ -396,9 +395,10 @@ export default function FacturasListaPage() {
             const total = g.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
               <div key={gi} className="doc-hoja">
-                <img src="/mem-encabezado.png" alt="" className="mem-h" />
-                <img src="/mem-pie.png" alt="" className="mem-f" />
-                <div>
+                <table className="wrap">
+                  <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
+                  <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
+                  <tbody><tr><td className="cuerpo">
                   <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13 }}>
                     <div style={{ textAlign: "right" }}><div style={{ fontWeight: 700, letterSpacing: 1.5 }}>MEMORÁNDUM</div><div style={{ color: "#555" }}>{g.folio}</div></div>
                   </div>
@@ -421,7 +421,6 @@ export default function FacturasListaPage() {
                       <tr><td style={{ ...mD, borderBottom: "2px solid #333", borderTop: "2px solid #333" }} colSpan={4}><strong>Total ({g.filas.length} factura{g.filas.length !== 1 ? "s" : ""})</strong></td><td style={{ ...mD, textAlign: "right", fontWeight: 700, borderBottom: "2px solid #333", borderTop: "2px solid #333" }}>{money(total)}</td></tr>
                     </tbody>
                   </table>
-                </div>
                 {/* firma al fondo de la hoja */}
                 <div style={{ marginTop: 48, textAlign: "left" }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>ATENTAMENTE</div>
@@ -431,29 +430,29 @@ export default function FacturasListaPage() {
                     <span style={{ fontSize: 13, color: "#444" }}>Jefa del Departamento de Finanzas · HGZ No. 2</span>
                   </div>
                 </div>
+                  </td></tr></tbody>
+                </table>
               </div>
             );
           })}
         </div>
         <style>{`
-          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:4.7cm 2.3cm 4.3cm; border:1px solid var(--borde); border-radius:4px; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete partido: encabezado arriba y pie abajo (se repiten por hoja al imprimir) */
-          .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .mem-h { top:0; }
-          .mem-f { display:none; }
-          .doc-hoja tr { break-inside:avoid; }
-          .doc-hoja > *:not(.mem-h):not(.mem-f) { position:relative; z-index:1; }
-          @page { size: letter; margin: 0; }
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
+          .wrap { width:100%; border-collapse:collapse; }
+          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .thc, .tfc { padding:0; }
+          .cuerpo { vertical-align:top; padding:0.5cm 0.8cm; }
+          .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
+          @page { size: letter; margin: 0.8cm 1.2cm; }
           @media print {
-            /* Márgenes verticales por hoja; laterales como padding (membrete de borde a borde) */
-            @page { size: letter; margin: 4.7cm 0 4.3cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 2.3cm !important; }
-            .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
-            .mem-f { display:block !important; position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
+            thead { display:table-header-group; }
+            tfoot { display:table-footer-group; }
           }
         `}</style>
       </div>
