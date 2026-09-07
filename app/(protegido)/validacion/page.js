@@ -233,11 +233,15 @@ export default function ValidacionServicioPage() {
           .doc-hoja tr { break-inside:avoid; }
           @page { size: letter; margin: 0; }
           @media print {
+            /* Márgenes por hoja: dejan la banda libre para el contenido en TODAS las hojas */
+            @page { size: letter; margin: 3.4cm 2.3cm 2.8cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
-            .hoja { position:absolute; left:0; top:0; width:100%; }
+            .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:100vh; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
+            /* Membrete repetido en cada hoja (encabezado + pie), cubriendo hasta los márgenes */
+            .membrete-bg { position:fixed !important; top:-3.4cm; left:-2.3cm; width:21.6cm; height:27.9cm !important; }
           }
         `}</style>
       </div>
