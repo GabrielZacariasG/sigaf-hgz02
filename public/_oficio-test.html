@@ -10,7 +10,7 @@
   .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:16px auto; padding:4.7cm 2.3cm 4.3cm; border:1px solid #ccc; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .mem-h { top:0; }
-  .mem-f { top:24cm; }
+  .mem-f { display:none; }   /* en pantalla no se puede anclar por hoja; se muestra al imprimir */
   .doc-hoja > *:not(.mem-h):not(.mem-f) { position:relative; z-index:1; }
   .doc-hoja tr { break-inside:avoid; }
   table { width:100%; border-collapse:collapse; margin-top:18px; }
@@ -24,7 +24,7 @@
     body { background:#fff; }
     .doc-hoja { border:none !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 2.3cm !important; }
     .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
-    .mem-f { position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
+    .mem-f { display:block !important; position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
   }
 </style>
 </head>

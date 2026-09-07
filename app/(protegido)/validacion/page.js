@@ -231,7 +231,7 @@ export default function ValidacionServicioPage() {
           /* Membrete partido: encabezado arriba y pie abajo (se repiten por hoja al imprimir) */
           .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .mem-h { top:0; }
-          .mem-f { top:24cm; }
+          .mem-f { display:none; }
           .doc-hoja > *:not(.mem-h):not(.mem-f) { position:relative; z-index:1; }
           .doc-hoja tr { break-inside:avoid; }
           @page { size: letter; margin: 0; }
@@ -244,7 +244,7 @@ export default function ValidacionServicioPage() {
             .no-print { display:none !important; }
             .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 2.3cm !important; }
             .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
-            .mem-f { position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
+            .mem-f { display:block !important; position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
           }
         `}</style>
       </div>
