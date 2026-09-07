@@ -393,12 +393,12 @@ export default function FacturasListaPage() {
             const total = g.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
               <div key={gi} className="doc-hoja">
+                <img src="/membrete.png" alt="" className="membrete-bg" />
                 <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 12 }}>
-                    <div><div style={{ fontWeight: 800, fontSize: 17 }}>IMSS · Departamento de Finanzas</div><div style={{ fontSize: 12, color: "#555" }}>Instituto Mexicano del Seguro Social · HGZ No. 2</div></div>
-                    <div style={{ textAlign: "right", fontSize: 13 }}><div style={{ fontWeight: 700, letterSpacing: 1.5 }}>MEMORÁNDUM</div><div style={{ color: "#555" }}>{g.folio}</div></div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13 }}>
+                    <div style={{ textAlign: "right" }}><div style={{ fontWeight: 700, letterSpacing: 1.5 }}>MEMORÁNDUM</div><div style={{ color: "#555" }}>{g.folio}</div></div>
                   </div>
-                  <div style={{ marginTop: 30, display: "grid", gap: 7 }}>
+                  <div style={{ marginTop: 18, display: "grid", gap: 7 }}>
                     <div style={linea}><span style={{ color: "#777" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
                     <div style={linea}><span style={{ color: "#777" }}>De:</span><span><strong>L.A. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
                     <div style={linea}><span style={{ color: "#777" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
@@ -432,7 +432,9 @@ export default function FacturasListaPage() {
           })}
         </div>
         <style>{`
-          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:2.2cm 2.4cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; break-after:page; }
+          .doc-hoja { position:relative; overflow:hidden; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja > *:not(.membrete-bg) { position:relative; z-index:1; }
           @page { size: letter; margin: 0; }
           @media print {
             body * { visibility: hidden !important; }
