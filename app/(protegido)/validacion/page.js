@@ -141,7 +141,8 @@ export default function ValidacionServicioPage() {
         </div>
         <div className="hoja">
           <div className="doc-hoja">
-            <img src="/membrete.png" alt="" className="membrete-bg" />
+            <img src="/mem-encabezado.png" alt="" className="mem-h" />
+            <img src="/mem-pie.png" alt="" className="mem-f" />
             <div>
               {/* Encabezado institucional (arriba a la izquierda) */}
               <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222", marginTop: 6 }}>
@@ -226,22 +227,24 @@ export default function ValidacionServicioPage() {
           </div>
         </div>
         <style>{`
-          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete fijo a una hoja (no se estira si el contenido pasa a 2a hoja) */
-          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:27.9cm; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .doc-hoja > *:not(.membrete-bg) { position:relative; z-index:1; }
+          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:4.7cm 2.3cm 4.3cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete partido: encabezado arriba y pie abajo (se repiten por hoja al imprimir) */
+          .mem-h, .mem-f { position:absolute; left:0; width:100%; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .mem-h { top:0; }
+          .mem-f { top:24cm; }
+          .doc-hoja > *:not(.mem-h):not(.mem-f) { position:relative; z-index:1; }
           .doc-hoja tr { break-inside:avoid; }
           @page { size: letter; margin: 0; }
           @media print {
-            /* Márgenes por hoja: dejan la banda libre para el contenido en TODAS las hojas */
-            @page { size: letter; margin: 3.4cm 2.3cm 2.8cm; }
+            /* Márgenes verticales por hoja; laterales van como padding del contenido (para que el membrete salga de borde a borde) */
+            @page { size: letter; margin: 4.7cm 0 4.3cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
-            /* Membrete repetido en cada hoja (encabezado + pie), cubriendo hasta los márgenes */
-            .membrete-bg { position:fixed !important; top:-3.4cm; left:-2.3cm; width:21.6cm; height:27.9cm !important; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 2.3cm !important; }
+            .mem-h { position:fixed !important; top:0 !important; left:0 !important; width:100% !important; }
+            .mem-f { position:fixed !important; top:auto !important; bottom:0 !important; left:0 !important; width:100% !important; }
           }
         `}</style>
       </div>
