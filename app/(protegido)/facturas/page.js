@@ -302,6 +302,7 @@ export default function FacturasListaPage() {
             const total = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
               <div key={di} className="doc-oficio">
+                <img src="/membrete.png" alt="" className="membrete-bg" />
                 <div className="of-cuerpo">
                   <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.2, lineHeight: 1.35, color: "#333" }}>
                     ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />HOSPITAL GENERAL DE ZONA NO. 02<br />DEPARTAMENTO DE FINANZAS
@@ -355,10 +356,12 @@ export default function FacturasListaPage() {
           })}
         </div>
         <style>{`
-          .doc-oficio { position:relative; background:#fff url('/membrete.png') no-repeat; background-size:100% 100%;
+          .doc-oficio { position:relative; background:#fff; overflow:hidden;
             box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; border:1px solid var(--borde); border-radius:4px;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .of-cuerpo { padding:3.7cm 2.3cm 3cm 2.3cm; color:#111; }
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none;
+            -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .of-cuerpo { position:relative; z-index:1; padding:3.7cm 2.3cm 3cm 2.3cm; color:#111; }
           @page { size: letter; margin: 0; }
           @media print {
             body * { visibility: hidden !important; }

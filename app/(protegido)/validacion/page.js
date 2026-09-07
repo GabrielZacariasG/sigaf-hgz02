@@ -139,13 +139,9 @@ export default function ValidacionServicioPage() {
         </div>
         <div className="hoja">
           <div className="doc-hoja">
+            <img src="/membrete.png" alt="" className="membrete-bg" />
             <div>
-              {/* Membrete */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "3px solid #7a1737", paddingBottom: 12 }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>Gobierno de México · IMSS<br /><span style={{ fontWeight: 400, fontSize: 12, color: "#555" }}>Instituto Mexicano del Seguro Social</span></div>
-                <div style={{ fontSize: 12, textAlign: "right", color: "#555" }}>HGZ No. 2<br />Jefatura de {oficio.jefe?.jefatura}</div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 26, fontSize: 13.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 13.5 }}>
                 <span>Of. N° <strong>{oficio.folio}</strong></span>
                 <span>Aguascalientes, Ags., a {hoy()}.</span>
               </div>
@@ -183,25 +179,42 @@ export default function ValidacionServicioPage() {
               </table>
               <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
             </div>
-            {/* Firmas al fondo */}
+            {/* Firmas al fondo: firma el Director; rubrican el Jefe de Servicio y el Subdirector Administrativo */}
             <div style={{ marginTop: "auto", paddingTop: 40 }}>
               <div style={{ textAlign: "center", fontWeight: 700 }}>ATENTAMENTE</div>
               <div style={{ textAlign: "center", fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 60 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+              {/* Firma principal: Director del Hospital */}
               <div style={{ textAlign: "center" }}>
-                <div style={{ borderTop: "1px solid #333", width: 340, margin: "0 auto", paddingTop: 6 }}>
-                  <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</strong><br />
-                  <span style={{ fontSize: 13, color: "#444" }}>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</span>
+                <div style={{ borderTop: "1px solid #333", width: 360, margin: "0 auto", paddingTop: 6 }}>
+                  <strong>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</strong><br />
+                  <span style={{ fontSize: 13, color: "#444" }}>Director del Hospital General de Zona No. 2</span>
                 </div>
               </div>
-              <div style={{ marginTop: 28, fontSize: 11.5, color: "#555" }}>
-                <div><strong>Autoriza:</strong> Subdirector Administrativo HGZ No. 2</div>
-                <div style={{ marginTop: 10 }}>Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.</div>
+              {/* Rúbricas: Jefe de Servicio y Subdirector Administrativo */}
+              <div style={{ display: "flex", justifyContent: "space-around", gap: 24, marginTop: 70 }}>
+                <div style={{ textAlign: "center", flex: 1 }}>
+                  <div style={{ borderTop: "1px solid #333", width: "88%", margin: "0 auto", paddingTop: 6 }}>
+                    <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</strong><br />
+                    <span style={{ fontSize: 12.5, color: "#444" }}>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center", flex: 1 }}>
+                  <div style={{ borderTop: "1px solid #333", width: "88%", margin: "0 auto", paddingTop: 6 }}>
+                    <strong>LIC. JOSÉ CORTEZ GONZÁLEZ</strong><br />
+                    <span style={{ fontSize: 12.5, color: "#444" }}>Subdirector Administrativo · HGZ No. 2</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 26, fontSize: 11, color: "#555" }}>
+                Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
               </div>
             </div>
           </div>
         </div>
         <style>{`
-          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:2.2cm 2.4cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; line-height:1.55; }
+          .doc-hoja { position:relative; overflow:hidden; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja > *:not(.membrete-bg) { position:relative; z-index:1; }
           @page { size: letter; margin: 0; }
           @media print {
             body * { visibility: hidden !important; }

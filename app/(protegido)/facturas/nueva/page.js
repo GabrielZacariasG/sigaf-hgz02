@@ -58,14 +58,20 @@ export default function NuevaFacturaPage() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
-  // 1) Cargar todos los capítulos.
+  // 1) Cargar capítulos — SOLO los que tienen cuentas (partidas). Así se evita
+  //    mostrar capítulos huérfanos/duplicados que no llevan a ninguna cuenta.
   useEffect(() => {
     let activo = true;
     (async () => {
-      const { data, error } = await supabase.from("capitulos").select("id, nombre").order("nombre");
+      const { data, error } = await supabase
+        .from("partidas")
+        .select("capitulo_id, capitulos ( id, nombre )");
       if (!activo) return;
       if (error) { setMensaje("No se pudo cargar el catálogo de capítulos: " + error.message); return; }
-      setCapitulos(data || []);
+      const map = new Map();
+      (data || []).forEach((p) => { if (p.capitulos) map.set(p.capitulos.id, p.capitulos); });
+      const caps = [...map.values()].sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      setCapitulos(caps);
     })();
     return () => { activo = false; };
   }, []);
