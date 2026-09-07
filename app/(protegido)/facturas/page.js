@@ -352,17 +352,17 @@ export default function FacturasListaPage() {
         </div>
         <style>{`
           .doc-oficio { background:#fff;
-            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px;
+            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
           .wrap { width:100%; border-collapse:collapse; }
           .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .thc, .tfc { padding:0; }
-          .of-cuerpo { vertical-align:top; padding:0.5cm 0.8cm; color:#111; }
+          .of-cuerpo { vertical-align:top; padding:0.25cm 0.8cm; color:#111; }
           .doc-oficio table:not(.wrap) tr { break-inside:avoid; }
           .of-datos { margin-top:14px; font-size:12.5px; line-height:1.6; }
           .of-datos > div { padding:2px 0; }
-          @page { size: letter; margin: 0.8cm 1.2cm; }
+          @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
@@ -437,14 +437,14 @@ export default function FacturasListaPage() {
           })}
         </div>
         <style>{`
-          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
           .wrap { width:100%; border-collapse:collapse; }
           .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .thc, .tfc { padding:0; }
-          .cuerpo { vertical-align:top; padding:0.5cm 0.8cm; }
+          .cuerpo { vertical-align:top; padding:0.25cm 0.8cm; }
           .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
-          @page { size: letter; margin: 0.8cm 1.2cm; }
+          @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }

@@ -189,13 +189,13 @@ export default function ValidacionServicioPage() {
                 </table>
                 <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
                 {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
-                <div style={{ marginTop: 48 }}>
+                <div className="firma-bloque" style={{ marginTop: 30 }}>
                   <div style={{ fontWeight: 700 }}>Atentamente:</div>
-                  <div style={{ marginTop: 64 }}>
+                  <div style={{ marginTop: 44 }}>
                     <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
                     <div style={{ fontSize: 12.5, color: "#333" }}>Auxiliar en la Administración del contrato número {contratoNum}</div>
                   </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 34 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 24 }}>
                     <thead>
                       <tr>
                         <th style={actTh}>Actividad</th>
@@ -228,15 +228,16 @@ export default function ValidacionServicioPage() {
           </div>
         </div>
         <style>{`
-          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.8cm 1.2cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
           .wrap { width:100%; border-collapse:collapse; }
           .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .thc, .tfc { padding:0; }
-          .cuerpo { vertical-align:top; padding:0.5cm 0.8cm; }
+          .cuerpo { vertical-align:top; padding:0.25cm 0.8cm; }
           /* Solo las tablas internas (facturas, autorizó/validó) evitan cortar renglones; la tabla .wrap SÍ debe poder pasar de hoja */
           .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
-          @page { size: letter; margin: 0.8cm 1.2cm; }
+          .firma-bloque { break-inside:avoid; }
+          @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
