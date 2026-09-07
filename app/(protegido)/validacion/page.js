@@ -188,19 +188,17 @@ export default function ValidacionServicioPage() {
                   <span style={{ fontSize: 13, color: "#444" }}>Director del Hospital General de Zona No. 2</span>
                 </div>
               </div>
-              {/* Rúbricas: Jefe de Servicio y Subdirector Administrativo */}
-              <div style={{ display: "flex", justifyContent: "space-around", gap: 24, marginTop: 70 }}>
-                <div style={{ textAlign: "center", flex: 1 }}>
-                  <div style={{ borderTop: "1px solid #333", width: "88%", margin: "0 auto", paddingTop: 6 }}>
-                    <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</strong><br />
-                    <span style={{ fontSize: 12.5, color: "#444" }}>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</span>
-                  </div>
+              {/* Rúbricas pequeñas: Validó (Jefe de Servicio) y Autoriza (Subdirector Administrativo) */}
+              <div style={{ display: "flex", gap: 60, marginTop: 40, fontSize: 11, color: "#444" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#111" }}>Validó</div>
+                  <div>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ")}</div>
+                  <div>Jefe(a) del Servicio de {oficio.jefe?.jefatura} · HGZ No. 2</div>
                 </div>
-                <div style={{ textAlign: "center", flex: 1 }}>
-                  <div style={{ borderTop: "1px solid #333", width: "88%", margin: "0 auto", paddingTop: 6 }}>
-                    <strong>LIC. JOSÉ CORTEZ GONZÁLEZ</strong><br />
-                    <span style={{ fontSize: 12.5, color: "#444" }}>Subdirector Administrativo · HGZ No. 2</span>
-                  </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#111" }}>Autoriza</div>
+                  <div>LIC. José Cortez González</div>
+                  <div>Subdirector Administrativo · HGZ No. 2</div>
                 </div>
               </div>
               <div style={{ marginTop: 26, fontSize: 11, color: "#555" }}>
