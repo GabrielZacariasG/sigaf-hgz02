@@ -188,7 +188,7 @@ export default function ValidacionServicioPage() {
               <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
             </div>
             {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
-            <div style={{ marginTop: "auto", paddingTop: 32 }}>
+            <div style={{ marginTop: 48 }}>
               <div style={{ fontWeight: 700 }}>Atentamente:</div>
               <div style={{ marginTop: 64 }}>
                 <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
@@ -226,9 +226,11 @@ export default function ValidacionServicioPage() {
           </div>
         </div>
         <style>{`
-          .doc-hoja { position:relative; overflow:hidden; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete fijo a una hoja (no se estira si el contenido pasa a 2a hoja) */
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:27.9cm; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .doc-hoja > *:not(.membrete-bg) { position:relative; z-index:1; }
+          .doc-hoja tr { break-inside:avoid; }
           @page { size: letter; margin: 0; }
           @media print {
             body * { visibility: hidden !important; }

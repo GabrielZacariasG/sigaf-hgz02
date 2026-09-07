@@ -347,12 +347,14 @@ export default function FacturasListaPage() {
           })}
         </div>
         <style>{`
-          .doc-oficio { position:relative; background:#fff; overflow:hidden;
+          .doc-oficio { position:relative; background:#fff;
             box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; border:1px solid var(--borde); border-radius:4px;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none;
+          /* Membrete fijo a una hoja (no se estira si el contenido pasa a 2a hoja) */
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:27.9cm; object-fit:fill; z-index:0; pointer-events:none;
             -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .of-cuerpo { position:relative; z-index:1; padding:3.7cm 2.3cm 3cm 2.3cm; color:#111; }
+          .doc-oficio tr { break-inside:avoid; }
           .of-datos { margin-top:14px; font-size:12.5px; line-height:1.6; }
           .of-datos > div { padding:2px 0; }
           @page { size: letter; margin: 0; }
@@ -412,7 +414,7 @@ export default function FacturasListaPage() {
                   </table>
                 </div>
                 {/* firma al fondo de la hoja */}
-                <div style={{ marginTop: "auto", paddingTop: 40, textAlign: "left" }}>
+                <div style={{ marginTop: 48, textAlign: "left" }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>ATENTAMENTE</div>
                   <div style={{ fontSize: 12, fontStyle: "italic", color: "#555", marginBottom: 56 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
                   <div style={{ borderTop: "1px solid #333", width: 320, margin: "0", paddingTop: 6 }}>
@@ -425,8 +427,10 @@ export default function FacturasListaPage() {
           })}
         </div>
         <style>{`
-          .doc-hoja { position:relative; overflow:hidden; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; display:flex; flex-direction:column; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.7cm 2.4cm 2.6cm; border:1px solid var(--borde); border-radius:4px; break-after:page; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete fijo a una hoja (no se estira si el contenido pasa a 2a hoja) */
+          .membrete-bg { position:absolute; top:0; left:0; width:100%; height:27.9cm; object-fit:fill; z-index:0; pointer-events:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .doc-hoja tr { break-inside:avoid; }
           .doc-hoja > *:not(.membrete-bg) { position:relative; z-index:1; }
           @page { size: letter; margin: 0; }
           @media print {
