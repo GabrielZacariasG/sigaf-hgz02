@@ -213,8 +213,8 @@ export default function ValidacionServicioPage() {
                   </tr>
                   <tr>
                     <td style={actTd}>Validó</td>
-                    <td style={actTd}>{oficio.jefe?.nombre || "(jefe(a) de servicio)"}</td>
-                    <td style={actTd}>{oficio.jefe?.cargo || (oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio")}</td>
+                    <td style={actTd}>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "(jefe(a) de servicio)"}</td>
+                    <td style={actTd}>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio"}</td>
                     <td style={actTd}></td>
                   </tr>
                 </tbody>
