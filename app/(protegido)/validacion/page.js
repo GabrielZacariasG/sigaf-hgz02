@@ -129,7 +129,7 @@ export default function ValidacionServicioPage() {
     const tblH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
     const tblD = { padding: "8px 12px", borderBottom: "1px solid #ddd", fontSize: 13 };
     const actTh = { border: "1px solid #333", padding: "5px 8px", fontSize: 11.5, fontWeight: 700, textAlign: "left" };
-    const actTd = { border: "1px solid #333", padding: "12px 8px", fontSize: 11.5, verticalAlign: "top" };
+    const actTd = { border: "1px solid #333", padding: "6px 8px", fontSize: 11.5, verticalAlign: "top" };
     const tot = oficio.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
     return (
       <div>
@@ -172,10 +172,10 @@ export default function ValidacionServicioPage() {
                   </tbody>
                 </table>
                 <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
-                <div className="firma-bloque" style={{ marginTop: 30 }}>
+                <div className="firma-bloque" style={{ marginTop: 18 }}>
                   <div style={{ fontWeight: 700 }}>Atentamente</div>
                   <div style={{ fontStyle: "italic", fontSize: 12, color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
-                  <div style={{ marginTop: 60 }}>
+                  <div style={{ marginTop: 40 }}>
                     <div style={{ borderTop: "1px solid #333", width: 340, paddingTop: 6 }}>
                       <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "(jefe(a) de servicio)"}</strong><br />
                       <span style={{ fontSize: 12.5, color: "#444" }}>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura} · HGZ No. 2` : "Jefe(a) de Servicio · HGZ No. 2"}</span>
@@ -235,13 +235,13 @@ export default function ValidacionServicioPage() {
                 </table>
                 <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
                 {/* Firma principal (solo el Director firma en grande) + tabla Autorizó/Validó */}
-                <div className="firma-bloque" style={{ marginTop: 30 }}>
+                <div className="firma-bloque" style={{ marginTop: 18 }}>
                   <div style={{ fontWeight: 700 }}>Atentamente:</div>
-                  <div style={{ marginTop: 44 }}>
+                  <div style={{ marginTop: 30 }}>
                     <div style={{ fontWeight: 700 }}>DR. YAMID BRAJIN SÁNCHEZ RODRÍGUEZ</div>
                     <div style={{ fontSize: 12.5, color: "#333" }}>Auxiliar en la Administración del contrato número {contratoNum}</div>
                   </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 24 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
                     <thead>
                       <tr>
                         <th style={actTh}>Actividad</th>
@@ -265,7 +265,7 @@ export default function ValidacionServicioPage() {
                       </tr>
                     </tbody>
                   </table>
-                  <div style={{ marginTop: 20, fontSize: 11, color: "#555" }}>
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#555" }}>
                     Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
                   </div>
                 </div>
@@ -284,6 +284,7 @@ export default function ValidacionServicioPage() {
           .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
           .firma-bloque { break-inside:avoid; }
           .doc-hoja + .doc-hoja { break-before: page; }
+          .cuerpo p { margin-top: 16px; }
           @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
             body * { visibility: hidden !important; }
