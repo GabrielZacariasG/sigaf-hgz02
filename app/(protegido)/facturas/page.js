@@ -300,6 +300,14 @@ export default function FacturasListaPage() {
           {/* oficio de pago/devolución — membrete por hoja (thead/tfoot) */}
           {oficio.docs.map((d, di) => {
             const total = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+            // Servicio(s) que validaron (jefatura ligada al proveedor de cada factura)
+            const nkr = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const servicios = [...new Set(d.filas.flatMap((f) => (provJefes[nkr(f.prov)] || []).map((j) => j.jefatura)).filter(Boolean))];
+            const servicioTxt = servicios.length === 1
+              ? `el Servicio de ${servicios[0]}`
+              : servicios.length > 1
+                ? `los servicios de ${servicios.slice(0, -1).join(", ")} y ${servicios[servicios.length - 1]}`
+                : "el servicio correspondiente";
             return (
               <div key={di} className="doc-oficio">
                 <table className="wrap">
@@ -324,7 +332,7 @@ export default function FacturasListaPage() {
                   </div>
                   <p style={{ marginTop: 18, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
                     {esPago
-                      ? "Por medio del presente envío a usted, facturas para trámite de pago, mismas que a continuación se relacionan:"
+                      ? <>Por medio del presente envío a usted, facturas <strong>validadas por {servicioTxt}</strong>, para trámite de pago, mismas que a continuación se relacionan:</>
                       : "Por medio del presente se devuelven a usted las siguientes facturas para su corrección, mismas que a continuación se relacionan:"}
                   </p>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
