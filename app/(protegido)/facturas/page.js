@@ -306,11 +306,21 @@ export default function FacturasListaPage() {
                   <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
                   <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
                   <tbody><tr><td className="of-cuerpo">
-                  <div className="of-datos">
-                    <div><strong>Para:</strong> {esPago ? "Mtra. Farlyn Isabel Hernández Arias — Departamento de Presupuesto, Contabilidad y Erogaciones" : `A QUIEN CORRESPONDA — ${d.prov}`}</div>
-                    <div><strong>De:</strong> L.A. Nayeli Alonso Orozco — Jefa del Departamento de Finanzas del HGZ No. 02</div>
-                    <div><strong>Lugar y Fecha:</strong> Aguascalientes, Ags., a {hoy}</div>
-                    <div><strong>No. de Oficio:</strong> {d.folio}</div>
+                  {/* Encabezado institucional (arriba a la izquierda) — formato unificado */}
+                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
+                    ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
+                    HOSPITAL GENERAL DE ZONA NO. 2
+                  </div>
+                  {/* Of. N° y fecha — arriba a la derecha */}
+                  <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
+                    <div>Of. N° <strong>{d.folio}</strong></div>
+                    <div>Aguascalientes, Ags., a {hoy}</div>
+                  </div>
+                  {/* Destinatario en bloque */}
+                  <div style={{ marginTop: 8, fontSize: 14 }}>
+                    <div style={{ fontWeight: 700 }}>{esPago ? "Mtra. Farlyn Isabel Hernández Arias" : d.prov}</div>
+                    <div>{esPago ? "Departamento de Presupuesto, Contabilidad y Erogaciones" : "Proveedor"}</div>
+                    <div style={{ marginTop: 16 }}>Presente</div>
                   </div>
                   <p style={{ marginTop: 18, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
                     {esPago
@@ -379,7 +389,6 @@ export default function FacturasListaPage() {
 
   // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (hoja carta, limpio) ----
   if (memo) {
-    const linea = { display: "grid", gridTemplateColumns: "80px 1fr", gap: 6, fontSize: 14 };
     const mH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
     const mD = { padding: "8px 12px", borderBottom: "1px solid #ddd", fontSize: 13 };
     return (
@@ -399,14 +408,21 @@ export default function FacturasListaPage() {
                   <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
                   <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
                   <tbody><tr><td className="cuerpo">
-                  <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13 }}>
-                    <div style={{ textAlign: "right" }}><div style={{ fontWeight: 700, letterSpacing: 1.5 }}>MEMORÁNDUM</div><div style={{ color: "#555" }}>{g.folio}</div></div>
+                  {/* Encabezado institucional (arriba a la izquierda) — formato unificado */}
+                  <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
+                    ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
+                    HOSPITAL GENERAL DE ZONA NO. 2
                   </div>
-                  <div style={{ marginTop: 18, display: "grid", gap: 7 }}>
-                    <div style={linea}><span style={{ color: "#777" }}>Para:</span><span><strong>{g.jefe}</strong>{g.jefatura ? ` — Jefatura de ${g.jefatura}` : ""}</span></div>
-                    <div style={linea}><span style={{ color: "#777" }}>De:</span><span><strong>L.A. Nayeli Alonso Orozco</strong> — Jefa del Departamento de Finanzas, HGZ No. 2</span></div>
-                    <div style={linea}><span style={{ color: "#777" }}>Fecha:</span><span>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</span></div>
-                    <div style={linea}><span style={{ color: "#777" }}>Asunto:</span><strong>Envío de facturas para validación del servicio</strong></div>
+                  {/* Memorándum N° y fecha — arriba a la derecha */}
+                  <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
+                    <div>Memorándum N° <strong>{g.folio}</strong></div>
+                    <div>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</div>
+                  </div>
+                  {/* Destinatario en bloque */}
+                  <div style={{ marginTop: 8, fontSize: 14 }}>
+                    <div style={{ fontWeight: 700 }}>{g.jefe}</div>
+                    <div>{g.jefatura ? `Jefatura de ${g.jefatura}` : "Jefe(a) de Servicio"}</div>
+                    <div style={{ marginTop: 16 }}>Presente</div>
                   </div>
                   <p style={{ marginTop: 30, textAlign: "justify", fontSize: 15, lineHeight: 1.7 }}>
                     Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
