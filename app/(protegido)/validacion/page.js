@@ -140,6 +140,52 @@ export default function ValidacionServicioPage() {
           {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
         <div className="hoja">
+          {/* HOJA 1 — Oficio de remisión: la jefatura del servicio envía a Finanzas las facturas validadas, adjuntando el oficio de cumplimiento/incumplimiento */}
+          <div className="doc-hoja">
+            <table className="wrap">
+              <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
+              <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
+              <tbody><tr><td className="cuerpo">
+                <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
+                  ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
+                  HOSPITAL GENERAL DE ZONA NO. 2
+                </div>
+                <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
+                  <div>Of. N° <strong>{oficio.folio}</strong></div>
+                  <div>Aguascalientes, Ags., a {hoy()}.</div>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 14 }}>
+                  <div style={{ fontWeight: 700 }}>L.A. Nayeli Alonso Orozco</div>
+                  <div>Jefa del Departamento de Finanzas del HGZ No. 02</div>
+                  <div style={{ marginTop: 16 }}>Presente</div>
+                </div>
+                <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
+                  Por medio del presente le remito las siguientes facturas del proveedor <strong>{proveedor}</strong>, debidamente <strong>validadas por este servicio</strong>, adjuntando el <strong>oficio de {esCum ? "cumplimiento" : "incumplimiento"}</strong> dirigido al <strong>Administrador del Contrato</strong> {contratoNum}, para que por su conducto se realice el envío correspondiente.
+                </p>
+                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
+                  <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
+                  <tbody>
+                    {oficio.filas.map((f) => (
+                      <tr key={f.id}><td style={tblD}>{f.folio_proveedor}</td><td style={tblD}>{f.proveedores?.razon_social}</td><td style={tblD}>{f.periodo_inicio} → {f.periodo_fin}</td><td style={{ ...tblD, textAlign: "right" }}>{money(f.importe_factura)}</td></tr>
+                    ))}
+                    <tr><td style={{ ...tblD, borderTop: "2px solid #333", borderBottom: "2px solid #333" }} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>{money(tot)}</td></tr>
+                  </tbody>
+                </table>
+                <p style={{ marginTop: 26 }}>Sin otro particular, me es grato enviarle un cordial saludo.</p>
+                <div className="firma-bloque" style={{ marginTop: 30 }}>
+                  <div style={{ fontWeight: 700 }}>Atentamente</div>
+                  <div style={{ fontStyle: "italic", fontSize: 12, color: "#555" }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+                  <div style={{ marginTop: 60 }}>
+                    <div style={{ borderTop: "1px solid #333", width: 340, paddingTop: 6 }}>
+                      <strong>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "(jefe(a) de servicio)"}</strong><br />
+                      <span style={{ fontSize: 12.5, color: "#444" }}>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura} · HGZ No. 2` : "Jefe(a) de Servicio · HGZ No. 2"}</span>
+                    </div>
+                  </div>
+                </div>
+              </td></tr></tbody>
+            </table>
+          </div>
+          {/* HOJA 2 — Oficio de cumplimiento/incumplimiento dirigido al Administrador del Contrato (firma el Director) */}
           <div className="doc-hoja">
             <table className="wrap">
               <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
@@ -237,6 +283,7 @@ export default function ValidacionServicioPage() {
           /* Solo las tablas internas (facturas, autorizó/validó) evitan cortar renglones; la tabla .wrap SÍ debe poder pasar de hoja */
           .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
           .firma-bloque { break-inside:avoid; }
+          .doc-hoja + .doc-hoja { break-before: page; }
           @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
             body * { visibility: hidden !important; }
