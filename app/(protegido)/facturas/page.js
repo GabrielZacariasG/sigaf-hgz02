@@ -319,7 +319,7 @@ export default function FacturasListaPage() {
                   {/* Destinatario en bloque */}
                   <div style={{ marginTop: 8, fontSize: 14 }}>
                     <div style={{ fontWeight: 700 }}>{esPago ? "Mtra. Farlyn Isabel Hernández Arias" : d.prov}</div>
-                    <div>{esPago ? "Departamento de Presupuesto, Contabilidad y Erogaciones" : "Proveedor"}</div>
+                    <div>{esPago ? "Departamento de Presupuesto, Contabilidad y Erogaciones" : "Estimado proveedor"}</div>
                     <div style={{ marginTop: 16 }}>Presente</div>
                   </div>
                   <p style={{ marginTop: 18, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
@@ -336,9 +336,7 @@ export default function FacturasListaPage() {
                       <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={4}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
                     </tbody>
                   </table>
-                  {esPago ? (
-                    <p style={{ marginTop: 14, fontSize: 12.5, fontWeight: 700 }}>SE ENVÍAN LAS SIGUIENTES FACTURAS PARA SU DEBIDO PAGO.</p>
-                  ) : (
+                  {!esPago && (
                     <p style={{ marginTop: 14, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}><strong>Motivo de la devolución:</strong> {d.motivo || "____________________________________________"}</p>
                   )}
                   <p style={{ marginTop: 14, fontSize: 12.5, textAlign: "justify", lineHeight: 1.55 }}>
@@ -352,7 +350,10 @@ export default function FacturasListaPage() {
                       <span style={{ fontSize: 12.5 }}>Jefa del Departamento de Finanzas del HGZ No. 02</span>
                     </div>
                     <div style={{ marginTop: 18, fontSize: 12 }}>c.c.p. Expediente</div>
-                    <div style={{ marginTop: 10, fontSize: 10.5, color: "#666" }}>NAO / gdr</div>
+                    <div style={{ marginTop: 14, fontSize: 10.5, color: "#666", lineHeight: 1.4 }}>
+                      Revisó: L.A.E. Gabriel Alejandro Zacarías Girón<br />
+                      Jefe de la Oficina de Presupuesto · HGZ No. 02
+                    </div>
                   </div>
                   </td></tr></tbody>
                 </table>
@@ -445,6 +446,10 @@ export default function FacturasListaPage() {
                   <div style={{ borderTop: "1px solid #333", width: 320, margin: "0", paddingTop: 6 }}>
                     <strong>L.A. Nayeli Alonso Orozco</strong><br />
                     <span style={{ fontSize: 13, color: "#444" }}>Jefa del Departamento de Finanzas · HGZ No. 2</span>
+                  </div>
+                  <div style={{ marginTop: 22, fontSize: 10.5, color: "#666", lineHeight: 1.4 }}>
+                    Revisó: L.A.E. Gabriel Alejandro Zacarías Girón<br />
+                    Jefe de la Oficina de Presupuesto · HGZ No. 02
                   </div>
                 </div>
                   </td></tr></tbody>
