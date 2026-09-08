@@ -309,11 +309,9 @@ export default function FacturasListaPage() {
                 ? `los servicios de ${servicios.slice(0, -1).join(", ")} y ${servicios[servicios.length - 1]}`
                 : "el servicio correspondiente";
             return (
-              <div key={di} className="doc-oficio">
-                <table className="wrap">
-                  <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
-                  <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
-                  <tbody><tr><td className="of-cuerpo">
+              <section key={di} className="oficio">
+                <img className="mh" src="/mem-encabezado.png" alt="" />
+                <img className="mf" src="/mem-pie.png" alt="" />
                   {/* Encabezado institucional (arriba a la izquierda) — formato unificado */}
                   <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
                     ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
@@ -363,33 +361,30 @@ export default function FacturasListaPage() {
                       Jefe de la Oficina de Presupuesto · HGZ No. 02
                     </div>
                   </div>
-                  </td></tr></tbody>
-                </table>
-              </div>
+              </section>
             );
           })}
         </div>
         <style>{`
-          .doc-oficio { background:#fff;
-            box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px;
-            -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
-          .wrap { width:100%; height:26.5cm; border-collapse:collapse; }
-          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .thc, .tfc { padding:0; }
-          .of-cuerpo { vertical-align:top; padding:0.25cm 0.8cm; color:#111; }
-          .doc-oficio table:not(.wrap) tr { break-inside:avoid; }
+          /* Cada oficio = una hoja. Membrete (encabezado+pie) FIJO: en impresión se repite en TODAS las hojas. */
+          .oficio { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.1cm 2cm 3cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .mh, .mf { position:absolute; left:1.2cm; right:1.2cm; width:auto; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .mh { top:0.5cm; }
+          .mf { bottom:0.5cm; }
+          .oficio table tr { break-inside:avoid; }
           .of-datos { margin-top:14px; font-size:12.5px; line-height:1.6; }
           .of-datos > div { padding:2px 0; }
-          @page { size: letter; margin: 0.5cm 1.2cm; }
+          @page { size: letter; margin: 0; }
           @media print {
+            @page { size: letter; margin: 3.1cm 1.2cm 3cm 1.2cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .no-print { display:none !important; }
-            .doc-oficio { border:none !important; margin:0 !important; border-radius:0 !important; min-height:0 !important; padding:0 !important; }
-            .wrap { height:calc(100vh - 1.4cm); }
-            thead { display:table-header-group; }
-            tfoot { display:table-footer-group; }
+            .oficio { border:none !important; margin:0 !important; border-radius:0 !important; width:auto; min-height:0 !important; padding:0 !important; }
+            .oficio + .oficio { break-before: page; }
+            .mh { position:fixed; top:0.5cm; left:1.2cm; right:1.2cm; }
+            .mf { position:fixed; bottom:0.5cm; left:1.2cm; right:1.2cm; }
+            .oficio:not(:first-child) .mh, .oficio:not(:first-child) .mf { display:none; }
           }
         `}</style>
       </div>
@@ -413,11 +408,9 @@ export default function FacturasListaPage() {
           {memo.grupos.map((g, gi) => {
             const total = g.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
             return (
-              <div key={gi} className="doc-hoja">
-                <table className="wrap">
-                  <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
-                  <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
-                  <tbody><tr><td className="cuerpo">
+              <section key={gi} className="oficio">
+                <img className="mh" src="/mem-encabezado.png" alt="" />
+                <img className="mf" src="/mem-pie.png" alt="" />
                   {/* Encabezado institucional (arriba a la izquierda) — formato unificado */}
                   <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
                     ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
@@ -460,30 +453,29 @@ export default function FacturasListaPage() {
                     Jefe de la Oficina de Presupuesto · HGZ No. 02
                   </div>
                 </div>
-                  </td></tr></tbody>
-                </table>
-              </div>
+              </section>
             );
           })}
         </div>
         <style>{`
-          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
-          .wrap { width:100%; height:26.5cm; border-collapse:collapse; }
-          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .thc, .tfc { padding:0; }
-          .cuerpo { vertical-align:top; padding:0.25cm 0.8cm; }
-          .doc-hoja table:not(.wrap) tr { break-inside:avoid; }
-          @page { size: letter; margin: 0.5cm 1.2cm; }
+          .oficio { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.1cm 2cm 3cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          /* Membrete (encabezado+pie) FIJO: en impresión se repite en TODAS las hojas */
+          .mh, .mf { position:absolute; left:1.2cm; right:1.2cm; width:auto; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .mh { top:0.5cm; }
+          .mf { bottom:0.5cm; }
+          .oficio table tr { break-inside:avoid; }
+          @page { size: letter; margin: 0; }
           @media print {
+            @page { size: letter; margin: 3.1cm 1.2cm 3cm 1.2cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
-            .wrap { height:calc(100vh - 1.4cm); }
-            thead { display:table-header-group; }
-            tfoot { display:table-footer-group; }
+            .oficio { border:none !important; border-radius:0 !important; margin:0 !important; width:auto; min-height:0 !important; padding:0 !important; }
+            .oficio + .oficio { break-before: page; }
+            .mh { position:fixed; top:0.5cm; left:1.2cm; right:1.2cm; }
+            .mf { position:fixed; bottom:0.5cm; left:1.2cm; right:1.2cm; }
+            .oficio:not(:first-child) .mh, .oficio:not(:first-child) .mf { display:none; }
           }
         `}</style>
       </div>
