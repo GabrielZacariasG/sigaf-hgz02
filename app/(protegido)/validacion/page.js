@@ -230,7 +230,7 @@ export default function ValidacionServicioPage() {
         <style>{`
           .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           /* Membrete por hoja: encabezado en <thead> y pie en <tfoot> se repiten en CADA hoja al imprimir */
-          .wrap { width:100%; border-collapse:collapse; }
+          .wrap { width:100%; height:26.9cm; border-collapse:collapse; }
           .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
           .thc, .tfc { padding:0; }
           .cuerpo { vertical-align:top; padding:0.25cm 0.8cm; }
@@ -244,6 +244,7 @@ export default function ValidacionServicioPage() {
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
             .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
+            .wrap { height:calc(100vh - 1cm); }
             thead { display:table-header-group; }
             tfoot { display:table-footer-group; }
           }
