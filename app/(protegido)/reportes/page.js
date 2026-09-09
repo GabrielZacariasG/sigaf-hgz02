@@ -37,7 +37,7 @@ export default function ReportesPage() {
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [repKey, setRepKey] = useState("r1");
-  const [filtros, setFiltros] = useState({ contrato: "", proveedor: "", capitulo: "", etapa: "", desde: "", hasta: "", folio: "", soloVencidos: false });
+  const [filtros, setFiltros] = useState({ contrato: "", proveedor: "", capitulo: "", etapa: "", desde: "", hasta: "", folio: "", concepto: "", soloVencidos: false });
   const [res, setRes] = useState(null); // { columns, rows, totales, titulo }
   const [generando, setGenerando] = useState(false);
   const [msg, setMsg] = useState("");
@@ -74,6 +74,7 @@ export default function ReportesPage() {
     { key: "r1", grupo: "Facturas", label: "Facturas por contrato + estatus", desc: "Listado de facturas con su etapa/estatus actual, importe y validación.", filtros: ["contrato", "proveedor", "capitulo", "etapa", "fechas"] },
     { key: "r2", grupo: "Facturas", label: "Detalle de servicios de una factura", desc: "Conceptos, cantidad, precio unitario e importe de una factura (requiere desglose capturado).", filtros: ["folio"] },
     { key: "r3", grupo: "Facturas", label: "Servicios de mayor impacto", desc: "Ranking de conceptos por importe y cantidad (facturas con desglose).", filtros: ["contrato", "capitulo", "fechas"] },
+    { key: "r3b", grupo: "Facturas", label: "Consumo de un insumo/concepto", desc: "Cuánto se consumió de un concepto (ej. “jitomate”) en un periodo: en qué facturas y el total. Requiere desglose capturado.", filtros: ["concepto", "contrato", "capitulo", "fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
   ];
@@ -81,7 +82,7 @@ export default function ReportesPage() {
   const setF = (k, v) => setFiltros((p) => ({ ...p, [k]: v }));
 
   // ---- Generadores de cada reporte ----
-  const filtraFacturas = () => facturas.filter((f) => {
+  const pasaFactura = (f) => {
     if (filtros.contrato && f.contrato !== filtros.contrato) return false;
     if (filtros.proveedor && f.prov !== filtros.proveedor) return false;
     if (filtros.capitulo && f.capNom !== filtros.capitulo) return false;
@@ -89,7 +90,8 @@ export default function ReportesPage() {
     if (filtros.desde && (f.periodo_inicio || "") < filtros.desde) return false;
     if (filtros.hasta && (f.periodo_inicio || "") > filtros.hasta) return false;
     return true;
-  });
+  };
+  const filtraFacturas = () => facturas.filter(pasaFactura);
 
   async function generar() {
     setGenerando(true); setMsg("");
@@ -161,6 +163,37 @@ export default function ReportesPage() {
             { key: "cantidad", label: "Cantidad total", align: "right" }, { key: "importe", label: "Importe total", money: true, align: "right" },
           ],
           rows, totales: { concepto: `TOTAL (${rows.length} conceptos)`, importe: rows.reduce((s, r) => s + r.importe, 0) },
+        });
+      } else if (repKey === "r3b") {
+        const q = filtros.concepto.trim();
+        if (!q) { setMsg("Escribe el concepto a consultar (ej. jitomate)."); setGenerando(false); return; }
+        const { data: cs } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").ilike("nombre_servicio", `%${q}%`);
+        if (!cs?.length) { setRes({ titulo: `Consumo de "${q}"`, nota: "Ningún concepto coincide con ese texto.", columns: [{ key: "concepto", label: "Concepto" }], rows: [], totales: null }); setGenerando(false); return; }
+        const info = Object.fromEntries(cs.map((c) => [c.id, { n: c.nombre_servicio, p: Number(c.precio_unitario) || 0 }]));
+        const ids = cs.map((c) => c.id);
+        let det = [];
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data } = await supabase.from("factura_detalle").select("cantidad, factura_id, contrato_servicio_id").in("contrato_servicio_id", ids.slice(i, i + 200));
+          det = det.concat(data || []);
+        }
+        const facById = new Map(facturas.map((f) => [f.id, f]));
+        const rows = det.map((d) => {
+          const f = facById.get(d.factura_id);
+          if (!f || !pasaFactura(f)) return null;
+          const it = info[d.contrato_servicio_id] || { n: "—", p: 0 };
+          const cant = Number(d.cantidad) || 0;
+          return { folio: f.folio_ingreso, folioProv: f.folio_proveedor, periodo: `${f.periodo_inicio || "—"} → ${f.periodo_fin || "—"}`, prov: f.prov, contrato: f.contrato, concepto: it.n, cantidad: cant, precio: it.p, importe: cant * it.p };
+        }).filter(Boolean).sort((a, b) => (a.periodo < b.periodo ? -1 : 1));
+        setRes({
+          titulo: `Consumo de "${q}"`,
+          nota: rows.length === 0 ? "No hay consumo capturado de ese concepto con esos filtros (recuerda que solo cuentan facturas con desglose)." : "",
+          columns: [
+            { key: "folio", label: "Folio ingreso" }, { key: "folioProv", label: "Folio prov." }, { key: "periodo", label: "Periodo" },
+            { key: "prov", label: "Proveedor" }, { key: "contrato", label: "Contrato" }, { key: "concepto", label: "Concepto" },
+            { key: "cantidad", label: "Cantidad", align: "right" }, { key: "precio", label: "Precio unit.", money: true, align: "right" }, { key: "importe", label: "Importe", money: true, align: "right" },
+          ],
+          rows,
+          totales: { prov: `TOTAL (${rows.length} factura(s))`, cantidad: rows.reduce((s, r) => s + r.cantidad, 0), importe: rows.reduce((s, r) => s + r.importe, 0) },
         });
       } else if (repKey === "r7") {
         const rows = contratos
@@ -244,6 +277,7 @@ export default function ReportesPage() {
     etapa: <div key="e"><label style={lbl}>Etapa</label><select style={inp} value={filtros.etapa} onChange={(e) => setF("etapa", e.target.value)}><option value="">Todas</option>{ETAPAS.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>,
     fechas: <div key="f" style={{ display: "flex", gap: 6 }}><div><label style={lbl}>Desde (periodo)</label><input type="date" style={inp} value={filtros.desde} onChange={(e) => setF("desde", e.target.value)} /></div><div><label style={lbl}>Hasta</label><input type="date" style={inp} value={filtros.hasta} onChange={(e) => setF("hasta", e.target.value)} /></div></div>,
     folio: <div key="fo"><label style={lbl}>Folio de la factura (ingreso o proveedor)</label><input style={inp} value={filtros.folio} onChange={(e) => setF("folio", e.target.value)} placeholder="Ej. HGZ2-INT-2026-000003" /></div>,
+    concepto: <div key="co"><label style={lbl}>Concepto / insumo</label><input style={inp} value={filtros.concepto} onChange={(e) => setF("concepto", e.target.value)} placeholder="Ej. jitomate, gasa, oxígeno…" /></div>,
     soloVencidos: <label key="sv" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.soloVencidos} onChange={(e) => setF("soloVencidos", e.target.checked)} /> Solo contratos vencidos</label>,
   };
 
