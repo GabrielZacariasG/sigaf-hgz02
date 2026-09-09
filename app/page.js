@@ -149,6 +149,12 @@ export default function Portal() {
       cifra: c.contratos, etiqueta: 'contratos',
       ruta: '/catalogos', listo: true,
     },
+    {
+      paso: 'Consulta', titulo: 'Reportes',
+      desc: 'Consultas financieras: facturas, conciliación, vigencias… en Excel o PDF.',
+      cifra: '📊', etiqueta: 'exportables',
+      ruta: '/reportes', listo: true,
+    },
   ];
 
   // Rol AUO (ventanilla): panel simplificado, enfocado en capturar y dar
