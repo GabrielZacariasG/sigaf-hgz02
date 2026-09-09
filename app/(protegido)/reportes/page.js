@@ -44,6 +44,7 @@ export default function ReportesPage() {
   const [servLista, setServLista] = useState([]);      // conceptos del contrato elegido (para R3b)
   const [servSel, setServSel] = useState(() => new Set());
   const [buscaConcepto, setBuscaConcepto] = useState("");
+  const [folioOpen, setFolioOpen] = useState(false); // dropdown de sugerencias de folio (R2)
 
   useEffect(() => {
     (async () => {
@@ -305,7 +306,45 @@ export default function ReportesPage() {
     capitulo: <div key="cap"><label style={lbl}>Capítulo</label><select style={inp} value={filtros.capitulo} onChange={(e) => setF("capitulo", e.target.value)}><option value="">Todos</option>{capitulos.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>,
     etapa: <div key="e"><label style={lbl}>Etapa</label><select style={inp} value={filtros.etapa} onChange={(e) => setF("etapa", e.target.value)}><option value="">Todas</option>{ETAPAS.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>,
     fechas: <div key="f" style={{ display: "flex", gap: 6 }}><div><label style={lbl}>Desde (periodo)</label><input type="date" style={inp} value={filtros.desde} onChange={(e) => setF("desde", e.target.value)} /></div><div><label style={lbl}>Hasta</label><input type="date" style={inp} value={filtros.hasta} onChange={(e) => setF("hasta", e.target.value)} /></div></div>,
-    folio: <div key="fo"><label style={lbl}>Folio de la factura (ingreso o proveedor)</label><input style={inp} value={filtros.folio} onChange={(e) => setF("folio", e.target.value)} placeholder="Ej. HGZ2-INT-2026-000003" /></div>,
+    folio: (
+      <div key="fo" style={{ position: "relative" }}>
+        <label style={lbl}>Folio de la factura (escribe y elige de la lista)</label>
+        <input
+          style={inp}
+          value={filtros.folio}
+          autoComplete="off"
+          onChange={(e) => { setF("folio", e.target.value); setFolioOpen(true); }}
+          onFocus={() => setFolioOpen(true)}
+          onBlur={() => setTimeout(() => setFolioOpen(false), 150)}
+          placeholder="Folio de ingreso, folio del proveedor o proveedor…"
+        />
+        {folioOpen && (() => {
+          const q = (filtros.folio || "").trim().toLowerCase();
+          const lista = (q
+            ? facturas.filter((f) => `${f.folio_ingreso || ""} ${f.folio_proveedor || ""} ${f.prov || ""}`.toLowerCase().includes(q))
+            : facturas
+          ).slice(0, 40);
+          return (
+            <div style={{ position: "absolute", zIndex: 30, left: 0, right: 0, top: "calc(100% + 2px)", background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 300, overflowY: "auto" }}>
+              {lista.length === 0 ? (
+                <div style={{ padding: "10px 12px", fontSize: 13, color: "var(--texto-suave)" }}>Sin coincidencias.</div>
+              ) : lista.map((f) => (
+                <div
+                  key={f.id}
+                  onMouseDown={(e) => { e.preventDefault(); setF("folio", f.folio_ingreso || f.folio_proveedor || ""); setFolioOpen(false); }}
+                  style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid var(--borde)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--fondo)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--blanco)")}
+                >
+                  <div style={{ fontWeight: 600 }}>{f.folio_ingreso || "(sin folio ingreso)"}</div>
+                  <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.prov} · Folio prov. {f.folio_proveedor || "—"}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+    ),
     concepto: <div key="co"><label style={lbl}>Concepto / insumo</label><input style={inp} value={filtros.concepto} onChange={(e) => setF("concepto", e.target.value)} placeholder="Ej. jitomate, gasa, oxígeno…" /></div>,
     soloVencidos: <label key="sv" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.soloVencidos} onChange={(e) => setF("soloVencidos", e.target.checked)} /> Solo contratos vencidos</label>,
   };
