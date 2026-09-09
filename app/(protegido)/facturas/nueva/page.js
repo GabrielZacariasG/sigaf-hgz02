@@ -45,6 +45,8 @@ export default function NuevaFacturaPage() {
   const [cargandoCat, setCargandoCat] = useState(true);
 
   const [proveedorId, setProveedorId] = useState("");
+  const [provText, setProvText] = useState("");     // texto del buscador de proveedor
+  const [provOpen, setProvOpen] = useState(false);  // dropdown de sugerencias abierto
   const [contratoId, setContratoId] = useState("");
 
   const [folioProveedor, setFolioProveedor] = useState("");
@@ -170,12 +172,52 @@ export default function NuevaFacturaPage() {
       <p style={{ fontSize: 13, color: "#5a615e", marginTop: 4 }}>Elige el proveedor y su contrato — el capítulo y la cuenta se completan solos.</p>
 
       <form onSubmit={handleSubmit}>
-        {/* Proveedor */}
+        {/* Proveedor — buscador con sugerencias (typeahead) */}
         <label style={etiqueta}>Proveedor</label>
-        <input list="lst-prov" required value={proveedores.find((p) => p.id === proveedorId)?.razon_social || ""}
-          onChange={(e) => { const p = proveedores.find((x) => x.razon_social === e.target.value); setProveedorId(p ? p.id : ""); }}
-          placeholder={cargandoCat ? "Cargando…" : "Escribe o elige el proveedor…"} style={{ ...selectSty }} />
-        <datalist id="lst-prov">{proveedores.map((p) => <option key={p.id} value={p.razon_social} />)}</datalist>
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            required={!proveedorId}
+            value={provText}
+            autoComplete="off"
+            onChange={(e) => {
+              setProvText(e.target.value);
+              setProvOpen(true);
+              if (proveedorId) setProveedorId(""); // al editar, se deselecciona hasta elegir de la lista
+            }}
+            onFocus={() => setProvOpen(true)}
+            onBlur={() => setTimeout(() => setProvOpen(false), 150)} // permite el click en la sugerencia
+            placeholder={cargandoCat ? "Cargando…" : "Escribe para buscar el proveedor…"}
+            style={{ ...selectSty }}
+          />
+          {proveedorId && (
+            <button
+              type="button"
+              onClick={() => { setProveedorId(""); setProvText(""); setProvOpen(false); }}
+              title="Limpiar"
+              style={{ position: "absolute", right: 8, top: 9, background: "none", border: "none", cursor: "pointer", color: "#5a615e", fontSize: 16, lineHeight: 1 }}
+            >×</button>
+          )}
+          {provOpen && !proveedorId && (() => {
+            const q = provText.trim().toLowerCase();
+            const lista = (q ? proveedores.filter((p) => (p.razon_social || "").toLowerCase().includes(q)) : proveedores).slice(0, 50);
+            return (
+              <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "calc(100% + 2px)", background: "#fff", border: "1px solid #d8dbd9", borderRadius: 6, boxShadow: "0 6px 20px rgba(0,0,0,.12)", maxHeight: 260, overflowY: "auto" }}>
+                {lista.length === 0 ? (
+                  <div style={{ padding: "10px 12px", fontSize: 13, color: "#5a615e" }}>Sin coincidencias.</div>
+                ) : lista.map((p) => (
+                  <div
+                    key={p.id}
+                    onMouseDown={(e) => { e.preventDefault(); setProveedorId(p.id); setProvText(p.razon_social || ""); setProvOpen(false); }}
+                    style={{ padding: "9px 12px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f0f2f1" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f2f1")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  >{p.razon_social}</div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Contrato (de ese proveedor) */}
         <label style={etiqueta}>Contrato</label>
