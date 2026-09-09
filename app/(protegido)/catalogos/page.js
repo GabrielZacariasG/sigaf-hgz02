@@ -54,8 +54,10 @@ export default function CatalogosPage() {
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando catálogos…</p>;
 
+  const nAdmins = new Set(contratos.map((c) => (c.administrador_contrato || "").trim())).size;
   const tabs = [
     ["contratos", `Contratos (${contratos.length})`],
+    ["admins", `Administradores (${nAdmins})`],
     ["jefes", `Jefes de servicio (${jefes.length})`],
     ["proveedores", `Proveedores (${proveedores.length})`],
     ["cuentas", `Cuentas (${partidas.length})`],
@@ -90,6 +92,7 @@ export default function CatalogosPage() {
       </div>
 
       {tab === "contratos" && <TabContratos contratos={contratos} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
+      {tab === "admins" && <TabAdministradores contratos={contratos} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
       {tab === "jefes" && <TabJefes jefes={jefes} proveedores={proveedores} jefeProv={jefeProv} flash={flash} recargar={cargar} />}
       {tab === "proveedores" && <TabProveedores proveedores={proveedores} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
       {tab === "cuentas" && <TabCuentas partidas={partidas} capitulos={capitulos} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
@@ -252,6 +255,61 @@ function EditorContrato({ contrato, esAdmin, flash, recargar }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ---------------- ADMINISTRADORES DE CONTRATO (unificar) ---------------- */
+function TabAdministradores({ contratos, esAdmin, flash, recargar }) {
+  const grupos = useMemo(() => {
+    const m = new Map();
+    for (const c of contratos) {
+      const raw = c.administrador_contrato; // puede ser null
+      const key = raw == null ? " null" : raw; // clave exacta para el UPDATE
+      const g = m.get(key) || { raw, nombre: raw || "", contratos: [] };
+      g.contratos.push(c); m.set(key, g);
+    }
+    return [...m.values()].sort((a, b) => (a.nombre || "~").localeCompare(b.nombre || "~"));
+  }, [contratos]);
+  const nombres = [...new Set(grupos.map((g) => g.nombre).filter(Boolean))].sort();
+
+  const renombrar = async (g, nuevo) => {
+    const nv = (nuevo || "").trim();
+    if (!nv) return flash("El nombre no puede quedar vacío.");
+    if (nv === (g.raw || "")) return;
+    let query = supabase.from("contratos").update({ administrador_contrato: nv });
+    query = g.raw == null ? query.is("administrador_contrato", null) : query.eq("administrador_contrato", g.raw);
+    const { data, error } = await query.select("id");
+    if (error) return flash("No se pudo renombrar: " + error.message);
+    if (!data?.length) return flash("No se guardó (0 filas). ¿Tu cuenta tiene permiso de administrador?");
+    flash(`✅ ${data.length} contrato(s) ahora con administrador "${nv}".`); recargar();
+  };
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 0 }}>
+        Cada renglón es un administrador distinto tal como está escrito hoy. Corrige el texto (mayúsculas, acentos, cargo) y al guardar se actualizan <strong>todos</strong> los contratos con ese administrador. Para unificar dos variantes, escribe en una exactamente igual que la otra (usa la lista sugerida).
+      </p>
+      <datalist id="lst-admins">{nombres.map((n) => <option key={n} value={n} />)}</datalist>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr><th style={th}>Administrador de contrato</th><th style={{ ...th, width: 90, textAlign: "right" }}>Contratos</th></tr></thead>
+          <tbody>
+            {grupos.map((g, i) => (
+              <tr key={i}>
+                <td style={td}>
+                  {g.raw == null
+                    ? <span style={{ color: "var(--texto-suave)", fontStyle: "italic" }}>(sin administrador)</span>
+                    : <input list="lst-admins" style={inp} defaultValue={g.nombre} disabled={!esAdmin}
+                        onBlur={(e) => esAdmin && renombrar(g, e.target.value)} />}
+                </td>
+                <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{g.contratos.length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!esAdmin && <p style={{ fontSize: 12, color: "var(--ambar)", marginTop: 8 }}>Solo un rol de Presupuesto/Finanzas puede editar administradores.</p>}
     </div>
   );
 }
