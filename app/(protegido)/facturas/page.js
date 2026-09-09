@@ -140,6 +140,13 @@ export default function FacturasListaPage() {
     return () => { activo = false; };
   }, []);
 
+  // El aviso de éxito (✅) se oculta solo a los 5 segundos.
+  useEffect(() => {
+    if (!mensaje || !mensaje.startsWith("✅")) return;
+    const t = setTimeout(() => setMensaje(""), 5000);
+    return () => clearTimeout(t);
+  }, [mensaje]);
+
   const resumen = useMemo(() => {
     const porEstatus = {}, porCapitulo = {}, porEtapa = {};
     let estancadas = 0, montoTotal = 0, conCR = 0, devueltas = 0;
