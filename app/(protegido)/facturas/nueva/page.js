@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 
@@ -41,14 +41,11 @@ async function generarFolioIngreso(prefijoCap, anio) {
 
 export default function NuevaFacturaPage() {
   const router = useRouter();
-  const [capitulos, setCapitulos] = useState([]);
-  const [partidas, setPartidas] = useState([]);
-  const [contratos, setContratos] = useState([]);
+  const [contratos, setContratos] = useState([]);   // todos, con proveedor + partida + capítulo embebidos
+  const [cargandoCat, setCargandoCat] = useState(true);
 
-  const [capituloId, setCapituloId] = useState("");
-  const [partidaId, setPartidaId] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
   const [contratoId, setContratoId] = useState("");
-  const [proveedor, setProveedor] = useState(null);
 
   const [folioProveedor, setFolioProveedor] = useState("");
   const [periodoInicio, setPeriodoInicio] = useState("");
@@ -58,75 +55,53 @@ export default function NuevaFacturaPage() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
-  // 1) Cargar capítulos — SOLO los que tienen cuentas (partidas). Así se evita
-  //    mostrar capítulos huérfanos/duplicados que no llevan a ninguna cuenta.
+  // Cargar TODOS los contratos con su proveedor, partida y capítulo. Con eso,
+  // al elegir proveedor y contrato se autocompleta capítulo y cuenta.
   useEffect(() => {
-    let activo = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from("partidas")
-        .select("capitulo_id, capitulos ( id, nombre )");
-      if (!activo) return;
-      if (error) { setMensaje("No se pudo cargar el catálogo de capítulos: " + error.message); return; }
-      const map = new Map();
-      (data || []).forEach((p) => { if (p.capitulos) map.set(p.capitulos.id, p.capitulos); });
-      const caps = [...map.values()].sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
-      setCapitulos(caps);
-    })();
-    return () => { activo = false; };
-  }, []);
-
-  // 2) Al cambiar capítulo: cargar sus partidas y reiniciar lo dependiente.
-  useEffect(() => {
-    setPartidaId(""); setContratoId(""); setProveedor(null); setPartidas([]); setContratos([]);
-    if (!capituloId) return;
-    let activo = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from("partidas")
-        .select("id, cuenta_prei, cuenta_finat, nombre")
-        .eq("capitulo_id", capituloId)
-        .order("cuenta_finat", { ascending: true });
-      if (!activo) return;
-      if (error) { setMensaje("No se pudieron cargar las partidas: " + error.message); return; }
-      setPartidas(data || []);
-    })();
-    return () => { activo = false; };
-  }, [capituloId]);
-
-  // 3) Al cambiar partida: cargar contratos (con proveedor embebido).
-  useEffect(() => {
-    setContratoId(""); setProveedor(null); setContratos([]);
-    if (!partidaId) return;
     let activo = true;
     (async () => {
       const { data, error } = await supabase
         .from("contratos")
-        .select("id, numero_interno, adquisicion_servicio, proveedor_id, proveedores ( id, razon_social, no_proveedor )")
-        .eq("partida_id", partidaId)
+        .select("id, numero_interno, adquisicion_servicio, proveedor_id, partida_id, proveedores ( id, razon_social ), partidas ( id, cuenta_finat, cuenta_prei, nombre, capitulo_id, capitulos ( id, nombre ) )")
         .order("numero_interno", { ascending: true });
       if (!activo) return;
-      if (error) { setMensaje("No se pudieron cargar los contratos: " + error.message); return; }
+      if (error) { setMensaje("No se pudieron cargar los contratos: " + error.message); }
       setContratos(data || []);
+      setCargandoCat(false);
     })();
     return () => { activo = false; };
-  }, [partidaId]);
+  }, []);
 
-  function onCambiarContrato(e) {
-    const id = e.target.value;
-    setContratoId(id);
-    const c = contratos.find((x) => x.id === id);
-    setProveedor(c ? c.proveedores : null);
-  }
+  // Proveedores distintos (solo los que tienen contratos), ordenados.
+  const proveedores = useMemo(() => {
+    const m = new Map();
+    for (const c of contratos) { if (c.proveedores) m.set(c.proveedores.id, c.proveedores.razon_social); }
+    return [...m.entries()].map(([id, razon_social]) => ({ id, razon_social })).sort((a, b) => (a.razon_social || "").localeCompare(b.razon_social || ""));
+  }, [contratos]);
 
-  const capituloSel = capitulos.find((c) => c.id === capituloId) || null;
+  const contratosProv = useMemo(() => contratos.filter((c) => c.proveedor_id === proveedorId), [contratos, proveedorId]);
+
+  // Al cambiar de proveedor: si tiene un solo contrato, se elige solo; si no, se limpia.
+  useEffect(() => {
+    if (!proveedorId) { setContratoId(""); return; }
+    setContratoId(contratosProv.length === 1 ? contratosProv[0].id : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proveedorId]);
+
+  const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
+  const capituloSel = contratoSel?.partidas?.capitulos || null;
+  const cuentaSel = contratoSel?.partidas?.cuenta_finat || contratoSel?.partidas?.cuenta_prei || "";
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMensaje("");
 
-    if (!capituloId || !partidaId || !contratoId || !proveedor) {
-      setMensaje("Completa capítulo, partida, contrato y proveedor.");
+    if (!proveedorId || !contratoId || !contratoSel) {
+      setMensaje("Elige proveedor y contrato.");
+      return;
+    }
+    if (!contratoSel.partida_id || !capituloSel?.id) {
+      setMensaje("El contrato no tiene cuenta/capítulo asignado. Corrígelo en Catálogos.");
       return;
     }
     if (!periodoInicio || !periodoFin) { setMensaje("Indica el periodo (fecha inicio y fecha fin)."); return; }
@@ -159,10 +134,10 @@ export default function NuevaFacturaPage() {
         .insert({
           folio_ingreso: folioIngreso,
           folio_proveedor: folioProveedor,
-          capitulo_id: capituloId,
-          partida_id: partidaId,
+          capitulo_id: capituloSel.id,
+          partida_id: contratoSel.partida_id,
           contrato_id: contratoId,
-          proveedor_id: proveedor.id,
+          proveedor_id: proveedorId,
           periodo_inicio: periodoInicio,
           periodo_fin: periodoFin,
           importe_factura: importeNum,
@@ -175,8 +150,6 @@ export default function NuevaFacturaPage() {
       if (error) {
         setMensaje("No se pudo guardar la factura: " + error.message);
       } else {
-        // Paso 2: detalle de servicios (si el contrato tiene catálogo; si no, ahí
-        // mismo se registra por importe).
         router.push(`/facturas/${nueva.id}/detalle`);
         return;
       }
@@ -194,37 +167,31 @@ export default function NuevaFacturaPage() {
   return (
     <div style={{ maxWidth: 520, margin: "0 auto", background: "#fff", border: "1px solid #e2e4e2", borderRadius: 12, padding: 24 }}>
       <h1 style={{ fontSize: 20, marginTop: 0 }}>Captura de factura</h1>
-      <p style={{ fontSize: 13, color: "#5a615e", marginTop: 4 }}>Elige el capítulo y el contrato al que pertenece la factura.</p>
+      <p style={{ fontSize: 13, color: "#5a615e", marginTop: 4 }}>Elige el proveedor y su contrato — el capítulo y la cuenta se completan solos.</p>
 
       <form onSubmit={handleSubmit}>
-        {/* Capítulo */}
-        <label style={etiqueta}>Capítulo</label>
-        <select required value={capituloId} onChange={(e) => setCapituloId(e.target.value)} style={selectSty}>
-          <option value="">Selecciona un capítulo…</option>
-          {capitulos.map((c) => (<option key={c.id} value={c.id}>{c.nombre}</option>))}
-        </select>
+        {/* Proveedor */}
+        <label style={etiqueta}>Proveedor</label>
+        <input list="lst-prov" required value={proveedores.find((p) => p.id === proveedorId)?.razon_social || ""}
+          onChange={(e) => { const p = proveedores.find((x) => x.razon_social === e.target.value); setProveedorId(p ? p.id : ""); }}
+          placeholder={cargandoCat ? "Cargando…" : "Escribe o elige el proveedor…"} style={{ ...selectSty }} />
+        <datalist id="lst-prov">{proveedores.map((p) => <option key={p.id} value={p.razon_social} />)}</datalist>
 
-        {/* Cuenta / partida */}
-        <label style={etiqueta}>Cuenta / partida</label>
-        <select required value={partidaId} onChange={(e) => setPartidaId(e.target.value)} disabled={!capituloId} style={selectSty}>
-          <option value="">{capituloId ? "Selecciona una partida…" : "Primero elige un capítulo"}</option>
-          {partidas.map((p) => (
-            <option key={p.id} value={p.id}>{[p.cuenta_finat || p.cuenta_prei, p.nombre].filter(Boolean).join(" — ")}</option>
-          ))}
-        </select>
-
-        {/* Contrato */}
+        {/* Contrato (de ese proveedor) */}
         <label style={etiqueta}>Contrato</label>
-        <select required value={contratoId} onChange={onCambiarContrato} disabled={!partidaId} style={selectSty}>
-          <option value="">{partidaId ? "Selecciona un contrato…" : "Primero elige una partida"}</option>
-          {contratos.map((c) => (
+        <select required value={contratoId} onChange={(e) => setContratoId(e.target.value)} disabled={!proveedorId} style={selectSty}>
+          <option value="">{!proveedorId ? "Primero elige un proveedor" : contratosProv.length === 0 ? "Este proveedor no tiene contratos" : "Selecciona un contrato…"}</option>
+          {contratosProv.map((c) => (
             <option key={c.id} value={c.id}>{[c.numero_interno, c.adquisicion_servicio].filter(Boolean).join(" — ")}</option>
           ))}
         </select>
+        {proveedorId && contratosProv.length === 1 && <div style={{ fontSize: 11, color: "#5a615e", marginTop: 4 }}>Único contrato de este proveedor (ya seleccionado).</div>}
 
-        {/* Proveedor (autocompletado) */}
-        <label style={etiqueta}>Proveedor</label>
-        <input type="text" value={proveedor ? proveedor.razon_social || "" : ""} readOnly placeholder="Se completa al elegir el contrato" style={soloLectura} />
+        {/* Capítulo y cuenta — autocompletados (solo lectura) */}
+        <label style={etiqueta}>Capítulo y cuenta (automáticos)</label>
+        <input type="text" readOnly style={soloLectura}
+          value={contratoSel ? [capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`, contratoSel?.partidas?.nombre].filter(Boolean).join(" · ") : ""}
+          placeholder="Se completa al elegir el contrato" />
 
         {/* Folio proveedor */}
         <label style={etiqueta}>Folio de factura del proveedor</label>
