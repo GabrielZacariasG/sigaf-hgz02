@@ -28,6 +28,24 @@ const ESTATUS_COLOR = {
   en_tramite_ooad: "#2563eb", gasto_reflejado: "#15803d",
 };
 
+// Etapa del PROCESO (combina estatus general + circuito de firmas) para la vista ejecutiva.
+function etapaDe(f) {
+  if (f.estatus_general === "gasto_reflejado") return "pagada";
+  if (f.estatus_general === "devuelta_proveedor") return "devuelta";
+  if (["enviada_ooad", "en_tramite_ooad"].includes(f.estatus_general)) return "ooad";
+  if (["envio_firmas_admin_contrato", "autorizada_admin_contrato"].includes(f.estatus_firmas)) return "adm_contrato";
+  if (["envio_firmas_servicio", "autorizada_servicio"].includes(f.estatus_firmas)) return "servicio";
+  return "finanzas"; // capturada / en_revision, firmas pendiente
+}
+const ETAPAS = [
+  { key: "finanzas", label: "En Finanzas", sub: "captura / revisión", color: "#b45309" },
+  { key: "servicio", label: "En Servicio", sub: "validación del servicio", color: "#0e7490" },
+  { key: "adm_contrato", label: "En Adm. de Contrato", sub: "firma del administrador", color: "#7c3aed" },
+  { key: "ooad", label: "En OOAD", sub: "trámite de pago", color: "#2563eb" },
+  { key: "pagada", label: "Pagadas", sub: "gasto reflejado", color: "#15803d" },
+];
+const ETAPA_LABEL = Object.fromEntries(ETAPAS.map((e) => [e.key, e.label]));
+
 export default function FacturasListaPage() {
   const [facturas, setFacturas] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -36,12 +54,14 @@ export default function FacturasListaPage() {
   const [fProv, setFProv] = useState("");
   const [fContrato, setFContrato] = useState("");
   const [fEstatus, setFEstatus] = useState(null);
+  const [fEtapa, setFEtapa] = useState(null);       // etapa del proceso (pipeline ejecutivo)
   const [fCapitulo, setFCapitulo] = useState(null);
   const [soloCR, setSoloCR] = useState(false);
   const [soloEstancadas, setSoloEstancadas] = useState(false);
   const [soloDiscrep, setSoloDiscrep] = useState(false);
   const [ocultarCompl, setOcultarCompl] = useState(false);
   const [agrupar, setAgrupar] = useState("none");
+  const [verTodo, setVerTodo] = useState(false);   // mostrar la lista completa sin filtro
   const [abiertos, setAbiertos] = useState({});
   const [sel, setSel] = useState({});         // facturaId -> bool (para enviar al servicio)
   const [memo, setMemo] = useState(null);      // { grupos: [{ jefe, jefatura, filas, folio }] }
@@ -110,7 +130,7 @@ export default function FacturasListaPage() {
           ...f, capNom: f.capitulos?.nombre || "—", prov: f.proveedores?.razon_social || "—",
           contrato: f.contratos?.numero_interno || "—", tieneCR: !!String(f.cr_contrarecibo ?? "").trim(),
           pp: f.partidas?.cuenta_finat || f.partidas?.cuenta_prei || "—",
-          gen, fir, ped, generaPR, estancada,
+          gen, fir, ped, generaPR, estancada, etapa: etapaDe(f),
         };
       });
       setFacturas(filas);
@@ -121,19 +141,23 @@ export default function FacturasListaPage() {
   }, []);
 
   const resumen = useMemo(() => {
-    const porEstatus = {}, porCapitulo = {};
-    let estancadas = 0, montoTotal = 0, conCR = 0;
+    const porEstatus = {}, porCapitulo = {}, porEtapa = {};
+    let estancadas = 0, montoTotal = 0, conCR = 0, devueltas = 0;
     for (const f of facturas) {
       const e = (porEstatus[f.estatus_general] ||= { n: 0, monto: 0 });
       e.n++; e.monto += Number(f.importe_factura) || 0;
-      const c = (porCapitulo[f.capNom] ||= { n: 0, monto: 0, refl: 0 });
+      const et = (porEtapa[f.etapa] ||= { n: 0, monto: 0 });
+      et.n++; et.monto += Number(f.importe_factura) || 0;
+      const c = (porCapitulo[f.capNom] ||= { n: 0, monto: 0, refl: 0, etapas: {} });
       c.n++; c.monto += Number(f.importe_factura) || 0;
+      c.etapas[f.etapa] = (c.etapas[f.etapa] || 0) + 1;
       if (f.estatus_general === "gasto_reflejado") c.refl++;
+      if (f.etapa === "devuelta") devueltas++;
       if (f.estancada) estancadas++;
       if (f.tieneCR) conCR++;
       montoTotal += Number(f.importe_factura) || 0;
     }
-    return { porEstatus, porCapitulo, estancadas, montoTotal, conCR };
+    return { porEstatus, porCapitulo, porEtapa, estancadas, montoTotal, conCR, devueltas };
   }, [facturas]);
 
   const capitulos = useMemo(() => Object.keys(resumen.porCapitulo).sort(), [resumen]);
@@ -146,6 +170,7 @@ export default function FacturasListaPage() {
     const ct = fContrato.trim().toLowerCase();
     return facturas.filter((f) => {
       if (fEstatus && f.estatus_general !== fEstatus) return false;
+      if (fEtapa && f.etapa !== fEtapa) return false;
       if (fCapitulo && f.capNom !== fCapitulo) return false;
       if (soloCR && !f.tieneCR) return false;
       if (soloEstancadas && !f.estancada) return false;
@@ -161,7 +186,7 @@ export default function FacturasListaPage() {
     }).sort((a, b) => (a.estancada !== b.estancada ? (a.estancada ? -1 : 1)
       : (a.estatus_general === "gasto_reflejado") !== (b.estatus_general === "gasto_reflejado") ? (a.estatus_general === "gasto_reflejado" ? 1 : -1)
       : (b.gen.dias ?? -1) - (a.gen.dias ?? -1)));
-  }, [facturas, busqueda, fProv, fContrato, fEstatus, fCapitulo, soloCR, soloEstancadas, soloDiscrep, ocultarCompl]);
+  }, [facturas, busqueda, fProv, fContrato, fEstatus, fEtapa, fCapitulo, soloCR, soloEstancadas, soloDiscrep, ocultarCompl]);
 
   // Agrupación
   const grupos = useMemo(() => {
@@ -172,7 +197,9 @@ export default function FacturasListaPage() {
     return Object.entries(g).sort((a, b) => b[1].filas.length - a[1].filas.length);
   }, [filtradas, agrupar]);
 
-  const hayFiltro = fEstatus || fCapitulo || busqueda || fProv || fContrato || soloCR || soloEstancadas || soloDiscrep || ocultarCompl;
+  const hayFiltro = fEstatus || fEtapa || fCapitulo || busqueda || fProv || fContrato || soloCR || soloEstancadas || soloDiscrep || ocultarCompl;
+  // La lista solo aparece cuando el usuario entra a algo (etapa/capítulo/estatus/búsqueda/chip) o pide ver todo.
+  const mostrarLista = hayFiltro || verTodo;
   const montoFiltrado = useMemo(() => filtradas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0), [filtradas]);
   const seleccionadas = useMemo(() => filtradas.filter((f) => sel[f.id]), [filtradas, sel]);
   const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
@@ -595,39 +622,75 @@ export default function FacturasListaPage() {
           : <p style={{ color: "var(--rojo)", fontSize: 13 }}>{mensaje}</p>
       )}
 
-      {/* Resumen por estatus */}
-      <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 14, marginBottom: 4 }}>Por estatus (clic para filtrar)</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {FLUJO_GENERAL.map((e) => {
-          const r = resumen.porEstatus[e] || { n: 0, monto: 0 };
+      {/* PIPELINE DEL PROCESO (vista ejecutiva) */}
+      <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 16, marginBottom: 6 }}>Flujo del proceso — clic en una etapa para ver sus facturas</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {ETAPAS.map((e) => {
+          const r = resumen.porEtapa[e.key] || { n: 0, monto: 0 };
+          const activo = fEtapa === e.key;
           return (
-            <button key={e} style={chipBtn(fEstatus === e, ESTATUS_COLOR[e])} onClick={() => setFEstatus(fEstatus === e ? null : e)}>
-              <div style={{ fontSize: 12, color: ESTATUS_COLOR[e], fontWeight: 600 }}>{LABEL_GENERAL[e] || e}</div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{r.n}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{moneyK(r.monto)}</div>
+            <button key={e.key} onClick={() => { setFEtapa(activo ? null : e.key); setFCapitulo(null); setFEstatus(null); }}
+              style={{ flex: "1 1 165px", minWidth: 150, textAlign: "left", cursor: "pointer",
+                border: `1px solid ${activo ? e.color : "var(--borde)"}`,
+                background: activo ? `color-mix(in srgb, ${e.color} 12%, transparent)` : "var(--blanco)",
+                borderRadius: 12, padding: "12px 14px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: e.color }}>{e.label}</div>
+              <div style={{ fontSize: 10.5, color: "var(--texto-suave)", marginBottom: 6 }}>{e.sub}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{r.n}</div>
+              <div style={{ fontSize: 11.5, color: "var(--texto-suave)", marginTop: 3 }}>{moneyK(r.monto)}</div>
             </button>
           );
         })}
       </div>
+      {/* Chips de excepción */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <button style={filtroChip(fEtapa === "devuelta")} onClick={() => { setFEtapa(fEtapa === "devuelta" ? null : "devuelta"); setFCapitulo(null); }}>↩ Devueltas ({resumen.devueltas})</button>
+        <button style={filtroChip(soloEstancadas)} onClick={() => setSoloEstancadas((v) => !v)}>⚠️ Estancadas ({resumen.estancadas})</button>
+        <button style={filtroChip(soloCR)} onClick={() => setSoloCR((v) => !v)}>Con contrarecibo ({resumen.conCR})</button>
+        <button style={filtroChip(soloDiscrep)} onClick={() => setSoloDiscrep((v) => !v)}>Con discrepancia ✗</button>
+      </div>
 
-      {/* Resumen por capítulo */}
-      <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 14, marginBottom: 4 }}>Por capítulo (clic para filtrar)</div>
+      {/* CAPÍTULOS */}
+      <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 16, marginBottom: 6 }}>Por capítulo — clic para ver su detalle</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {capitulos.map((c) => {
           const r = resumen.porCapitulo[c];
           const pct = r.n ? Math.round((100 * r.refl) / r.n) : 0;
           return (
-            <button key={c} style={chipBtn(fCapitulo === c)} onClick={() => setFCapitulo(fCapitulo === c ? null : c)}>
+            <button key={c} style={chipBtn(fCapitulo === c)} onClick={() => { setFCapitulo(fCapitulo === c ? null : c); setFEtapa(null); setFEstatus(null); }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{c}</div>
               <div style={{ fontSize: 18, fontWeight: 700 }}>{r.n} <span style={{ fontSize: 11, fontWeight: 400, color: "var(--texto-suave)" }}>{moneyK(r.monto)}</span></div>
               <div style={{ height: 5, background: "var(--borde)", borderRadius: 3, marginTop: 4, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: "var(--verde)" }} /></div>
-              <div style={{ fontSize: 10, color: "var(--texto-suave)", marginTop: 2 }}>{pct}% reflejadas</div>
+              <div style={{ fontSize: 10, color: "var(--texto-suave)", marginTop: 2 }}>{pct}% pagadas</div>
             </button>
           );
         })}
       </div>
 
-      {/* Buscador + facetas */}
+      {/* Mini-resumen por etapa del capítulo seleccionado */}
+      {fCapitulo && resumen.porCapitulo[fCapitulo] && (
+        <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "12px 16px", marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Resumen de “{fCapitulo}” por etapa</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {ETAPAS.map((e) => {
+              const n = resumen.porCapitulo[fCapitulo].etapas[e.key] || 0;
+              const activo = fEtapa === e.key;
+              return (
+                <button key={e.key} onClick={() => setFEtapa(activo ? null : e.key)}
+                  style={{ cursor: "pointer", textAlign: "center", minWidth: 100,
+                    border: `1px solid ${activo ? e.color : "var(--borde)"}`,
+                    background: activo ? `color-mix(in srgb, ${e.color} 12%, transparent)` : "var(--blanco)",
+                    borderRadius: 8, padding: "6px 12px" }}>
+                  <div style={{ fontSize: 11, color: e.color, fontWeight: 600 }}>{e.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{n}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* BUSCADOR (siempre visible) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
         <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar folio, CR, importe…" style={{ ...inp, flex: 2, minWidth: 200 }} />
         <input value={fProv} onChange={(e) => setFProv(e.target.value)} placeholder="Proveedor…" list="lst-prov" style={{ ...inp, flex: 1, minWidth: 160 }} />
@@ -636,60 +699,66 @@ export default function FacturasListaPage() {
         <datalist id="lst-cont">{contratos.map((c) => <option key={c} value={c} />)}</datalist>
       </div>
 
-      {/* Chips de filtro rápido + agrupar */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-        <button style={filtroChip(soloCR)} onClick={() => setSoloCR((v) => !v)}>Con contrarecibo ({resumen.conCR})</button>
-        <button style={filtroChip(soloEstancadas)} onClick={() => setSoloEstancadas((v) => !v)}>Estancadas ({resumen.estancadas})</button>
-        <button style={filtroChip(soloDiscrep)} onClick={() => setSoloDiscrep((v) => !v)}>Con discrepancia ✗</button>
-        <button style={filtroChip(ocultarCompl)} onClick={() => setOcultarCompl((v) => !v)}>Ocultar completadas</button>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--texto-suave)" }}>Agrupar por:</span>
-        <select value={agrupar} onChange={(e) => { setAgrupar(e.target.value); setAbiertos({}); }} style={{ ...inp, padding: "7px 10px" }}>
-          <option value="none">Ninguno</option>
-          <option value="prov">Proveedor</option>
-          <option value="contrato">Contrato</option>
-          <option value="capNom">Capítulo</option>
-        </select>
-        {hayFiltro && <button className="boton secundario" onClick={() => { setFEstatus(null); setFCapitulo(null); setBusqueda(""); setFProv(""); setFContrato(""); setSoloCR(false); setSoloEstancadas(false); setSoloDiscrep(false); setOcultarCompl(false); }}>Limpiar</button>}
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <span style={{ fontSize: 14, fontWeight: 700 }}>{filtradas.length} factura(s) · {money(montoFiltrado)}</span>
-        {seleccionadas.length > 0 && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{seleccionadas.length} seleccionada(s)</span>
-            <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
-            <button className="boton secundario" onClick={enviarServicio}>Enviar al servicio →</button>
-            <button className="boton secundario" onClick={devolverProveedor}>Devolver al proveedor →</button>
-            <button className="boton" onClick={enviarOOAD}>Enviar a OOAD (pago) →</button>
-          </div>
-        )}
-      </div>
-
-      {filtradas.length === 0 ? (
-        <p style={{ color: "var(--texto-suave)", fontSize: 13, marginTop: 8 }}>Ninguna factura con estos filtros. <Link href="/facturas/nueva">Capturar una</Link>.</p>
-      ) : grupos ? (
-        <div style={{ marginTop: 8 }}>
-          {grupos.map(([nombre, g]) => {
-            const open = abiertos[nombre];
-            return (
-              <div key={nombre} style={{ marginTop: 8 }}>
-                <button onClick={() => setAbiertos((p) => ({ ...p, [nombre]: !p[nombre] }))}
-                  style={{ width: "100%", textAlign: "left", cursor: "pointer", background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>{open ? "▾" : "▸"} {nombre}</span>
-                  <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{g.filas.length} · {money(g.monto)}</span>
-                </button>
-                {open && <Tabla filas={g.filas} />}
-              </div>
-            );
-          })}
+      {/* LISTA — solo aparece al entrar a una etapa/capítulo, buscar o pedir "ver todo" */}
+      {!mostrarLista ? (
+        <div style={{ textAlign: "center", color: "var(--texto-suave)", padding: "26px 10px", marginTop: 8 }}>
+          <div style={{ fontSize: 14 }}>Elige una <strong>etapa</strong> o un <strong>capítulo</strong> de arriba, o usa el buscador, para ver las facturas.</div>
+          <button className="boton secundario" style={{ marginTop: 12 }} onClick={() => setVerTodo(true)}>Ver todo el listado ({facturas.length})</button>
         </div>
       ) : (
-        <Tabla filas={filtradas} />
-      )}
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+            <button style={filtroChip(ocultarCompl)} onClick={() => setOcultarCompl((v) => !v)}>Ocultar pagadas</button>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--texto-suave)" }}>Agrupar por:</span>
+            <select value={agrupar} onChange={(e) => { setAgrupar(e.target.value); setAbiertos({}); }} style={{ ...inp, padding: "7px 10px" }}>
+              <option value="none">Ninguno</option>
+              <option value="prov">Proveedor</option>
+              <option value="contrato">Contrato</option>
+              <option value="capNom">Capítulo</option>
+            </select>
+            <button className="boton secundario" onClick={() => { setFEstatus(null); setFEtapa(null); setFCapitulo(null); setBusqueda(""); setFProv(""); setFContrato(""); setSoloCR(false); setSoloEstancadas(false); setSoloDiscrep(false); setOcultarCompl(false); setVerTodo(false); }}>Limpiar / cerrar</button>
+          </div>
 
-      <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 14 }}>
-        Nada se borra: las completadas se atenúan pero siguen aquí (y buscables por CR). Renglones en rojo = algún eje supera su umbral.
-      </p>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{filtradas.length} factura(s) · {money(montoFiltrado)}</span>
+            {seleccionadas.length > 0 && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{seleccionadas.length} seleccionada(s)</span>
+                <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
+                <button className="boton secundario" onClick={enviarServicio}>Enviar al servicio →</button>
+                <button className="boton secundario" onClick={devolverProveedor}>Devolver al proveedor →</button>
+                <button className="boton" onClick={enviarOOAD}>Enviar a OOAD (pago) →</button>
+              </div>
+            )}
+          </div>
+
+          {filtradas.length === 0 ? (
+            <p style={{ color: "var(--texto-suave)", fontSize: 13, marginTop: 8 }}>Ninguna factura con estos filtros. <Link href="/facturas/nueva">Capturar una</Link>.</p>
+          ) : grupos ? (
+            <div style={{ marginTop: 8 }}>
+              {grupos.map(([nombre, g]) => {
+                const open = abiertos[nombre];
+                return (
+                  <div key={nombre} style={{ marginTop: 8 }}>
+                    <button onClick={() => setAbiertos((p) => ({ ...p, [nombre]: !p[nombre] }))}
+                      style={{ width: "100%", textAlign: "left", cursor: "pointer", background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{open ? "▾" : "▸"} {nombre}</span>
+                      <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{g.filas.length} · {money(g.monto)}</span>
+                    </button>
+                    {open && <Tabla filas={g.filas} />}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <Tabla filas={filtradas} />
+          )}
+
+          <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 14 }}>
+            Nada se borra: las pagadas se atenúan pero siguen aquí (y buscables por CR). Renglones en rojo = algún eje supera su umbral.
+          </p>
+        </>
+      )}
     </div>
   );
 }
