@@ -215,6 +215,7 @@ export default function FacturasListaPage() {
       setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
       const d = deepOrigenId;
       setSel({}); setMemo(null);
+      setMensaje(`✅ ${ids.length} factura(s) cambiaron de estatus · ahora en "${LABEL_FIRMAS.envio_firmas_servicio}" (en validación por el servicio).`);
       if (d) router.push(`/facturas/${d}`);
     } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
     setEnviando(false);
@@ -284,7 +285,12 @@ export default function FacturasListaPage() {
       }
       const allIds = new Set(oficio.docs.flatMap((d) => d.filas.map((f) => f.id)));
       setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
+      const d = deepOrigenId;
       setSel({}); setOficio(null);
+      setMensaje(oficio.tipo === "pago"
+        ? `✅ ${allIds.size} factura(s) cambiaron de estatus · ahora en "${LABEL_GENERAL.en_tramite_ooad}" (enviadas a OOAD para pago).`
+        : `✅ ${allIds.size} factura(s) devueltas al proveedor para corrección.`);
+      if (d) router.push(`/facturas/${d}`);
     } catch (e) { setMensaje("No se pudo aplicar: " + e.message); }
     setEnviando(false);
   };
@@ -583,7 +589,11 @@ export default function FacturasListaPage() {
           {resumen.estancadas > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>{" · "}{resumen.estancadas} estancada(s)</span>}
         </div>
       </div>
-      {mensaje && <p style={{ color: "var(--rojo)", fontSize: 13 }}>{mensaje}</p>}
+      {mensaje && (
+        mensaje.startsWith("✅")
+          ? <div style={{ background: "var(--verde-claro)", color: "var(--verde-oscuro)", border: "1px solid var(--verde)", padding: "10px 14px", borderRadius: 8, fontSize: 14, fontWeight: 600, margin: "8px 0" }}>{mensaje}</div>
+          : <p style={{ color: "var(--rojo)", fontSize: 13 }}>{mensaje}</p>
+      )}
 
       {/* Resumen por estatus */}
       <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 14, marginBottom: 4 }}>Por estatus (clic para filtrar)</div>
