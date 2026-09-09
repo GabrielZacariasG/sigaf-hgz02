@@ -145,9 +145,9 @@ export default function Portal() {
     },
     {
       paso: 'Consulta', titulo: 'Catálogos',
-      desc: 'Contratos, proveedores, cuentas y jefaturas.',
+      desc: 'Contratos, precios, proveedores, cuentas y jefaturas — editable.',
       cifra: c.contratos, etiqueta: 'contratos',
-      ruta: '/catalogos', listo: false,
+      ruta: '/catalogos', listo: true,
     },
   ];
 
