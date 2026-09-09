@@ -47,6 +47,7 @@ export default function FacturasListaPage() {
   const [oficio, setOficio] = useState(null);  // { tipo:'pago'|'devolucion', docs:[{ prov?, filas, folio, motivo? }] }
   const [enviando, setEnviando] = useState(false);
   const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
+  const [deepHecho, setDeepHecho] = useState(false); // enlace ?accion=memo|pago&id= (desde el detalle)
 
   useEffect(() => {
     (async () => {
@@ -173,11 +174,12 @@ export default function FacturasListaPage() {
   const seleccionadas = useMemo(() => filtradas.filter((f) => sel[f.id]), [filtradas, sel]);
   const toggleSel = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
 
-  const enviarServicio = async () => {
-    if (!seleccionadas.length) return;
+  const enviarServicio = async (lista) => {
+    const items = lista && lista.length ? lista : seleccionadas;
+    if (!items.length) return;
     const g = new Map();
     const nk = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-    for (const f of seleccionadas) {
+    for (const f of items) {
       const jefes = provJefes[nk(f.prov)] || [];
       if (!jefes.length) {
         const k = "__sin__"; const grp = g.get(k) || { jefe: "Jefe(a) de Servicio correspondiente", jefatura: "(sin proveedor asignado)", filas: [] };
@@ -222,11 +224,12 @@ export default function FacturasListaPage() {
     const { data } = await supabase.from("oficios").select("consecutivo").eq("tipo", tipoDb).eq("anio", anio).order("consecutivo", { ascending: false }).limit(1);
     return (data?.[0]?.consecutivo || 0) + 1;
   };
-  const enviarOOAD = async () => {
-    if (!seleccionadas.length) return;
+  const enviarOOAD = async (lista) => {
+    const items = lista && lista.length ? lista : seleccionadas;
+    if (!items.length) return;
     const anio = new Date().getFullYear();
     const consec = await proximoConsec("envio_pago", anio);
-    setOficio({ tipo: "pago", docs: [{ filas: [...seleccionadas], tipoDb: "envio_pago", anio, consecutivo: consec, folio: fmtFolio("envio_pago", consec, anio) }] });
+    setOficio({ tipo: "pago", docs: [{ filas: [...items], tipoDb: "envio_pago", anio, consecutivo: consec, folio: fmtFolio("envio_pago", consec, anio) }] });
   };
   const devolverProveedor = async () => {
     if (!seleccionadas.length) return;
@@ -237,6 +240,24 @@ export default function FacturasListaPage() {
     const docs = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "devolucion", anio, consecutivo: c, folio: fmtFolio("devolucion", c, anio), motivo: "" }; });
     setOficio({ tipo: "devolucion", docs });
   };
+
+  // Enlace desde el detalle de una factura: /facturas?accion=memo|pago&id=<facturaId>
+  // Abre el oficio (memo al servicio / envío a pago) SOLO de esa factura.
+  useEffect(() => {
+    if (deepHecho || cargando || !facturas.length) return;
+    const q = new URLSearchParams(window.location.search);
+    const accion = q.get("accion");
+    const id = q.get("id");
+    if (!accion || !id) return;
+    // El memo agrupa por jefe (provJefes): esperar a que cargue ese catálogo.
+    if (accion === "memo" && Object.keys(provJefes).length === 0) return;
+    const f = facturas.find((x) => x.id === id);
+    setDeepHecho(true);
+    if (!f) { setMensaje("No se encontró la factura del enlace."); return; }
+    if (accion === "memo") enviarServicio([f]);
+    else if (accion === "pago") enviarOOAD([f]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, facturas, provJefes, deepHecho]);
   const setDoc = (i, campo, val) => setOficio((o) => ({ ...o, docs: o.docs.map((d, idx) => (idx === i ? { ...d, [campo]: val } : d)) }));
   const confirmarOficio = async () => {
     setEnviando(true);

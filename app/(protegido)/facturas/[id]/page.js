@@ -79,23 +79,48 @@ function Stepper({ titulo, flujo, labels, actual, historial, circuito, alertasMa
   );
 }
 
-// Control de cambio de un eje.
-function Control({ label, flujo, labels, actual, sel, setSel, onGuardar, guardando, disabled, hint }) {
+// Control guiado de un eje: solo permite AVANZAR o RETROCEDER un paso (candado),
+// para seguir el ciclo correcto sin saltos. Muestra la etapa actual y, si aplica,
+// el botón para imprimir el oficio de esa etapa.
+function GuidedControl({ label, flujo, labels, actual, onSet, guardando, avanzarBloqueado, hint, oficio }) {
+  const idx = flujo.indexOf(actual);
+  const next = idx >= 0 && idx < flujo.length - 1 ? flujo[idx + 1] : null;
+  const prev = idx > 0 ? flujo[idx - 1] : null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-      <label style={{ fontSize: 13, color: "var(--texto-suave)", minWidth: 130 }}>{label}:</label>
-      <select value={sel} onChange={(e) => setSel(e.target.value)} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid var(--borde)" }}>
-        {flujo.map((st) => <option key={st} value={st}>{labels[st]}</option>)}
-      </select>
-      <button className="boton" onClick={onGuardar} disabled={guardando || sel === actual || disabled}>
-        {guardando ? "Guardando…" : "Cambiar"}
-      </button>
-      {hint && <span style={{ fontSize: 12, color: "var(--ambar)" }}>{hint}</span>}
+    <div style={{ borderTop: "1px solid var(--borde)", paddingTop: 12, marginTop: 12 }}>
+      <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>{labels[actual] || actual}</span>
+        {next ? (
+          <button className="boton" onClick={() => onSet(next)} disabled={guardando || avanzarBloqueado}>
+            {guardando ? "Guardando…" : `Avanzar → ${labels[next]}`}
+          </button>
+        ) : (
+          <span style={{ fontSize: 12, color: "var(--verde-oscuro)", fontWeight: 600 }}>✓ etapa final</span>
+        )}
+        {prev && (
+          <button className="boton secundario" style={{ fontSize: 12, padding: "6px 10px" }} disabled={guardando}
+            onClick={() => { if (window.confirm(`¿Regresar a "${labels[prev]}"?`)) onSet(prev); }}>
+            ↩ Retroceder
+          </button>
+        )}
+      </div>
+      {avanzarBloqueado && next && hint && (
+        <div style={{ fontSize: 12, color: "var(--ambar)", marginTop: 6 }}>🔒 {hint}</div>
+      )}
+      {oficio && <div style={{ marginTop: 8 }}>{oficio}</div>}
     </div>
   );
 }
 
-const siguiente = (flujo, actual) => flujo[Math.min(flujo.indexOf(actual) + 1, flujo.length - 1)];
+// Botón-enlace para imprimir el oficio de ESTA factura (reusa la generación de la lista).
+function BotonOficio({ href, texto }) {
+  return (
+    <Link href={href} className="boton secundario" style={{ display: "inline-block", fontSize: 13, textDecoration: "none" }}>
+      📄 {texto}
+    </Link>
+  );
+}
 
 export default function FacturaEstatusPage() {
   const facturaId = useParams().id;
@@ -103,9 +128,6 @@ export default function FacturaEstatusPage() {
   const [factura, setFactura] = useState(null);
   const [historial, setHistorial] = useState([]);
   const [alertasMap, setAlertasMap] = useState({});
-  const [selGen, setSelGen] = useState("");
-  const [selFir, setSelFir] = useState("");
-  const [selPed, setSelPed] = useState("");
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(null); // qué eje se está guardando
@@ -130,9 +152,6 @@ export default function FacturaEstatusPage() {
     const m = {};
     (rAlertas.data || []).forEach((a) => (m[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
     setAlertasMap(m);
-    setSelGen(siguiente(FLUJO_GENERAL, rFac.data.estatus_general));
-    setSelFir(siguiente(FLUJO_FIRMAS, rFac.data.estatus_firmas));
-    setSelPed(siguiente(FLUJO_PEDIDO, rFac.data.estatus_pedido_recepcion));
     setCargando(false);
   }
 
@@ -184,7 +203,10 @@ export default function FacturaEstatusPage() {
   // Solo Integrales (PREI II, módulo de compras) genera pedido-recepción.
   // Los demás capítulos (PREI I: Área Médica, Subrogados, Compra Emergente) no.
   const generaPR = ["Integrales", "Servicios Integrales"].includes(factura.capitulos?.nombre);
-  const bloqueoOoad = selGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado");
+  // Candado cruzado: solo se puede AVANZAR general a "enviada_ooad" si firmas (y pedido en Integrales) están completos.
+  const idxGen = FLUJO_GENERAL.indexOf(factura.estatus_general);
+  const nextGen = idxGen >= 0 && idxGen < FLUJO_GENERAL.length - 1 ? FLUJO_GENERAL[idxGen + 1] : null;
+  const bloqueoOoad = nextGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado");
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -224,13 +246,41 @@ export default function FacturaEstatusPage() {
         {generaPR && <Stepper titulo="Circuito de pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} historial={historial} circuito="pedido_recepcion" alertasMap={alertasMap} />}
       </div>
 
-      {/* Controles de cambio (cualquier rol) */}
+      {/* Avance guiado (candados: solo un paso a la vez) */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", marginTop: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Cambiar estatus</div>
-        <Control label="General" flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general} sel={selGen} setSel={setSelGen} onGuardar={() => cambiar("estatus_general", selGen)} guardando={guardando === "estatus_general"} disabled={bloqueoOoad} hint={bloqueoOoad ? (generaPR ? "Requiere firmas y pedido completos para enviar a OOAD" : "Requiere firmas completas para enviar a OOAD") : ""} />
-        <Control label="Circuito de firmas" flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas} sel={selFir} setSel={setSelFir} onGuardar={() => cambiar("estatus_firmas", selFir)} guardando={guardando === "estatus_firmas"} />
-        {generaPR && <Control label="Pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} sel={selPed} setSel={setSelPed} onGuardar={() => cambiar("estatus_pedido_recepcion", selPed)} guardando={guardando === "estatus_pedido_recepcion"} />}
-        {!generaPR && <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>Este capítulo no genera pedido-recepción (no aplica módulo de compras / PREI II).</p>}
+        <div style={{ fontSize: 14, fontWeight: 700 }}>Avanzar la factura</div>
+        <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 2 }}>Sigue el ciclo paso a paso. Cada eje solo avanza (o retrocede) una etapa a la vez.</div>
+
+        <GuidedControl
+          label="Estatus general"
+          flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general}
+          onSet={(v) => cambiar("estatus_general", v)} guardando={guardando === "estatus_general"}
+          avanzarBloqueado={bloqueoOoad}
+          hint={generaPR ? "Requiere firmas y pedido-recepción completos para enviar a OOAD" : "Requiere firmas completas para enviar a OOAD"}
+          oficio={factura.estatus_general === "enviada_ooad"
+            ? <BotonOficio href={`/facturas?accion=pago&id=${factura.id}`} texto="Imprimir oficio de envío a pago (OOAD)" />
+            : null}
+        />
+
+        <GuidedControl
+          label="Circuito de firmas"
+          flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas}
+          onSet={(v) => cambiar("estatus_firmas", v)} guardando={guardando === "estatus_firmas"}
+          oficio={factura.estatus_firmas === "envio_firmas_servicio"
+            ? <BotonOficio href={`/facturas?accion=memo&id=${factura.id}`} texto="Imprimir memo de envío al servicio" />
+            : null}
+        />
+
+        {generaPR ? (
+          <GuidedControl
+            label="Circuito de pedido-recepción"
+            flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion}
+            onSet={(v) => cambiar("estatus_pedido_recepcion", v)} guardando={guardando === "estatus_pedido_recepcion"}
+          />
+        ) : (
+          <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 12, borderTop: "1px solid var(--borde)", paddingTop: 12 }}>Este capítulo no genera pedido-recepción (no aplica módulo de compras / PREI II).</p>
+        )}
+
         {mensaje && <p style={{ fontSize: 13, color: "var(--rojo)", marginTop: 10 }}>{mensaje}</p>}
       </div>
     </div>
