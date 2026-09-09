@@ -15,6 +15,7 @@ const PREFIJO_CAPITULO = {
   "Área Médica": "AM",
   "Subrogados": "SS",
   "Cuadro Básico": "CB",
+  "Compra Emergente": "CE",
 };
 function prefijoDe(nombre) {
   if (PREFIJO_CAPITULO[nombre]) return PREFIJO_CAPITULO[nombre];
@@ -48,6 +49,9 @@ export default function NuevaFacturaPage() {
   const [cargandoCat, setCargandoCat] = useState(true);
 
   const [paso, setPaso] = useState(1); // 1 = datos · 2 = validación
+  const [modo, setModo] = useState("contrato"); // "contrato" | "oc" (compra emergente)
+  const [todosProveedores, setTodosProveedores] = useState([]); // TODOS (para compra emergente)
+  const [ordenCompra, setOrdenCompra] = useState("");           // número de OC (compra emergente)
 
   // ---- Paso 1: datos de la factura ----
   const [proveedorId, setProveedorId] = useState("");
@@ -83,26 +87,43 @@ export default function NuevaFacturaPage() {
       if (!activo) return;
       if (error) { setMensaje("No se pudieron cargar los contratos: " + error.message); }
       setContratos(data || []);
+
+      // Todos los proveedores (para compra emergente el proveedor varía y puede
+      // no tener contrato). Se excluyen los genéricos de contratos marco.
+      const { data: provs } = await supabase
+        .from("proveedores")
+        .select("id, razon_social")
+        .order("razon_social", { ascending: true });
+      if (!activo) return;
+      setTodosProveedores((provs || []).filter((p) => !/PROVEEDORES VARIOS/i.test(p.razon_social || "")));
       setCargandoCat(false);
     })();
     return () => { activo = false; };
   }, []);
 
-  // Proveedores distintos (solo los que tienen contratos), ordenados.
-  const proveedores = useMemo(() => {
+  const esOC = modo === "oc";
+  // Contratos marco de Compra Emergente (uno por cuenta, número CE-####).
+  const contratosCE = useMemo(() => contratos.filter((c) => (c.numero_interno || "").startsWith("CE-")), [contratos]);
+
+  // Proveedores distintos (solo los que tienen contratos), ordenados. En modo
+  // contrato se usa esta lista; en modo OC (compra emergente) se usan TODOS.
+  const proveedoresConContrato = useMemo(() => {
     const m = new Map();
     for (const c of contratos) { if (c.proveedores) m.set(c.proveedores.id, c.proveedores.razon_social); }
     return [...m.entries()].map(([id, razon_social]) => ({ id, razon_social })).sort((a, b) => (a.razon_social || "").localeCompare(b.razon_social || ""));
   }, [contratos]);
+  const proveedores = esOC ? todosProveedores : proveedoresConContrato;
 
   const contratosProv = useMemo(() => contratos.filter((c) => c.proveedor_id === proveedorId), [contratos, proveedorId]);
 
-  // Al cambiar de proveedor: si tiene un solo contrato, se elige solo; si no, se limpia.
+  // Al cambiar de proveedor (SOLO modo contrato): si tiene un solo contrato, se
+  // elige solo; si no, se limpia. En modo OC el contrato marco es independiente.
   useEffect(() => {
+    if (esOC) return;
     if (!proveedorId) { setContratoId(""); return; }
     setContratoId(contratosProv.length === 1 ? contratosProv[0].id : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proveedorId]);
+  }, [proveedorId, esOC]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
@@ -147,7 +168,13 @@ export default function NuevaFacturaPage() {
 
   // Valida los datos del paso 1 (devuelve string de error o null).
   function validarPaso1() {
-    if (!proveedorId || !contratoId || !contratoSel) return "Elige proveedor y contrato.";
+    if (esOC) {
+      if (!proveedorId) return "Elige el proveedor de la compra emergente.";
+      if (!contratoId || !contratoSel) return "Elige la cuenta (partida) de la compra emergente.";
+      if (!ordenCompra.trim()) return "Captura el número de Orden de Compra (OC).";
+    } else {
+      if (!proveedorId || !contratoId || !contratoSel) return "Elige proveedor y contrato.";
+    }
     if (!contratoSel.partida_id || !capituloSel?.id) return "El contrato no tiene cuenta/capítulo asignado. Corrígelo en Catálogos.";
     if (!folioProveedor.trim()) return "Captura el folio de la factura del proveedor.";
     if (!periodoInicio || !periodoFin) return "Indica el periodo (fecha inicio y fecha fin).";
@@ -221,6 +248,7 @@ export default function NuevaFacturaPage() {
           total_calculado: total,
           tasa_iva: tasa,
           validacion_ok: ok,
+          orden_compra: esOC ? ordenCompra.trim() : null,
           estatus_general: "capturada",
           created_by: createdBy,
         })
@@ -263,7 +291,7 @@ export default function NuevaFacturaPage() {
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
-    setMensaje("");
+    setOrdenCompra(""); setMensaje("");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -304,7 +332,25 @@ export default function NuevaFacturaPage() {
       {/* ============ PASO 1 · DATOS ============ */}
       {paso1 && (
         <div style={{ background: "#fff", border: "1px solid #e2e4e2", borderRadius: 12, padding: 24 }}>
-          <p style={{ fontSize: 13, color: "#5a615e", marginTop: 0 }}>Elige el proveedor y su contrato — el capítulo y la cuenta se completan solos. El folio de ingreso se asigna al final, cuando todo cuadre.</p>
+          {/* Selector de modo de captura */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            {[["contrato", "Por contrato"], ["oc", "Compra emergente (OC)"]].map(([val, txt]) => (
+              <button key={val} type="button"
+                onClick={() => { if (modo === val) return; setModo(val); setProveedorId(""); setProvText(""); setContratoId(""); setOrdenCompra(""); setMensaje(""); }}
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontSize: 13,
+                  border: `1px solid ${modo === val ? "var(--verde)" : "#d8dbd9"}`,
+                  background: modo === val ? "var(--verde-claro)" : "#fff",
+                  color: modo === val ? "var(--verde-oscuro)" : "#5a615e",
+                  fontWeight: modo === val ? 700 : 400 }}>
+                {txt}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 13, color: "#5a615e", marginTop: 0 }}>
+            {esOC
+              ? "Compra por Orden de Compra: elige el proveedor, la cuenta y captura el número de OC. El folio se asigna al final, cuando todo cuadre."
+              : "Elige el proveedor y su contrato — el capítulo y la cuenta se completan solos. El folio de ingreso se asigna al final, cuando todo cuadre."}
+          </p>
 
           {/* Proveedor — buscador con sugerencias (typeahead) */}
           <label style={etiqueta}>Proveedor</label>
@@ -352,21 +398,40 @@ export default function NuevaFacturaPage() {
             })()}
           </div>
 
-          {/* Contrato (de ese proveedor) */}
-          <label style={etiqueta}>Contrato</label>
-          <select required value={contratoId} onChange={(e) => setContratoId(e.target.value)} disabled={!proveedorId} style={selectSty}>
-            <option value="">{!proveedorId ? "Primero elige un proveedor" : contratosProv.length === 0 ? "Este proveedor no tiene contratos" : "Selecciona un contrato…"}</option>
-            {contratosProv.map((c) => (
-              <option key={c.id} value={c.id}>{[c.numero_interno, c.adquisicion_servicio].filter(Boolean).join(" — ")}</option>
-            ))}
-          </select>
-          {proveedorId && contratosProv.length === 1 && <div style={{ fontSize: 11, color: "#5a615e", marginTop: 4 }}>Único contrato de este proveedor (ya seleccionado).</div>}
+          {esOC ? (
+            <>
+              {/* Cuenta (partida) de la compra emergente — marco CE- */}
+              <label style={etiqueta}>Cuenta (partida) de la compra emergente</label>
+              <select required value={contratoId} onChange={(e) => setContratoId(e.target.value)} style={selectSty}>
+                <option value="">{contratosCE.length === 0 ? "No hay cuentas de Compra Emergente (corre el SQL)" : "Selecciona la cuenta…"}</option>
+                {contratosCE.map((c) => (
+                  <option key={c.id} value={c.id}>{[c.partidas?.cuenta_finat, c.partidas?.nombre].filter(Boolean).join(" — ")}</option>
+                ))}
+              </select>
+
+              {/* Número de Orden de Compra */}
+              <label style={etiqueta}>Número de Orden de Compra (OC)</label>
+              <input type="text" value={ordenCompra} onChange={(e) => setOrdenCompra(e.target.value)} placeholder="Ej. OC-2026-0123" />
+            </>
+          ) : (
+            <>
+              {/* Contrato (de ese proveedor) */}
+              <label style={etiqueta}>Contrato</label>
+              <select required value={contratoId} onChange={(e) => setContratoId(e.target.value)} disabled={!proveedorId} style={selectSty}>
+                <option value="">{!proveedorId ? "Primero elige un proveedor" : contratosProv.length === 0 ? "Este proveedor no tiene contratos" : "Selecciona un contrato…"}</option>
+                {contratosProv.map((c) => (
+                  <option key={c.id} value={c.id}>{[c.numero_interno, c.adquisicion_servicio].filter(Boolean).join(" — ")}</option>
+                ))}
+              </select>
+              {proveedorId && contratosProv.length === 1 && <div style={{ fontSize: 11, color: "#5a615e", marginTop: 4 }}>Único contrato de este proveedor (ya seleccionado).</div>}
+            </>
+          )}
 
           {/* Capítulo y cuenta — autocompletados (solo lectura) */}
           <label style={etiqueta}>Capítulo y cuenta (automáticos)</label>
           <input type="text" readOnly style={soloLectura}
             value={contratoSel ? [capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`, contratoSel?.partidas?.nombre].filter(Boolean).join(" · ") : ""}
-            placeholder="Se completa al elegir el contrato" />
+            placeholder={esOC ? "Se completa al elegir la cuenta" : "Se completa al elegir el contrato"} />
 
           {/* Folio proveedor */}
           <label style={etiqueta}>Folio de factura del proveedor</label>
@@ -402,7 +467,8 @@ export default function NuevaFacturaPage() {
           <div style={{ ...card, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
             <div><strong>Proveedor:</strong> {proveedores.find((p) => p.id === proveedorId)?.razon_social || "—"}</div>
             <div><strong>Folio proveedor:</strong> {folioProveedor}</div>
-            <div style={{ gridColumn: "1 / -1" }}><strong>Contrato:</strong> {contratoSel?.numero_interno} — {contratoSel?.adquisicion_servicio}</div>
+            {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}</div>}
+            <div style={{ gridColumn: "1 / -1" }}><strong>{esOC ? "Compra emergente:" : "Contrato:"}</strong> {contratoSel?.numero_interno} — {contratoSel?.adquisicion_servicio}</div>
             <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}>{[capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`].filter(Boolean).join(" · ")}</div>
             <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)" }}>
               <strong>Total de la factura (capturado):</strong>{" "}
