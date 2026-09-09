@@ -102,7 +102,7 @@ export default function FacturasListaPage() {
         const [rFac, a, h] = await Promise.all([
           supabase.from("facturas").select(
             "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
-          ).range(desde, desde + 999),
+          ).eq("anulada", false).range(desde, desde + 999),
           desde === 0 ? supabase.from("alertas_config").select("circuito, estatus, dias_umbral") : Promise.resolve({ data: rAlertas }),
           desde === 0 ? supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha") : Promise.resolve({ data: rHist }),
         ]);

@@ -52,7 +52,7 @@ export default function ReportesPage() {
       for (;;) {
         const { data, error } = await supabase.from("facturas").select(
           "id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, validacion_ok, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, created_at, contrato_id, proveedor_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
-        ).range(desde, desde + 999);
+        ).eq("anulada", false).range(desde, desde + 999);
         if (error) { setMsg("No se pudieron cargar facturas: " + error.message); break; }
         todas = todas.concat(data || []);
         if (!data || data.length < 1000) break;

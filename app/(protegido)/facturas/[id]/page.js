@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
@@ -10,6 +10,22 @@ import {
   FLUJO_PEDIDO, LABEL_PEDIDO,
   puedeEnviarOoad,
 } from "../../../../lib/estatus";
+
+// Prefijo de folio de ingreso por capítulo (igual que en captura).
+const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
+function prefijoDe(nombre) {
+  if (PREFIJO_CAPITULO[nombre]) return PREFIJO_CAPITULO[nombre];
+  const s = (nombre || "GEN").normalize("NFD").replace(/[^\w\s]/g, "").trim().toUpperCase();
+  return s.split(/\s+/).map((w) => w[0]).join("").slice(0, 3) || "GEN";
+}
+async function generarFolioIngreso(prefijoCap, anio) {
+  const prefijo = `HGZ2-${prefijoCap}-${anio}-`;
+  const { data, error } = await supabase.from("facturas").select("folio_ingreso").like("folio_ingreso", `${prefijo}%`).order("folio_ingreso", { ascending: false }).limit(1);
+  if (error) throw error;
+  let consec = 1;
+  if (data && data.length > 0) { const n = parseInt(data[0].folio_ingreso.slice(prefijo.length), 10); if (!Number.isNaN(n)) consec = n + 1; }
+  return prefijo + String(consec).padStart(6, "0");
+}
 
 const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -125,6 +141,7 @@ function BotonOficio({ href, texto }) {
 
 export default function FacturaEstatusPage() {
   const facturaId = useParams().id;
+  const router = useRouter();
 
   const [factura, setFactura] = useState(null);
   const [historial, setHistorial] = useState([]);
@@ -134,10 +151,17 @@ export default function FacturaEstatusPage() {
   const [guardando, setGuardando] = useState(null); // qué eje se está guardando
   const [mensaje, setMensaje] = useState("");
 
+  // Resolución de devolución
+  const [accionDev, setAccionDev] = useState(null); // null | 'refactura'
+  const [rfFolio, setRfFolio] = useState("");       // nuevo folio del proveedor
+  const [rfImporte, setRfImporte] = useState("");   // nuevo importe (total con IVA)
+  const [rfIni, setRfIni] = useState("");
+  const [rfFin, setRfFin] = useState("");
+
   async function cargar() {
     const [rFac, rHist, rAlertas] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -191,6 +215,69 @@ export default function FacturaEstatusPage() {
     }
   }
 
+  // Reingreso: la MISMA factura vuelve a "en_revision" (editable) y se cuenta.
+  async function reingresar() {
+    if (!window.confirm("¿Reingresar la MISMA factura? Volverá a 'En revisión' y podrás corregir su detalle.")) return;
+    setMensaje(""); setGuardando("dev");
+    try {
+      const { error } = await supabase.from("facturas").update({
+        estatus_general: "en_revision",
+        reingresos: (factura.reingresos || 0) + 1,
+        fecha_reingreso: new Date().toISOString(),
+      }).eq("id", facturaId);
+      if (error) throw error;
+      await cargar();
+      setMensaje("");
+    } catch (err) { setMensaje("No se pudo reingresar: " + err.message); }
+    finally { setGuardando(null); }
+  }
+
+  // Re-factura: se crea una factura NUEVA (folio nuevo) enlazada; la original se anula.
+  async function crearRefactura() {
+    setMensaje("");
+    if (!rfFolio.trim()) { setMensaje("Captura el folio de la NUEVA factura del proveedor."); return; }
+    const imp = parseFloat(rfImporte);
+    if (Number.isNaN(imp) || imp <= 0) { setMensaje("Captura el importe de la nueva factura."); return; }
+    if (!rfIni || !rfFin) { setMensaje("Indica el periodo de la nueva factura."); return; }
+    if (rfFin < rfIni) { setMensaje("La fecha fin no puede ser anterior a la inicio."); return; }
+    setGuardando("dev");
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const authId = userData?.user?.id ?? null;
+      let createdBy = null;
+      if (authId) { const { data: perfil } = await supabase.from("usuarios").select("id").eq("auth_id", authId).maybeSingle(); createdBy = perfil?.id ?? null; }
+      if (!createdBy) { setMensaje("Tu usuario no está dado de alta en 'usuarios'."); setGuardando(null); return; }
+
+      const anio = new Date(rfIni + "T00:00:00").getFullYear();
+      const folioIngreso = await generarFolioIngreso(prefijoDe(factura.capitulos?.nombre), anio);
+
+      const { data: nueva, error: eIns } = await supabase.from("facturas").insert({
+        folio_ingreso: folioIngreso,
+        folio_proveedor: rfFolio.trim(),
+        capitulo_id: factura.capitulo_id,
+        partida_id: factura.partida_id,
+        contrato_id: factura.contrato_id,
+        proveedor_id: factura.proveedor_id,
+        orden_compra: factura.orden_compra || null,
+        periodo_inicio: rfIni,
+        periodo_fin: rfFin,
+        importe_factura: imp,
+        estatus_general: "capturada",
+        sustituye_a_id: factura.id,
+        created_by: createdBy,
+      }).select("id, folio_ingreso").single();
+      if (eIns) throw eIns;
+
+      // Anular la original y enlazarla a la re-factura
+      const { error: eUpd } = await supabase.from("facturas").update({
+        anulada: true, sustituida_por_id: nueva.id,
+      }).eq("id", factura.id);
+      if (eUpd) throw eUpd;
+
+      router.push(`/facturas/${nueva.id}/detalle`);
+    } catch (err) { setMensaje("No se pudo crear la re-factura: " + err.message); setGuardando(null); }
+  }
+
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
   if (!factura) {
     return (
@@ -234,6 +321,67 @@ export default function FacturaEstatusPage() {
       )}
       {factura.vigencia_alerta === "por_vencer" && (
         <div style={{ background: "var(--ambar-claro)", color: "var(--ambar)", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>⚠️ La vigencia del contrato está por vencer.</div>
+      )}
+
+      {/* Enlaces de re-factura */}
+      {factura.anulada && (
+        <div style={{ background: "var(--ambar-claro)", color: "var(--ambar)", padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+          🚫 Esta factura fue <strong>anulada</strong> (re-facturada). No cuenta en montos.
+          {factura.sustituida_por_id && <> Sustituida por <Link href={`/facturas/${factura.sustituida_por_id}`}>la nueva factura →</Link></>}
+        </div>
+      )}
+      {factura.sustituye_a_id && (
+        <div style={{ background: "var(--verde-claro)", color: "var(--verde-oscuro)", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+          🔁 Esta factura <strong>sustituye</strong> a una devuelta. <Link href={`/facturas/${factura.sustituye_a_id}`}>Ver la factura original →</Link>
+        </div>
+      )}
+
+      {/* Panel: RESOLVER DEVOLUCIÓN (solo si está devuelta y no anulada) */}
+      {factura.estatus_general === "devuelta_proveedor" && !factura.anulada && (
+        <div style={{ background: "var(--blanco)", border: "2px solid var(--ambar)", borderRadius: 10, padding: "14px 16px", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>↩ Resolver devolución</div>
+          <div style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 2 }}>
+            Devuelta el {factura.fecha_devolucion ? fechaCorta(factura.fecha_devolucion) : "—"}
+            {factura.reingresos > 0 ? ` · ${factura.reingresos} reingreso(s) previo(s)` : ""}.
+          </div>
+          {factura.motivo_devolucion && <div style={{ fontSize: 13, marginTop: 6 }}><strong>Motivo:</strong> {factura.motivo_devolucion}</div>}
+
+          {accionDev !== "refactura" ? (
+            <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+              <button className="boton" onClick={reingresar} disabled={guardando === "dev"}>
+                {guardando === "dev" ? "Aplicando…" : "Reingreso (misma factura)"}
+              </button>
+              <button className="boton secundario" disabled={guardando === "dev"}
+                onClick={() => { setAccionDev("refactura"); setRfFolio(""); setRfImporte(String(factura.importe_factura || "")); setRfIni(factura.periodo_inicio || ""); setRfFin(factura.periodo_fin || ""); }}>
+                Re-factura (CFDI nuevo)
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, borderTop: "1px solid var(--borde)", paddingTop: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Nueva factura (sustituye a {factura.folio_ingreso})</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>Folio del proveedor (nuevo)
+                  <input type="text" value={rfFolio} onChange={(e) => setRfFolio(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 6, border: "1px solid var(--borde)", marginTop: 4 }} />
+                </label>
+                <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>Importe (total con IVA)
+                  <input type="number" step="0.01" min="0" value={rfImporte} onChange={(e) => setRfImporte(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 6, border: "1px solid var(--borde)", marginTop: 4 }} />
+                </label>
+                <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>Periodo — inicio
+                  <input type="date" value={rfIni} onChange={(e) => setRfIni(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 6, border: "1px solid var(--borde)", marginTop: 4 }} />
+                </label>
+                <label style={{ fontSize: 12, color: "var(--texto-suave)" }}>Periodo — fin
+                  <input type="date" value={rfFin} onChange={(e) => setRfFin(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 6, border: "1px solid var(--borde)", marginTop: 4 }} />
+                </label>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>Se creará con folio de ingreso nuevo; esta factura quedará anulada y enlazada. Luego capturarás su subtotal/desglose.</div>
+              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                <button className="boton" onClick={crearRefactura} disabled={guardando === "dev"}>{guardando === "dev" ? "Creando…" : "Crear re-factura"}</button>
+                <button className="boton secundario" onClick={() => setAccionDev(null)} disabled={guardando === "dev"}>Cancelar</button>
+              </div>
+            </div>
+          )}
+          {mensaje && <p style={{ fontSize: 13, color: "var(--rojo)", marginTop: 10 }}>{mensaje}</p>}
+        </div>
       )}
 
       {/* Aviso de la etapa en que se encuentra la factura */}
