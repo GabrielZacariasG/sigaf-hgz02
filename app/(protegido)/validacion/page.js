@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -22,6 +23,9 @@ export default function ValidacionServicioPage() {
   const [oficio, setOficio] = useState(null); // { jefe, dictamen, motivo, filas, folio }
   const [guardando, setGuardando] = useState(false);
   const [esJefeSesion, setEsJefeSesion] = useState(false); // el usuario logueado ES un jefe (bloquea a él)
+  const [deepHecho, setDeepHecho] = useState(false); // reimpresión por enlace ?accion=oficio&id=
+  const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de origen para "Volver"
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -58,6 +62,36 @@ export default function ValidacionServicioPage() {
 
   const jefe = useMemo(() => jefes.find((j) => j.id === jefeId), [jefes, jefeId]);
   const sinAsignacion = jefeId && asignados && asignados.size === 0;
+
+  // Enlace desde el detalle: /validacion?accion=oficio&id=<facturaId> → reimprime el oficio al Adm de Contrato de esa factura.
+  useEffect(() => {
+    if (deepHecho || cargando || !jefes.length) return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("accion") !== "oficio") return;
+    const id = q.get("id");
+    if (!id) return;
+    setDeepHecho(true);
+    setDeepOrigenId(id);
+    (async () => {
+      const [rVal, rFac] = await Promise.all([
+        supabase.from("validaciones_servicio").select("dictamen, motivo, oficio_folio, jefe_id").eq("factura_id", id).maybeSingle(),
+        supabase.from("facturas").select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )").eq("id", id).maybeSingle(),
+      ]);
+      const fac = rFac.data;
+      if (!fac) { setMensaje("No se encontró la factura del enlace."); return; }
+      const val = rVal.data;
+      let jefeObj = val?.jefe_id ? jefes.find((j) => j.id === val.jefe_id) : null;
+      if (!jefeObj) {
+        const { data: jp } = await supabase.from("jefe_proveedor").select("jefe_id").eq("proveedor_id", fac.proveedor_id).limit(1);
+        if (jp?.[0]) jefeObj = jefes.find((j) => j.id === jp[0].jefe_id) || null;
+      }
+      const dictamen = val?.dictamen || "cumplimiento";
+      const folio = val?.oficio_folio || `OF-${dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+      if (val?.jefe_id) setJefeId(val.jefe_id);
+      setOficio({ jefe: jefeObj, dictamen, motivo: val?.motivo || "", filas: [fac], folio, reimpresion: true });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, jefes, deepHecho]);
 
   const pendientes = useMemo(() => {
     let base = facturas;
@@ -134,9 +168,13 @@ export default function ValidacionServicioPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => setOficio(null)}>← Volver</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
-          <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
+          {oficio.reimpresion ? (
+            <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Reimpresión (ya registrado).</span>
+          ) : (
+            <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
+          )}
           {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
         <div className="hoja">

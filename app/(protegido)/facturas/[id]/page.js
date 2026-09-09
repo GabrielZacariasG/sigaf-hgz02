@@ -92,7 +92,8 @@ function GuidedControl({ label, flujo, labels, actual, onSet, guardando, avanzar
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>{labels[actual] || actual}</span>
         {next ? (
-          <button className="boton" onClick={() => onSet(next)} disabled={guardando || avanzarBloqueado}>
+          <button className="boton" disabled={guardando || avanzarBloqueado}
+            onClick={() => { if (window.confirm(`¿Seguro que deseas avanzar a "${labels[next]}"?`)) onSet(next); }}>
             {guardando ? "Guardando…" : `Avanzar → ${labels[next]}`}
           </button>
         ) : (
@@ -282,9 +283,13 @@ export default function FacturaEstatusPage() {
           label="Circuito de firmas"
           flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas}
           onSet={(v) => cambiar("estatus_firmas", v)} guardando={guardando === "estatus_firmas"}
-          oficio={factura.estatus_firmas === "envio_firmas_servicio"
-            ? <BotonOficio href={`/facturas?accion=memo&id=${factura.id}`} texto="Imprimir memo de envío al servicio" />
-            : null}
+          oficio={
+            factura.estatus_firmas === "envio_firmas_servicio"
+              ? <BotonOficio href={`/facturas?accion=memo&id=${factura.id}`} texto="Imprimir memo de envío al servicio" />
+              : ["autorizada_servicio", "envio_firmas_admin_contrato", "autorizada_admin_contrato"].includes(factura.estatus_firmas)
+                ? <BotonOficio href={`/validacion?accion=oficio&id=${factura.id}`} texto="Imprimir oficio al Administrador del Contrato" />
+                : null
+          }
         />
 
         {generaPR ? (
