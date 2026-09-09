@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
@@ -25,6 +25,8 @@ export default function ValidacionServicioPage() {
   const [esJefeSesion, setEsJefeSesion] = useState(false); // el usuario logueado ES un jefe (bloquea a él)
   const [deepHecho, setDeepHecho] = useState(false); // reimpresión por enlace ?accion=oficio&id=
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de origen para "Volver"
+  const [detAbierto, setDetAbierto] = useState(null);   // factura con su detalle de servicios desplegado
+  const [detData, setDetData] = useState({});           // factura_id -> filas | "load"
   const router = useRouter();
 
   useEffect(() => {
@@ -113,6 +115,16 @@ export default function ValidacionServicioPage() {
   const seleccionadas = useMemo(() => pendientes.filter((f) => sel[f.id]), [pendientes, sel]);
   const toggle = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
   const toggleTodas = () => { const all = pendientes.every((f) => sel[f.id]); const n = {}; pendientes.forEach((f) => (n[f.id] = !all)); setSel(n); };
+  const verDetalle = async (f) => {
+    if (detAbierto === f.id) { setDetAbierto(null); return; }
+    setDetAbierto(f.id);
+    if (detData[f.id] == null) {
+      setDetData((p) => ({ ...p, [f.id]: "load" }));
+      const { data } = await supabase.from("factura_detalle").select("cantidad, contrato_servicios ( nombre_servicio, precio_unitario )").eq("factura_id", f.id);
+      const filas = (data || []).map((d) => { const pr = Number(d.contrato_servicios?.precio_unitario) || 0; const c = Number(d.cantidad) || 0; return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant: c, precio: pr, importe: c * pr }; });
+      setDetData((prev) => ({ ...prev, [f.id]: filas }));
+    }
+  };
 
   const generar = () => {
     if (!jefeId) { setMensaje("Elige el jefe de servicio."); return; }
@@ -402,14 +414,65 @@ export default function ValidacionServicioPage() {
                   </tr></thead>
                   <tbody>
                     {pendientes.map((f) => (
-                      <tr key={f.id} style={sel[f.id] ? { background: "var(--verde-claro)" } : {}}>
+                      <Fragment key={f.id}>
+                      <tr style={sel[f.id] ? { background: "var(--verde-claro)" } : {}}>
                         <td style={td}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggle(f.id)} /></td>
-                        <td style={td}><Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)", fontWeight: 600 }}>{f.folio_ingreso}</Link><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td>
+                        <td style={td}>
+                          <span style={{ fontWeight: 600 }}>{f.folio_ingreso}</span>
+                          <div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div>
+                          <button className="boton secundario" style={{ fontSize: 11, padding: "3px 8px", marginTop: 4 }} onClick={() => verDetalle(f)}>
+                            {detAbierto === f.id ? "Ocultar detalle" : "Ver detalle de servicios"}
+                          </button>
+                        </td>
                         <td style={{ ...td, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedores?.razon_social ?? "—"}</td>
                         <td style={{ ...td, fontSize: 12, color: "var(--texto-suave)" }}>{f.contratos?.numero_interno ?? "—"}</td>
                         <td style={{ ...td, fontSize: 12 }}>{f.periodo_inicio} → {f.periodo_fin}</td>
                         <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
                       </tr>
+                      {detAbierto === f.id && (
+                        <tr>
+                          <td style={{ ...td, background: "var(--fondo)" }} colSpan={6}>
+                            {detData[f.id] === "load" || detData[f.id] == null ? (
+                              <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>Cargando detalle…</span>
+                            ) : detData[f.id].length === 0 ? (
+                              <span style={{ fontSize: 13, color: "var(--ambar)" }}>⚠️ Esta factura no tiene desglose de servicios capturado en el sistema.</span>
+                            ) : (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Detalle de servicios en sistema (coteje contra la factura en papel)</div>
+                                <table style={{ width: "100%", borderCollapse: "collapse", maxWidth: 640 }}>
+                                  <thead><tr>
+                                    <th style={{ ...th, borderBottom: "1px solid var(--borde)" }}>Concepto</th>
+                                    <th style={{ ...th, textAlign: "right", borderBottom: "1px solid var(--borde)" }}>Cantidad</th>
+                                    <th style={{ ...th, textAlign: "right", borderBottom: "1px solid var(--borde)" }}>Precio</th>
+                                    <th style={{ ...th, textAlign: "right", borderBottom: "1px solid var(--borde)" }}>Importe</th>
+                                  </tr></thead>
+                                  <tbody>
+                                    {detData[f.id].map((d, i) => (
+                                      <tr key={i}>
+                                        <td style={{ ...td, fontSize: 13 }}>{d.nombre}</td>
+                                        <td style={{ ...td, textAlign: "right", fontSize: 13 }}>{d.cant}</td>
+                                        <td style={{ ...td, textAlign: "right", fontSize: 13 }}>{money(d.precio)}</td>
+                                        <td style={{ ...td, textAlign: "right", fontSize: 13 }}>{money(d.importe)}</td>
+                                      </tr>
+                                    ))}
+                                    {(() => { const tot = detData[f.id].reduce((s, d) => s + d.importe, 0); const dif = Math.abs(tot - (Number(f.importe_factura) || 0)) <= 1; return (
+                                      <tr>
+                                        <td style={{ ...td, fontWeight: 700, borderTop: "2px solid #333" }} colSpan={3}>Total en sistema</td>
+                                        <td style={{ ...td, fontWeight: 700, textAlign: "right", borderTop: "2px solid #333", color: dif ? "var(--verde-oscuro)" : "var(--rojo)" }}>{money(tot)}{dif ? " ✓" : " ✗"}</td>
+                                      </tr>
+                                    ); })()}
+                                    <tr>
+                                      <td style={{ ...td, color: "var(--texto-suave)", fontSize: 12 }} colSpan={3}>Importe de la factura (capturado)</td>
+                                      <td style={{ ...td, textAlign: "right", fontSize: 12, color: "var(--texto-suave)" }}>{money(f.importe_factura)}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
