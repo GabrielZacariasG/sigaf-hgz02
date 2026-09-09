@@ -58,6 +58,18 @@ export default function DetalleFacturaPage() {
         .order("nombre_servicio", { ascending: true });
       if (!activo) return;
       setServicios(servs || []);
+
+      // Precargar el desglose ya guardado (si lo hay) para poder verlo/editarlo.
+      const { data: det } = await supabase
+        .from("factura_detalle")
+        .select("contrato_servicio_id, cantidad")
+        .eq("factura_id", facturaId);
+      if (!activo) return;
+      if (det && det.length > 0) {
+        const mapa = {};
+        for (const d of det) mapa[d.contrato_servicio_id] = String(d.cantidad);
+        setCantidades(mapa);
+      }
       setCargando(false);
     }
     cargar();
@@ -114,6 +126,19 @@ export default function DetalleFacturaPage() {
       const tasa = sub > 0 ? Math.round((ivaAmt / sub) * 10000) / 10000 : 0;
       const ok = Math.abs(total - (Number(factura.importe_factura) || 0)) <= TOLERANCIA;
 
+      // Reemplazar el desglose por servicio (para que el jefe pueda verlo).
+      const detalleRows = servicios
+        .map((s) => ({ sid: s.id, cant: parseFloat(cantidades[s.id]) }))
+        .filter((r) => !Number.isNaN(r.cant) && r.cant > 0)
+        .map((r) => ({ factura_id: facturaId, contrato_servicio_id: r.sid, cantidad: r.cant }));
+      await supabase.from("factura_detalle").delete().eq("factura_id", facturaId);
+      if (detalleRows.length > 0) {
+        const { error: eDet } = await supabase.from("factura_detalle").insert(detalleRows);
+        if (eDet) throw new Error("Al guardar el desglose: " + eDet.message);
+      }
+
+      // Un trigger de factura_detalle recalcula subtotal/IVA/total; se hace la
+      // actualización DESPUÉS del desglose para que manden los montos capturados.
       const { error } = await supabase
         .from("facturas")
         .update({

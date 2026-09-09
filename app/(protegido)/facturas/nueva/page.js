@@ -228,6 +228,27 @@ export default function NuevaFacturaPage() {
         .single();
 
       if (error) { setMensaje("No se pudo guardar la factura: " + error.message); setCargando(false); return; }
+
+      // Persistir el desglose por servicio, para que el jefe pueda verlo en Validación.
+      const detalleRows = servicios
+        .map((s) => ({ sid: s.id, cant: parseFloat(cantidades[s.id]) }))
+        .filter((r) => !Number.isNaN(r.cant) && r.cant > 0)
+        .map((r) => ({ factura_id: nueva.id, contrato_servicio_id: r.sid, cantidad: r.cant }));
+      let avisoDetalle = "";
+      if (detalleRows.length > 0) {
+        const { error: eDet } = await supabase.from("factura_detalle").insert(detalleRows);
+        if (eDet) {
+          avisoDetalle = " (el desglose no se pudo guardar: " + eDet.message + ")";
+        } else {
+          // Un trigger de factura_detalle recalcula subtotal/IVA/total con base en el
+          // desglose; reafirmamos los montos capturados para que manden esos.
+          await supabase.from("facturas").update({
+            subtotal_calculado: sub, iva_calculado: ivaAmt, total_calculado: total, tasa_iva: tasa, validacion_ok: ok,
+          }).eq("id", nueva.id);
+        }
+      }
+
+      if (avisoDetalle) setMensaje("Factura guardada" + avisoDetalle);
       setExito({ id: nueva.id, folio: nueva.folio_ingreso, validacion_ok: ok });
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err2) {
