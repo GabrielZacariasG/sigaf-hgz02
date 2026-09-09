@@ -85,6 +85,19 @@ export default function DetalleFacturaPage() {
     return s;
   }, [servicios, cantidades]);
 
+  // El desglose puede cuadrar de dos formas según cómo estén cargados los
+  // precios del contrato:
+  //   • precios CON IVA  → la suma del desglose = TOTAL de la factura
+  //   • precios SIN IVA  → la suma del desglose = SUBTOTAL (suma × 1.16 = TOTAL)
+  // Aceptamos ambas para no marcar error donde no lo hay.
+  const desglose = useMemo(() => {
+    const total = Number(factura?.importe_factura) || 0;
+    const suma = sumaServicios;
+    const conIva = suma > 0 && Math.abs(suma - total) <= TOLERANCIA;         // precios ya con IVA
+    const sinIva = suma > 0 && Math.abs(suma * 1.16 - total) <= TOLERANCIA;  // precios sin IVA
+    return { total, suma, conIva, sinIva, ok: conIva || sinIva };
+  }, [sumaServicios, factura]);
+
   const serviciosFiltrados = useMemo(() => {
     const f = filtro.trim().toLowerCase();
     if (!f) return servicios;
@@ -237,23 +250,39 @@ export default function DetalleFacturaPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ fontSize: 15, margin: 0 }}>Desglose por servicio <span style={{ fontSize: 12, color: "var(--texto-suave)", fontWeight: 400 }}>(opcional)</span></h2>
             <div style={{ fontSize: 13 }}>
-              Suma (con IVA): <strong>{money(sumaServicios)}</strong>{" "}
+              Suma del desglose: <strong>{money(sumaServicios)}</strong>{" "}
               {sumaServicios > 0 && (
                 <button className="boton secundario" style={{ padding: "4px 10px", fontSize: 12 }}
-                  onClick={() => { setResultado(null); const sub = Math.round((sumaServicios / 1.16) * 100) / 100; setSubtotal(String(sub)); setIva(String(Math.round((sumaServicios - sub) * 100) / 100)); }}>
-                  Desglosar subtotal + IVA (÷ 1.16)
+                  onClick={() => {
+                    setResultado(null);
+                    const t = Number(factura.importe_factura) || 0;
+                    if (desglose.sinIva && !desglose.conIva) {
+                      // precios SIN IVA: la suma es el subtotal; el IVA es lo que falta para el total
+                      const sub = Math.round(sumaServicios * 100) / 100;
+                      setSubtotal(String(sub));
+                      setIva(String(Math.round((t - sub) * 100) / 100));
+                    } else {
+                      // precios CON IVA: la suma es el total; se despeja el subtotal ÷ 1.16
+                      const sub = Math.round((sumaServicios / 1.16) * 100) / 100;
+                      setSubtotal(String(sub));
+                      setIva(String(Math.round((sumaServicios - sub) * 100) / 100));
+                    }
+                  }}>
+                  Usar desglose para llenar subtotal + IVA
                 </button>
               )}
             </div>
           </div>
-          {/* Validación 2: la suma del desglose (precios CON IVA) debe cuadrar con el TOTAL */}
+          {/* Validación 2: el desglose cuadra con el TOTAL (precios con IVA) o con el SUBTOTAL (precios sin IVA) */}
           {sumaServicios > 0 && (
             <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, fontSize: 13,
-              background: Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA ? "var(--verde-claro)" : "var(--rojo-claro)",
-              color: Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA ? "var(--verde-oscuro)" : "var(--rojo)" }}>
-              {Math.abs(sumaServicios - calc.totalFactura) <= TOLERANCIA
-                ? `✓ La suma del desglose (${money(sumaServicios)}) coincide con el TOTAL de la factura.`
-                : `✗ La suma del desglose (${money(sumaServicios)}) difiere del TOTAL de la factura (${money(calc.totalFactura)}) por ${money(sumaServicios - calc.totalFactura)}.`}
+              background: desglose.ok ? "var(--verde-claro)" : "var(--rojo-claro)",
+              color: desglose.ok ? "var(--verde-oscuro)" : "var(--rojo)" }}>
+              {desglose.conIva
+                ? `✓ La suma del desglose (${money(sumaServicios)}) coincide con el TOTAL de la factura (precios con IVA).`
+                : desglose.sinIva
+                  ? `✓ La suma del desglose (${money(sumaServicios)}) coincide con el SUBTOTAL — los precios de este contrato son sin IVA; con IVA (×1.16) = ${money(sumaServicios * 1.16)} = el TOTAL de la factura.`
+                  : `✗ La suma del desglose (${money(sumaServicios)}) no cuadra: ni con el TOTAL (dif. ${money(sumaServicios - desglose.total)}) ni como SUBTOTAL + IVA (dif. ${money(sumaServicios * 1.16 - desglose.total)}).`}
             </div>
           )}
           <input type="text" placeholder="Buscar servicio…" value={filtro} onChange={(e) => setFiltro(e.target.value)}
@@ -289,7 +318,7 @@ export default function DetalleFacturaPage() {
             </div>
           </div>
           <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>
-            Los precios del catálogo <strong>ya incluyen IVA</strong>, por eso la suma del desglose cuadra con el <strong>TOTAL</strong> de la factura (no con el subtotal). El botón "Calcular subtotal" saca el subtotal dividiendo la suma entre 1.16.
+            El desglose se da por bueno si la suma cuadra con el <strong>TOTAL</strong> (contratos con precios que ya incluyen IVA) o con el <strong>SUBTOTAL</strong> (contratos con precios sin IVA; la suma × 1.16 = el total). El botón llena el subtotal y el IVA según el caso.
           </p>
         </div>
       )}
