@@ -166,6 +166,11 @@ export default function NuevaFacturaPage() {
     return servicios.filter((s) => s.nombre_servicio.toLowerCase().includes(f));
   }, [servicios, filtro]);
 
+  // El desglose es OBLIGATORIO cuando el contrato tiene catálogo de conceptos.
+  // (Compra emergente / contratos sin catálogo no tienen servicios → no aplica.)
+  const requiereDesglose = servicios.length > 0;
+  const desgloseListo = sumaServicios > 0;
+
   // Valida los datos del paso 1 (devuelve string de error o null).
   function validarPaso1() {
     if (esOC) {
@@ -204,6 +209,7 @@ export default function NuevaFacturaPage() {
     const err = validarPaso1();
     if (err) { setMensaje(err); setPaso(1); return; }
     if (!calc.ok) { setMensaje("El subtotal + IVA aún no coincide con el total de la factura. Ajústalo antes de guardar."); return; }
+    if (requiereDesglose && !desgloseListo) { setMensaje("Captura el desglose por servicio: es obligatorio en este contrato."); return; }
 
     setCargando(true);
     try {
@@ -532,7 +538,7 @@ export default function NuevaFacturaPage() {
           {servicios.length > 0 && (
             <div style={{ marginTop: 26 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-                <h2 style={{ fontSize: 15, margin: 0 }}>Desglose por servicio <span style={{ fontSize: 12, color: "var(--texto-suave)", fontWeight: 400 }}>(opcional)</span></h2>
+                <h2 style={{ fontSize: 15, margin: 0 }}>Desglose por servicio <span style={{ fontSize: 12, color: "var(--rojo)", fontWeight: 700 }}>(obligatorio)</span></h2>
                 <div style={{ fontSize: 13 }}>
                   Suma del desglose: <strong>{money(sumaServicios)}</strong>{" "}
                   {sumaServicios > 0 && (
@@ -604,14 +610,14 @@ export default function NuevaFacturaPage() {
 
           {/* Acciones del paso 2 */}
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button type="button" className="boton" onClick={guardarYValidar} disabled={cargando || !calc.ok}>
+            <button type="button" className="boton" onClick={guardarYValidar} disabled={cargando || !calc.ok || (requiereDesglose && !desgloseListo)}>
               {cargando ? "Guardando…" : "Guardar y validar"}
             </button>
             <button type="button" className="boton secundario" onClick={() => { setPaso(1); setMensaje(""); }} disabled={cargando}>← Corregir datos</button>
           </div>
-          {!calc.ok && (
+          {(!calc.ok || (requiereDesglose && !desgloseListo)) && (
             <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
-              Para guardar y asignar el folio, el <strong>subtotal + IVA</strong> debe coincidir con el total de la factura.
+              Para guardar y asignar el folio: el <strong>subtotal + IVA</strong> debe coincidir con el total{requiereDesglose ? <> y debes <strong>capturar el desglose por servicio</strong> (obligatorio en este contrato)</> : ""}.
             </p>
           )}
         </>
