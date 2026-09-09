@@ -80,15 +80,16 @@ export default function ValidacionServicioPage() {
       const fac = rFac.data;
       if (!fac) { setMensaje("No se encontró la factura del enlace."); return; }
       const val = rVal.data;
-      let jefeObj = val?.jefe_id ? jefes.find((j) => j.id === val.jefe_id) : null;
+      // El oficio al Adm de Contrato lo genera ÚNICAMENTE el servicio: solo se reimprime si ya existe.
+      if (!val) { setMensaje("Esta factura aún no tiene oficio del servicio (el jefe de servicio debe generarlo primero)."); return; }
+      let jefeObj = val.jefe_id ? jefes.find((j) => j.id === val.jefe_id) : null;
       if (!jefeObj) {
         const { data: jp } = await supabase.from("jefe_proveedor").select("jefe_id").eq("proveedor_id", fac.proveedor_id).limit(1);
         if (jp?.[0]) jefeObj = jefes.find((j) => j.id === jp[0].jefe_id) || null;
       }
-      const dictamen = val?.dictamen || "cumplimiento";
-      const folio = val?.oficio_folio || `OF-${dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-      if (val?.jefe_id) setJefeId(val.jefe_id);
-      setOficio({ jefe: jefeObj, dictamen, motivo: val?.motivo || "", filas: [fac], folio, reimpresion: true });
+      const folio = val.oficio_folio || `OF-${val.dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+      if (val.jefe_id) setJefeId(val.jefe_id);
+      setOficio({ jefe: jefeObj, dictamen: val.dictamen, motivo: val.motivo || "", filas: [fac], folio, reimpresion: true });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, jefes, deepHecho]);
