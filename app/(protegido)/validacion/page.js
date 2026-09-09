@@ -141,9 +141,11 @@ export default function ValidacionServicioPage() {
         </div>
         <div className="hoja">
           {/* HOJA 1 — Oficio de remisión: la jefatura del servicio envía a Finanzas las facturas validadas, adjuntando el oficio de cumplimiento/incumplimiento */}
-          <section className="oficio">
-            <img className="mh" src="/mem-encabezado.png" alt="" />
-            <img className="mf" src="/mem-pie.png" alt="" />
+          <div className="doc-hoja">
+            <table className="wrap">
+              <thead><tr><td className="thc"><img src="/mem-encabezado.png" alt="" className="mem-h" /></td></tr></thead>
+              <tfoot><tr><td className="tfc"><img src="/mem-pie.png" alt="" className="mem-f" /></td></tr></tfoot>
+              <tbody><tr><td className="cuerpo">
                 <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
                   ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
                   HOSPITAL GENERAL DE ZONA NO. 2
@@ -180,11 +182,8 @@ export default function ValidacionServicioPage() {
                     </div>
                   </div>
                 </div>
-          </section>
-          {/* HOJA 2 — Oficio de cumplimiento/incumplimiento dirigido al Administrador del Contrato (firma el Director) */}
-          <section className="oficio">
-            <img className="mh" src="/mem-encabezado.png" alt="" />
-            <img className="mf" src="/mem-pie.png" alt="" />
+                {/* Salto de página: la HOJA 2 (oficio al Adm de Contrato) empieza en hoja nueva */}
+                <div className="salto" />
                 {/* Encabezado institucional (arriba a la izquierda) */}
                 <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: "#222" }}>
                   ÓRGANO DE OPERACIÓN ADMINISTRATIVA DESCONCENTRADA ESTATAL EN AGUASCALIENTES<br />
@@ -263,30 +262,31 @@ export default function ValidacionServicioPage() {
                     Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
                   </div>
                 </div>
-          </section>
+              </td></tr></tbody>
+            </table>
+          </div>
         </div>
         <style>{`
-          /* Cada oficio = una hoja. Membrete (encabezado+pie) FIJO: en impresión se repite en TODAS las hojas del oficio. */
-          .oficio { position:relative; background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:3.1cm 2cm 3cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .mh, .mf { position:absolute; left:1.2cm; right:1.2cm; width:auto; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .mh { top:0.5cm; }
-          .mf { bottom:0.5cm; }
-          .oficio table tr { break-inside:avoid; }
+          /* Membrete que se repite por hoja: encabezado en <thead>, pie en <tfoot>. Sin alturas forzadas (evita hojas vacías). */
+          .doc-hoja { background:#fff; color:#111; box-sizing:border-box; width:21.6cm; min-height:27.9cm; margin:0 auto 20px; padding:0.5cm 1.2cm; border:1px solid var(--borde); border-radius:4px; line-height:1.5; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .wrap { width:100%; border-collapse:collapse; }
+          .mem-h, .mem-f { display:block; width:100%; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .thc, .tfc { padding:0; }
+          .cuerpo { vertical-align:top; padding:0.25cm 0.8cm; }
+          .cuerpo table tr { break-inside:avoid; }
           .firma-bloque { break-inside:avoid; }
-          .oficio p { margin-top: 16px; }
-          @page { size: letter; margin: 0; }
+          .cuerpo p { margin-top: 16px; }
+          /* Salto de página entre oficios dentro de la misma tabla (así el membrete se repite en cada hoja) */
+          .salto { break-before: page; page-break-before: always; height: 0; overflow: hidden; }
+          @page { size: letter; margin: 0.5cm 1.2cm; }
           @media print {
-            /* Los márgenes reservan el espacio del membrete fijo en cada hoja */
-            @page { size: letter; margin: 3.1cm 1.2cm 3cm 1.2cm; }
             body * { visibility: hidden !important; }
             .hoja, .hoja * { visibility: visible !important; }
             .hoja { position:static !important; width:100%; }
             .no-print { display:none !important; }
-            .oficio { border:none !important; border-radius:0 !important; margin:0 !important; width:auto; min-height:0 !important; padding:0 !important; }
-            .oficio + .oficio { break-before: page; }
-            .mh { position:fixed; top:0.5cm; left:1.2cm; right:1.2cm; }
-            .mf { position:fixed; bottom:0.5cm; left:1.2cm; right:1.2cm; }
-            .oficio:not(:first-child) .mh, .oficio:not(:first-child) .mf { display:none; }
+            .doc-hoja { border:none !important; border-radius:0 !important; margin:0 !important; width:100%; min-height:0 !important; padding:0 !important; }
+            thead { display:table-header-group; }
+            tfoot { display:table-footer-group; }
           }
         `}</style>
       </div>
