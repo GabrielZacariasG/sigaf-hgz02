@@ -455,16 +455,29 @@ export default function ValidacionServicioPage() {
                                         <td style={{ ...td, textAlign: "right", fontSize: 13 }}>{money(d.importe)}</td>
                                       </tr>
                                     ))}
-                                    {(() => { const tot = detData[f.id].reduce((s, d) => s + d.importe, 0); const dif = Math.abs(tot - (Number(f.importe_factura) || 0)) <= 1; return (
+                                    {(() => {
+                                      const tot = detData[f.id].reduce((s, d) => s + d.importe, 0);
+                                      const total = Number(f.importe_factura) || 0;
+                                      const conIva = Math.abs(tot - total) <= 1;          // precios ya con IVA
+                                      const sinIva = Math.abs(tot * 1.16 - total) <= 1;   // precios sin IVA (suma = subtotal)
+                                      const ok = conIva || sinIva;
+                                      return (<>
                                       <tr>
-                                        <td style={{ ...td, fontWeight: 700, borderTop: "2px solid #333" }} colSpan={3}>Total en sistema</td>
-                                        <td style={{ ...td, fontWeight: 700, textAlign: "right", borderTop: "2px solid #333", color: dif ? "var(--verde-oscuro)" : "var(--rojo)" }}>{money(tot)}{dif ? " ✓" : " ✗"}</td>
+                                        <td style={{ ...td, fontWeight: 700, borderTop: "2px solid #333" }} colSpan={3}>Total en sistema{sinIva && !conIva ? " (subtotal, sin IVA)" : ""}</td>
+                                        <td style={{ ...td, fontWeight: 700, textAlign: "right", borderTop: "2px solid #333", color: ok ? "var(--verde-oscuro)" : "var(--rojo)" }}>{money(tot)}{ok ? " ✓" : " ✗"}</td>
                                       </tr>
-                                    ); })()}
-                                    <tr>
-                                      <td style={{ ...td, color: "var(--texto-suave)", fontSize: 12 }} colSpan={3}>Importe de la factura (capturado)</td>
-                                      <td style={{ ...td, textAlign: "right", fontSize: 12, color: "var(--texto-suave)" }}>{money(f.importe_factura)}</td>
-                                    </tr>
+                                      {sinIva && !conIva && (
+                                        <tr>
+                                          <td style={{ ...td, color: "var(--texto-suave)", fontSize: 12 }} colSpan={3}>+ IVA (×1.16) = total</td>
+                                          <td style={{ ...td, textAlign: "right", fontSize: 12, color: "var(--verde-oscuro)" }}>{money(tot * 1.16)} ✓</td>
+                                        </tr>
+                                      )}
+                                      <tr>
+                                        <td style={{ ...td, color: "var(--texto-suave)", fontSize: 12 }} colSpan={3}>Importe de la factura (capturado)</td>
+                                        <td style={{ ...td, textAlign: "right", fontSize: 12, color: "var(--texto-suave)" }}>{money(f.importe_factura)}</td>
+                                      </tr>
+                                      </>);
+                                    })()}
                                   </tbody>
                                 </table>
                               </div>
