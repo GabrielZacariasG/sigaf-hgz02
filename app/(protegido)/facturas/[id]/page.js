@@ -235,6 +235,22 @@ export default function FacturaEstatusPage() {
         <div style={{ background: "var(--ambar-claro)", color: "var(--ambar)", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>⚠️ La vigencia del contrato está por vencer.</div>
       )}
 
+      {/* Aviso de la etapa en que se encuentra la factura */}
+      {(() => {
+        const g = factura.estatus_general, f = factura.estatus_firmas;
+        let msg = null;
+        if (g === "gasto_reflejado") msg = "✅ Esta factura ya tiene el gasto reflejado (pagada).";
+        else if (g === "en_tramite_ooad") msg = "🏛️ Esta factura está en trámite en la OOAD.";
+        else if (g === "enviada_ooad") msg = "📤 Esta factura fue enviada a la OOAD para su pago.";
+        else if (f === "autorizada_admin_contrato") msg = "✍️ Autorizada por el Administrador del Contrato.";
+        else if (f === "envio_firmas_admin_contrato") msg = "📤 Enviada a firma del Administrador del Contrato.";
+        else if (f === "autorizada_servicio") msg = "✍️ Validada por el servicio.";
+        else if (f === "envio_firmas_servicio") msg = "📤 Esta factura se encuentra en validación por el servicio.";
+        return msg ? (
+          <div style={{ background: "var(--verde-claro)", color: "var(--verde-oscuro)", padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{msg}</div>
+        ) : null;
+      })()}
+
       {/* Eje general */}
       <div style={{ marginTop: 6 }}>
         <Stepper titulo="Estatus general" flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general} historial={historial} circuito="general" alertasMap={alertasMap} />

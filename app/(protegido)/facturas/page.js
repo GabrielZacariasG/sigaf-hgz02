@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import {
   FLUJO_GENERAL, LABEL_GENERAL,
@@ -48,6 +49,8 @@ export default function FacturasListaPage() {
   const [enviando, setEnviando] = useState(false);
   const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
   const [deepHecho, setDeepHecho] = useState(false); // enlace ?accion=memo|pago&id= (desde el detalle)
+  const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de la que vino el enlace, para "Volver" al detalle
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -210,7 +213,9 @@ export default function FacturasListaPage() {
         await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
       }
       setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
+      const d = deepOrigenId;
       setSel({}); setMemo(null);
+      if (d) router.push(`/facturas/${d}`);
     } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
     setEnviando(false);
   };
@@ -254,6 +259,7 @@ export default function FacturasListaPage() {
     const f = facturas.find((x) => x.id === id);
     setDeepHecho(true);
     if (!f) { setMensaje("No se encontró la factura del enlace."); return; }
+    setDeepOrigenId(id);
     if (accion === "memo") enviarServicio([f]);
     else if (accion === "pago") enviarOOAD([f]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,7 +302,7 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => setOficio(null)}>← Volver</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           <button className="boton" onClick={confirmarOficio} disabled={enviando}>
             {enviando ? "Aplicando…" : esPago ? "Confirmar envío a OOAD" : "Confirmar devolución"}
@@ -426,7 +432,7 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => setMemo(null)}>← Volver</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setMemo(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>
           <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.grupos.length} memo(s) · un jefe por hoja carta</span>
