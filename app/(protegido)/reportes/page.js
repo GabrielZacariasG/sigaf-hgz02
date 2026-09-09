@@ -41,6 +41,9 @@ export default function ReportesPage() {
   const [res, setRes] = useState(null); // { columns, rows, totales, titulo }
   const [generando, setGenerando] = useState(false);
   const [msg, setMsg] = useState("");
+  const [servLista, setServLista] = useState([]);      // conceptos del contrato elegido (para R3b)
+  const [servSel, setServSel] = useState(() => new Set());
+  const [buscaConcepto, setBuscaConcepto] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -66,6 +69,20 @@ export default function ReportesPage() {
     })();
   }, []);
 
+  // Al elegir contrato en R3b, cargar sus conceptos para poder seleccionarlos.
+  useEffect(() => {
+    if (repKey !== "r3b" || !filtros.contrato) { setServLista([]); setServSel(new Set()); return; }
+    const c = contratos.find((x) => x.numero_interno === filtros.contrato);
+    if (!c) { setServLista([]); setServSel(new Set()); return; }
+    let vivo = true;
+    (async () => {
+      const { data } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").eq("contrato_id", c.id).order("nombre_servicio");
+      if (!vivo) return;
+      setServLista(data || []); setServSel(new Set());
+    })();
+    return () => { vivo = false; };
+  }, [repKey, filtros.contrato, contratos]);
+
   const proveedores = useMemo(() => [...new Set([...facturas.map((f) => f.prov), ...contratos.map((c) => c.prov)])].filter((x) => x && x !== "—").sort(), [facturas, contratos]);
   const capitulos = useMemo(() => [...new Set([...facturas.map((f) => f.capNom), ...contratos.map((c) => c.capNom)])].filter((x) => x && x !== "—").sort(), [facturas, contratos]);
   const listaContratos = useMemo(() => [...new Set(contratos.map((c) => c.numero_interno))].sort(), [contratos]);
@@ -74,7 +91,7 @@ export default function ReportesPage() {
     { key: "r1", grupo: "Facturas", label: "Facturas por contrato + estatus", desc: "Listado de facturas con su etapa/estatus actual, importe y validación.", filtros: ["contrato", "proveedor", "capitulo", "etapa", "fechas"] },
     { key: "r2", grupo: "Facturas", label: "Detalle de servicios de una factura", desc: "Conceptos, cantidad, precio unitario e importe de una factura (requiere desglose capturado).", filtros: ["folio"] },
     { key: "r3", grupo: "Facturas", label: "Servicios de mayor impacto", desc: "Ranking de conceptos por importe y cantidad (facturas con desglose).", filtros: ["contrato", "capitulo", "fechas"] },
-    { key: "r3b", grupo: "Facturas", label: "Consumo de un insumo/concepto", desc: "Cuánto se consumió de un concepto (ej. “jitomate”) en un periodo: en qué facturas y el total. Requiere desglose capturado.", filtros: ["concepto", "contrato", "capitulo", "fechas"] },
+    { key: "r3b", grupo: "Facturas", label: "Consumo por conceptos (elige del contrato)", desc: "Elige contrato → marca los conceptos que quieras → te dice en qué facturas salen y cuánto. Sin contrato, puedes buscar por texto. Requiere desglose capturado.", filtros: ["proveedor", "contrato", "fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
   ];
@@ -165,12 +182,24 @@ export default function ReportesPage() {
           rows, totales: { concepto: `TOTAL (${rows.length} conceptos)`, importe: rows.reduce((s, r) => s + r.importe, 0) },
         });
       } else if (repKey === "r3b") {
-        const q = filtros.concepto.trim();
-        if (!q) { setMsg("Escribe el concepto a consultar (ej. jitomate)."); setGenerando(false); return; }
-        const { data: cs } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").ilike("nombre_servicio", `%${q}%`);
-        if (!cs?.length) { setRes({ titulo: `Consumo de "${q}"`, nota: "Ningún concepto coincide con ese texto.", columns: [{ key: "concepto", label: "Concepto" }], rows: [], totales: null }); setGenerando(false); return; }
-        const info = Object.fromEntries(cs.map((c) => [c.id, { n: c.nombre_servicio, p: Number(c.precio_unitario) || 0 }]));
-        const ids = cs.map((c) => c.id);
+        let info, ids, subtitulo;
+        if (filtros.contrato && servLista.length) {
+          // Modo guiado: conceptos seleccionados del contrato
+          const sel = servLista.filter((s) => servSel.has(s.id));
+          if (!sel.length) { setMsg("Marca al menos un concepto del contrato."); setGenerando(false); return; }
+          info = Object.fromEntries(sel.map((c) => [c.id, { n: c.nombre_servicio, p: Number(c.precio_unitario) || 0 }]));
+          ids = sel.map((c) => c.id);
+          subtitulo = `Contrato ${filtros.contrato} · ${sel.length} concepto(s)`;
+        } else {
+          // Modo texto (alternativa)
+          const q = filtros.concepto.trim();
+          if (!q) { setMsg("Elige un contrato y marca conceptos, o escribe un concepto en el buscador de abajo."); setGenerando(false); return; }
+          const { data: cs } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").ilike("nombre_servicio", `%${q}%`);
+          if (!cs?.length) { setRes({ titulo: `Consumo de "${q}"`, nota: "Ningún concepto coincide con ese texto.", columns: [{ key: "concepto", label: "Concepto" }], rows: [], totales: null }); setGenerando(false); return; }
+          info = Object.fromEntries(cs.map((c) => [c.id, { n: c.nombre_servicio, p: Number(c.precio_unitario) || 0 }]));
+          ids = cs.map((c) => c.id);
+          subtitulo = `Búsqueda: "${q}"`;
+        }
         let det = [];
         for (let i = 0; i < ids.length; i += 200) {
           const { data } = await supabase.from("factura_detalle").select("cantidad, factura_id, contrato_servicio_id").in("contrato_servicio_id", ids.slice(i, i + 200));
@@ -185,8 +214,8 @@ export default function ReportesPage() {
           return { folio: f.folio_ingreso, folioProv: f.folio_proveedor, periodo: `${f.periodo_inicio || "—"} → ${f.periodo_fin || "—"}`, prov: f.prov, contrato: f.contrato, concepto: it.n, cantidad: cant, precio: it.p, importe: cant * it.p };
         }).filter(Boolean).sort((a, b) => (a.periodo < b.periodo ? -1 : 1));
         setRes({
-          titulo: `Consumo de "${q}"`,
-          nota: rows.length === 0 ? "No hay consumo capturado de ese concepto con esos filtros (recuerda que solo cuentan facturas con desglose)." : "",
+          titulo: `Consumo por concepto — ${subtitulo}`,
+          nota: rows.length === 0 ? "No hay consumo capturado de esos conceptos con estos filtros (recuerda que solo cuentan facturas con desglose)." : "",
           columns: [
             { key: "folio", label: "Folio ingreso" }, { key: "folioProv", label: "Folio prov." }, { key: "periodo", label: "Periodo" },
             { key: "prov", label: "Proveedor" }, { key: "contrato", label: "Contrato" }, { key: "concepto", label: "Concepto" },
@@ -313,6 +342,38 @@ export default function ReportesPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, alignItems: "end" }}>
               {rep.filtros.map((k) => filtroInputs[k])}
             </div>
+
+            {/* R3b: selector de conceptos del contrato (o búsqueda por texto) */}
+            {repKey === "r3b" && (
+              <div style={{ marginTop: 12 }}>
+                {filtros.contrato && servLista.length > 0 ? (
+                  <div style={{ border: "1px solid var(--borde)", borderRadius: 8, padding: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                      <strong style={{ fontSize: 13 }}>Conceptos del contrato ({servLista.length})</strong>
+                      <input value={buscaConcepto} onChange={(e) => setBuscaConcepto(e.target.value)} placeholder="Filtrar conceptos…" style={{ ...inp, width: 200 }} />
+                      <button className="boton secundario" style={{ fontSize: 12 }} onClick={() => setServSel(new Set(servLista.map((s) => s.id)))}>Todos</button>
+                      <button className="boton secundario" style={{ fontSize: 12 }} onClick={() => setServSel(new Set())}>Ninguno</button>
+                      <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{servSel.size} seleccionado(s)</span>
+                    </div>
+                    <div style={{ maxHeight: 240, overflowY: "auto", display: "grid", gap: 2 }}>
+                      {servLista.filter((s) => s.nombre_servicio.toLowerCase().includes(buscaConcepto.trim().toLowerCase())).map((s) => (
+                        <label key={s.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "3px 4px" }}>
+                          <input type="checkbox" checked={servSel.has(s.id)} onChange={(e) => setServSel((prev) => { const n = new Set(prev); e.target.checked ? n.add(s.id) : n.delete(s.id); return n; })} />
+                          <span style={{ flex: 1 }}>{s.nombre_servicio}</span>
+                          <span style={{ color: "var(--texto-suave)", fontSize: 12 }}>{money(s.precio_unitario)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label style={lbl}>O busca por texto (sin elegir contrato)</label>
+                    <input style={{ ...inp, maxWidth: 360 }} value={filtros.concepto} onChange={(e) => setF("concepto", e.target.value)} placeholder="Ej. jitomate, gasa, oxígeno…" />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
               <button className="boton" onClick={generar} disabled={generando}>{generando ? "Generando…" : "Generar reporte"}</button>
               {res && <button className="boton secundario" onClick={exportExcel}>⬇ Excel</button>}
