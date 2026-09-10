@@ -27,13 +27,15 @@ export default function ProtegidoLayout({ children }) {
       }
     });
 
-    // Reaccionamos a cambios de sesión (p. ej. al cerrar sesión).
-    const { data: sub } = supabase.auth.onAuthStateChange((_evento, session) => {
+    // Reaccionamos a cambios de sesión. Solo expulsamos al login cuando el
+    // usuario CIERRA sesión explícitamente; los estados nulos transitorios
+    // (renovación de token, cambio de pestaña) NO deben sacar de la app.
+    const { data: sub } = supabase.auth.onAuthStateChange((evento, session) => {
       if (!activo) return;
       if (session) {
         setUsuario(session.user);
         setEstado("ok");
-      } else {
+      } else if (evento === "SIGNED_OUT") {
         router.replace("/login");
       }
     });
@@ -43,6 +45,22 @@ export default function ProtegidoLayout({ children }) {
       sub.subscription.unsubscribe();
     };
   }, [router]);
+
+  // Mantener la sesión viva: renovar el token periódicamente y al volver a la
+  // pestaña, para que NO expire durante trabajos largos (capturas extensas).
+  useEffect(() => {
+    const refrescar = () => { supabase.auth.refreshSession().catch(() => {}); };
+    const id = setInterval(refrescar, 10 * 60 * 1000); // cada 10 minutos
+    const onFocus = () => refrescar();
+    const onVis = () => { if (document.visibilityState === "visible") refrescar(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   async function cerrarSesion() {
     await supabase.auth.signOut();
