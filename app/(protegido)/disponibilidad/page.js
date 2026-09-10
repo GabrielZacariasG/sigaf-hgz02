@@ -128,7 +128,7 @@ export default function DisponibilidadIndexPage() {
             Ejercicio 2026 · {capitulos.length} capítulo(s) · {G.cuentas} cuenta(s) · {G.n} facturas
           </div>
         </div>
-        <Link href="/disponibilidad/cargar" className="boton" style={{ textDecoration: "none" }}>Cargar disponibilidad (dispo)</Link>
+        <Link href="/cierre" className="boton secundario" style={{ textDecoration: "none", fontSize: 13 }}>La dispo se sube en “Cierre por disponibilidad” →</Link>
       </div>
 
       {error && <p style={{ color: "var(--rojo)", fontSize: 13, marginTop: 12 }}>{error}</p>}
