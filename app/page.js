@@ -138,12 +138,6 @@ export default function Portal() {
       ruta: '/cierre', listo: true,
     },
     {
-      paso: 'Automatizar', titulo: 'Conciliar reportes',
-      desc: 'Sube los reportes de OOAD/PREI y SIGAF rellena el comprobante, marca pagadas y avanza el estatus solo.',
-      cifra: c.facturas, etiqueta: 'facturas a conciliar',
-      ruta: '/conciliar', listo: true,
-    },
-    {
       paso: 'Consulta', titulo: 'Oficios emitidos',
       desc: 'Busca por folio los oficios de envío a pago, devolución y envío a servicio ya generados.',
       cifra: '🔎', etiqueta: 'buscar por folio',
@@ -160,6 +154,12 @@ export default function Portal() {
       desc: 'Consultas financieras: facturas, conciliación, vigencias… en Excel o PDF.',
       cifra: '📊', etiqueta: 'exportables',
       ruta: '/reportes', listo: true,
+    },
+    {
+      paso: 'Automatizar', titulo: 'Conciliar reportes',
+      desc: 'Suspendido temporalmente — el cierre de pago se hace ahora desde "Cierre por disponibilidad".',
+      cifra: '⛔', etiqueta: 'suspendido',
+      ruta: '/conciliar', listo: false, nota: 'Suspendido temporalmente',
     },
   ];
 
@@ -225,7 +225,7 @@ export default function Portal() {
                 <div className="etiqueta">{t.etiqueta}</div>
                 {!t.listo && (
                   <div style={{ marginTop: 10, fontSize: 12, color: 'var(--texto-suave)' }}>
-                    En construcción
+                    {t.nota || 'En construcción'}
                   </div>
                 )}
               </>
