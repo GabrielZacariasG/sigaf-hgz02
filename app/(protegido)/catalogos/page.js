@@ -164,7 +164,7 @@ function EditorContrato({ contrato, esAdmin, flash, recargar }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").eq("contrato_id", contrato.id).order("nombre_servicio");
+      const { data } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").eq("contrato_id", contrato.id).order("orden", { ascending: true, nullsFirst: false }).order("nombre_servicio");
       setServicios(data || []);
     })();
   }, [contrato.id]);

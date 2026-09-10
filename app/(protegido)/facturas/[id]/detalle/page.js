@@ -55,6 +55,7 @@ export default function DetalleFacturaPage() {
         .from("contrato_servicios")
         .select("id, nombre_servicio, precio_unitario")
         .eq("contrato_id", fac.contrato_id)
+        .order("orden", { ascending: true, nullsFirst: false })
         .order("nombre_servicio", { ascending: true });
       if (!activo) return;
       setServicios(servs || []);

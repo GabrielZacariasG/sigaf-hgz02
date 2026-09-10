@@ -77,7 +77,7 @@ export default function ReportesPage() {
     if (!c) { setServLista([]); setServSel(new Set()); return; }
     let vivo = true;
     (async () => {
-      const { data } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").eq("contrato_id", c.id).order("nombre_servicio");
+      const { data } = await supabase.from("contrato_servicios").select("id, nombre_servicio, precio_unitario").eq("contrato_id", c.id).order("orden", { ascending: true, nullsFirst: false }).order("nombre_servicio");
       if (!vivo) return;
       setServLista(data || []); setServSel(new Set());
     })();

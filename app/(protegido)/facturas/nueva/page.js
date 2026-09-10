@@ -287,6 +287,7 @@ export default function NuevaFacturaPage() {
       .from("contrato_servicios")
       .select("id, nombre_servicio, precio_unitario")
       .eq("contrato_id", contratoId)
+      .order("orden", { ascending: true, nullsFirst: false })
       .order("nombre_servicio", { ascending: true });
     setServicios(servs || []);
     setCargandoServ(false);
