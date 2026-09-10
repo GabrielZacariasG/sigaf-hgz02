@@ -63,6 +63,7 @@ export default function NuevaFacturaPage() {
   const [provOpen, setProvOpen] = useState(false);  // dropdown de sugerencias abierto
   const [contratoId, setContratoId] = useState("");
   const [folioProveedor, setFolioProveedor] = useState("");
+  const [fechaFactura, setFechaFactura] = useState("");   // fecha de la factura (todos los capítulos)
   const [periodoInicio, setPeriodoInicio] = useState("");
   const [periodoFin, setPeriodoFin] = useState("");
   const [importe, setImporte] = useState("");       // TOTAL con IVA
@@ -121,6 +122,7 @@ export default function NuevaFacturaPage() {
         if (d.provText) setProvText(d.provText);
         if (d.contratoId) setContratoId(d.contratoId);
         if (d.folioProveedor) setFolioProveedor(d.folioProveedor);
+        if (d.fechaFactura) setFechaFactura(d.fechaFactura);
         if (d.periodoInicio) setPeriodoInicio(d.periodoInicio);
         if (d.periodoFin) setPeriodoFin(d.periodoFin);
         if (d.importe) setImporte(d.importe);
@@ -167,11 +169,11 @@ export default function NuevaFacturaPage() {
     try {
       if (vacio) { localStorage.removeItem(DRAFT_KEY); return; }
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        modo, proveedorId, provText, contratoId, folioProveedor, periodoInicio, periodoFin,
+        modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin,
         importe, ordenCompra, subtotal, iva, cantidades, paso,
       }));
     } catch { /* localStorage no disponible */ }
-  }, [modo, proveedorId, provText, contratoId, folioProveedor, periodoInicio, periodoFin, importe, ordenCompra, subtotal, iva, cantidades, paso, exito]);
+  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, subtotal, iva, cantidades, paso, exito]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
@@ -267,8 +269,12 @@ export default function NuevaFacturaPage() {
     }
     if (!contratoSel.partida_id || !capituloSel?.id) return "El contrato no tiene cuenta/capítulo asignado. Corrígelo en Catálogos.";
     if (!folioProveedor.trim()) return "Captura el folio de la factura del proveedor.";
-    if (!periodoInicio || !periodoFin) return "Indica el periodo (fecha inicio y fecha fin).";
-    if (periodoFin < periodoInicio) return "La fecha fin no puede ser anterior a la fecha inicio.";
+    if (!fechaFactura) return "Captura la fecha de la factura.";
+    if (!esOC) {
+      // El periodo solo se pide fuera de Compra Emergente.
+      if (!periodoInicio || !periodoFin) return "Indica el periodo (fecha inicio y fecha fin).";
+      if (periodoFin < periodoInicio) return "La fecha fin no puede ser anterior a la fecha inicio.";
+    }
     if (Number.isNaN(parseFloat(importe))) return "Captura un importe (total con IVA) válido.";
     return null;
   }
@@ -339,7 +345,10 @@ export default function NuevaFacturaPage() {
       const tasa = sub > 0 ? Math.round((ivaAmt / sub) * 10000) / 10000 : 0;
       const ok = Math.abs(total - importeNum) <= TOLERANCIA;
 
-      const anio = new Date(periodoInicio + "T00:00:00").getFullYear();
+      // En Compra Emergente no se pide periodo: se usa la fecha de la factura.
+      const periIni = esOC ? fechaFactura : periodoInicio;
+      const periFin = esOC ? fechaFactura : periodoFin;
+      const anio = new Date(periIni + "T00:00:00").getFullYear();
       const folioIngreso = await generarFolioIngreso(prefijoDe(capituloSel?.nombre), anio);
 
       const { data: nueva, error } = await supabase
@@ -347,12 +356,13 @@ export default function NuevaFacturaPage() {
         .insert({
           folio_ingreso: folioIngreso,
           folio_proveedor: folioProveedor,
+          fecha_factura: fechaFactura,
           capitulo_id: capituloSel.id,
           partida_id: contratoSel.partida_id,
           contrato_id: contratoId,
           proveedor_id: proveedorId,
-          periodo_inicio: periodoInicio,
-          periodo_fin: periodoFin,
+          periodo_inicio: periIni,
+          periodo_fin: periFin,
           importe_factura: importeNum,
           subtotal_calculado: sub,
           iva_calculado: ivaAmt,
@@ -401,7 +411,7 @@ export default function NuevaFacturaPage() {
   function capturarOtra() {
     setExito(null); setPaso(1);
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
-    setFolioProveedor(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
+    setFolioProveedor(""); setFechaFactura(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
     setOrdenCompra(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -566,17 +576,23 @@ export default function NuevaFacturaPage() {
             style={folioDup ? { borderColor: "var(--rojo)" } : undefined} />
           {folioDup && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>🔒 Este folio de proveedor ya fue capturado en la factura <strong>{folioDup}</strong>. No se puede duplicar.</div>}
 
-          {/* Periodo */}
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={etiqueta}>Periodo — inicio</label>
-              <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
+          {/* Fecha de la factura (todos los capítulos) */}
+          <label style={etiqueta}>Fecha de la factura</label>
+          <input type="date" value={fechaFactura} onChange={(e) => setFechaFactura(e.target.value)} />
+
+          {/* Periodo — solo fuera de Compra Emergente */}
+          {!esOC && (
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label style={etiqueta}>Periodo — inicio</label>
+                <input type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={etiqueta}>Periodo — fin</label>
+                <input type="date" value={periodoFin} onChange={(e) => setPeriodoFin(e.target.value)} />
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={etiqueta}>Periodo — fin</label>
-              <input type="date" value={periodoFin} onChange={(e) => setPeriodoFin(e.target.value)} />
-            </div>
-          </div>
+          )}
 
           {/* Importe */}
           <label style={etiqueta}>Importe de la factura (total con IVA)</label>
