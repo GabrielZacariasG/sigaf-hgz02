@@ -52,6 +52,8 @@ export default function NuevaFacturaPage() {
   const [modo, setModo] = useState("contrato"); // "contrato" | "oc" (compra emergente)
   const [todosProveedores, setTodosProveedores] = useState([]); // TODOS (para compra emergente)
   const [ordenCompra, setOrdenCompra] = useState("");           // número de OC (compra emergente)
+  const [ocDup, setOcDup] = useState("");                       // folio de factura donde ya se usó esa OC
+  const [folioDup, setFolioDup] = useState("");                 // folio de factura donde ya se usó ese folio de proveedor
 
   // ---- Paso 1: datos de la factura ----
   const [proveedorId, setProveedorId] = useState("");
@@ -171,6 +173,43 @@ export default function NuevaFacturaPage() {
   const requiereDesglose = servicios.length > 0;
   const desgloseListo = sumaServicios > 0;
 
+  // ---- Detección de duplicados (candado) ----
+  // Busca si el folio del proveedor (para ese proveedor) o la OC ya se
+  // capturaron antes en una factura NO anulada. Devuelve los folios de ingreso.
+  async function buscarDuplicados() {
+    let folioDupFolio = "", ocDupFolio = "";
+    const fp = folioProveedor.trim();
+    if (fp && proveedorId) {
+      const { data } = await supabase.from("facturas")
+        .select("folio_ingreso").eq("folio_proveedor", fp).eq("proveedor_id", proveedorId).eq("anulada", false).limit(1);
+      if (data && data.length) folioDupFolio = data[0].folio_ingreso;
+    }
+    if (esOC) {
+      const oc = ordenCompra.trim();
+      if (oc) {
+        const { data } = await supabase.from("facturas")
+          .select("folio_ingreso").eq("orden_compra", oc).eq("anulada", false).limit(1);
+        if (data && data.length) ocDupFolio = data[0].folio_ingreso;
+      }
+    }
+    return { folioDupFolio, ocDupFolio };
+  }
+
+  async function revisarFolioDup() {
+    const fp = folioProveedor.trim();
+    if (!fp || !proveedorId) { setFolioDup(""); return; }
+    const { data } = await supabase.from("facturas")
+      .select("folio_ingreso").eq("folio_proveedor", fp).eq("proveedor_id", proveedorId).eq("anulada", false).limit(1);
+    setFolioDup(data && data.length ? data[0].folio_ingreso : "");
+  }
+  async function revisarOcDup() {
+    const oc = ordenCompra.trim();
+    if (!oc) { setOcDup(""); return; }
+    const { data } = await supabase.from("facturas")
+      .select("folio_ingreso").eq("orden_compra", oc).eq("anulada", false).limit(1);
+    setOcDup(data && data.length ? data[0].folio_ingreso : "");
+  }
+
   // Valida los datos del paso 1 (devuelve string de error o null).
   function validarPaso1() {
     if (esOC) {
@@ -192,6 +231,11 @@ export default function NuevaFacturaPage() {
     const err = validarPaso1();
     if (err) { setMensaje(err); return; }
     setMensaje("");
+    // Candado: no permitir duplicar folio de proveedor ni OC.
+    const { folioDupFolio, ocDupFolio } = await buscarDuplicados();
+    setFolioDup(folioDupFolio); setOcDup(ocDupFolio);
+    if (folioDupFolio) { setMensaje(`El folio de proveedor "${folioProveedor.trim()}" ya fue capturado en la factura ${folioDupFolio}. No se puede duplicar.`); return; }
+    if (ocDupFolio) { setMensaje(`La Orden de Compra "${ordenCompra.trim()}" ya fue capturada en la factura ${ocDupFolio}. No se puede duplicar.`); return; }
     setCargandoServ(true);
     const { data: servs } = await supabase
       .from("contrato_servicios")
@@ -210,6 +254,10 @@ export default function NuevaFacturaPage() {
     if (err) { setMensaje(err); setPaso(1); return; }
     if (!calc.ok) { setMensaje("El subtotal + IVA aún no coincide con el total de la factura. Ajústalo antes de guardar."); return; }
     if (requiereDesglose && !desgloseListo) { setMensaje("Captura el desglose por servicio: es obligatorio en este contrato."); return; }
+    // Candado final anti-duplicados (por si algo cambió tras el paso 1).
+    const dups = await buscarDuplicados();
+    if (dups.folioDupFolio) { setFolioDup(dups.folioDupFolio); setMensaje(`El folio de proveedor "${folioProveedor.trim()}" ya fue capturado en la factura ${dups.folioDupFolio}. No se puede duplicar.`); setPaso(1); return; }
+    if (dups.ocDupFolio) { setOcDup(dups.ocDupFolio); setMensaje(`La Orden de Compra "${ordenCompra.trim()}" ya fue capturada en la factura ${dups.ocDupFolio}. No se puede duplicar.`); setPaso(1); return; }
 
     setCargando(true);
     try {
@@ -297,7 +345,7 @@ export default function NuevaFacturaPage() {
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
-    setOrdenCompra(""); setMensaje("");
+    setOrdenCompra(""); setOcDup(""); setFolioDup(""); setMensaje("");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -417,7 +465,12 @@ export default function NuevaFacturaPage() {
 
               {/* Número de Orden de Compra */}
               <label style={etiqueta}>Número de Orden de Compra (OC)</label>
-              <input type="text" value={ordenCompra} onChange={(e) => setOrdenCompra(e.target.value)} placeholder="Ej. OC-2026-0123" />
+              <input type="text" value={ordenCompra}
+                onChange={(e) => { setOrdenCompra(e.target.value); if (ocDup) setOcDup(""); }}
+                onBlur={revisarOcDup}
+                placeholder="Ej. OC-2026-0123"
+                style={ocDup ? { borderColor: "var(--rojo)" } : undefined} />
+              {ocDup && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>🔒 Esta OC ya fue capturada en la factura <strong>{ocDup}</strong>. No se puede duplicar.</div>}
             </>
           ) : (
             <>
@@ -441,7 +494,11 @@ export default function NuevaFacturaPage() {
 
           {/* Folio proveedor */}
           <label style={etiqueta}>Folio de factura del proveedor</label>
-          <input type="text" value={folioProveedor} onChange={(e) => setFolioProveedor(e.target.value)} />
+          <input type="text" value={folioProveedor}
+            onChange={(e) => { setFolioProveedor(e.target.value); if (folioDup) setFolioDup(""); }}
+            onBlur={revisarFolioDup}
+            style={folioDup ? { borderColor: "var(--rojo)" } : undefined} />
+          {folioDup && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>🔒 Este folio de proveedor ya fue capturado en la factura <strong>{folioDup}</strong>. No se puede duplicar.</div>}
 
           {/* Periodo */}
           <div style={{ display: "flex", gap: 12 }}>
