@@ -69,6 +69,17 @@ export default function CierrePage() {
       const { error: eUp } = await supabase.from("disponibilidad_diaria").upsert(filas, { onConflict: "fecha,cuenta_finat" });
       if (eUp) { setMensaje("No se pudo guardar la foto del día: " + eUp.message); setSubiendo(false); return; }
       setFecha(f);
+      // Si esta dispo es la MÁS RECIENTE, también actualiza el módulo de
+      // Disponibilidad presupuestal (misma agregación) para no cargar dos veces.
+      const { data: maxRows } = await supabase.from("disponibilidad_diaria").select("fecha").order("fecha", { ascending: false }).limit(1);
+      if ((maxRows?.[0]?.fecha || f) <= f) {
+        const payloadPres = cuentas.map((c) => ({
+          cuenta_prei: c.cuenta_finat, periodo: "2026",
+          presupuesto: c.presupuesto, gasto: c.gasto, comprometido: c.comprometido,
+          precomprometido: c.precomprometido, disponible: c.disponible, actualizado_at: new Date().toISOString(),
+        }));
+        await supabase.from("disponibilidad_presupuestal").upsert(payloadPres, { onConflict: "cuenta_prei,periodo" });
+      }
       // 2) Buscar la foto anterior (fecha < f)
       const { data: prevRows } = await supabase.from("disponibilidad_diaria").select("fecha").lt("fecha", f).order("fecha", { ascending: false }).limit(1);
       const fp = prevRows?.[0]?.fecha || null;
