@@ -1,7 +1,8 @@
 -- =====================================================================
 -- SIGAF · RECARGA de AREA MEDICA desde la cedula (hoja am)
--- Reemplaza TODAS las facturas del capitulo 'Area Medica Ctas' por las
--- 1569 de la cedula. Transaccional. Contrato por numero_interno.
+-- Reemplaza SOLO las facturas MIGRADAS (created_by IS NULL) por las 1569
+-- de la cedula; CONSERVA intactas las capturadas en la app por los usuarios.
+-- Transaccional. Contrato por numero_interno. Folios HGZ2-AM-HIST-*.
 -- Estatus: PAGADO/PASIVO->pagada, TP->OOAD, AC->autorizada servicio, SE->en servicio, DEV->devuelta, FACTURADO->en revision.
 -- Pasivos -> periodo 2025, ejercicio enero 2026.
 -- =====================================================================
@@ -1586,22 +1587,29 @@ do $$ declare n int; begin
   select count(distinct contrato) into n from stg_am s where not exists (select 1 from contratos c where c.numero_interno=s.contrato); if n>0 then raise exception 'Hay % contratos de la cedula que no existen en SIGAF', n; end if;
 end $$;
 
--- Liberar referencias sin cascade y borrar las facturas actuales de Area Medica
-update facturas set sustituida_por_id=null where sustituida_por_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas');
-update facturas set sustituye_a_id=null where sustituye_a_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas');
-do $$ begin if to_regclass('ooad_import_filas') is not null then update ooad_import_filas set matched_factura_id=null where matched_factura_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas'); end if; end $$;
-delete from facturas f using capitulos c where f.capitulo_id=c.id and c.nombre='Area Medica Ctas';
+-- IMPORTANTE: solo se reemplazan las facturas MIGRADAS (created_by IS NULL).
+-- Las capturadas en la app por los usuarios (created_by NO nulo) NO se tocan.
+-- Liberar referencias sin cascade (solo de las migradas que se van a borrar)
+update facturas set sustituida_por_id=null where sustituida_por_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas' and f.created_by is null);
+update facturas set sustituye_a_id=null where sustituye_a_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas' and f.created_by is null);
+do $$ begin if to_regclass('ooad_import_filas') is not null then update ooad_import_filas set matched_factura_id=null where matched_factura_id in (select f.id from facturas f join capitulos c on c.id=f.capitulo_id where c.nombre='Area Medica Ctas' and f.created_by is null); end if; end $$;
+delete from facturas f using capitulos c where f.capitulo_id=c.id and c.nombre='Area Medica Ctas' and f.created_by is null;
 
--- Insertar
+-- Insertar (folios HIST para no chocar con las capturadas en la app; se omite
+-- cualquier renglon de la cedula cuyo folio de proveedor ya exista capturado en vivo)
 with base as (
   select s.*, row_number() over (order by s.contrato, s.anio, s.mes, s.folio) rn,
          ct.id contrato_id, ct.partida_id, ct.proveedor_id, pa.capitulo_id
   from stg_am s
   join contratos ct on ct.numero_interno = s.contrato
   join partidas pa on pa.id = ct.partida_id
+  where not exists (
+    select 1 from facturas f2 join capitulos c2 on c2.id=f2.capitulo_id
+    where c2.nombre='Area Medica Ctas' and f2.folio_proveedor = s.folio
+  )
 )
 insert into facturas (folio_ingreso, folio_proveedor, capitulo_id, partida_id, contrato_id, proveedor_id, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, tasa_iva, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, es_pasivo)
-select 'HGZ2-AM-2026-'||lpad(rn::text,6,'0'), folio, capitulo_id, partida_id, contrato_id, proveedor_id,
+select 'HGZ2-AM-HIST-'||lpad(rn::text,6,'0'), folio, capitulo_id, partida_id, contrato_id, proveedor_id,
        make_date(anio,mes,1), (make_date(anio,mes,1) + interval '1 month - 1 day')::date, mes_ej, anio_ej, 0.16, importe,
        gen::estatus_general, fir::estatus_firmas, ped::estatus_pedido_recepcion, cr, pasivo
 from base;
