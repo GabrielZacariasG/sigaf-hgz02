@@ -132,6 +132,12 @@ export default function Portal() {
       cifra: c.facturas, etiqueta: 'facturas', ruta: '/validacion', listo: true,
     },
     {
+      paso: 'Cierre', titulo: 'Cierre por disponibilidad',
+      desc: 'Sube la disponibilidad del día; SIGAF compara con el día anterior y te sugiere, por cuenta, qué facturas se pagaron (gasto reflejado) o se revirtieron. Tú capturas el CR y confirmas.',
+      cifra: '💧', etiqueta: 'día vs día anterior',
+      ruta: '/cierre', listo: true,
+    },
+    {
       paso: 'Automatizar', titulo: 'Conciliar reportes',
       desc: 'Sube los reportes de OOAD/PREI y SIGAF rellena el comprobante, marca pagadas y avanza el estatus solo.',
       cifra: c.facturas, etiqueta: 'facturas a conciliar',
