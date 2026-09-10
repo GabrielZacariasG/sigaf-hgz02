@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
+
+const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
 const TOLERANCIA = 1.0; // $1.00 MXN
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -76,6 +78,9 @@ export default function NuevaFacturaPage() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [exito, setExito] = useState(null);         // { id, folio, validacion_ok }
+  const [borradorAviso, setBorradorAviso] = useState(false); // se restauró un borrador
+  const restaurando = useRef(false);                // evita que el auto-select borre el contrato restaurado
+  const draftListo = useRef(false);                 // no persistir hasta terminar de restaurar
 
   // Cargar TODOS los contratos con su proveedor, partida y capítulo. Con eso,
   // al elegir proveedor y contrato se autocompleta capítulo y cuenta.
@@ -103,6 +108,33 @@ export default function NuevaFacturaPage() {
     return () => { activo = false; };
   }, []);
 
+  // Restaurar un borrador guardado localmente (para no perder la captura si se
+  // cerró la sesión o se recargó la página).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        restaurando.current = true;
+        if (d.modo) setModo(d.modo);
+        if (d.proveedorId) setProveedorId(d.proveedorId);
+        if (d.provText) setProvText(d.provText);
+        if (d.contratoId) setContratoId(d.contratoId);
+        if (d.folioProveedor) setFolioProveedor(d.folioProveedor);
+        if (d.periodoInicio) setPeriodoInicio(d.periodoInicio);
+        if (d.periodoFin) setPeriodoFin(d.periodoFin);
+        if (d.importe) setImporte(d.importe);
+        if (d.ordenCompra) setOrdenCompra(d.ordenCompra);
+        if (d.subtotal) setSubtotal(d.subtotal);
+        if (d.iva) setIva(d.iva);
+        if (d.cantidades) setCantidades(d.cantidades);
+        if (d.paso === 2) setPaso(2);
+        setBorradorAviso(true);
+      }
+    } catch { /* localStorage no disponible */ }
+    draftListo.current = true;
+  }, []);
+
   const esOC = modo === "oc";
   // Contratos marco de Compra Emergente (uno por cuenta, número CE-####).
   const contratosCE = useMemo(() => contratos.filter((c) => (c.numero_interno || "").startsWith("CE-")), [contratos]);
@@ -121,11 +153,25 @@ export default function NuevaFacturaPage() {
   // Al cambiar de proveedor (SOLO modo contrato): si tiene un solo contrato, se
   // elige solo; si no, se limpia. En modo OC el contrato marco es independiente.
   useEffect(() => {
+    if (restaurando.current) { restaurando.current = false; return; } // no pisar el contrato restaurado
     if (esOC) return;
     if (!proveedorId) { setContratoId(""); return; }
     setContratoId(contratosProv.length === 1 ? contratosProv[0].id : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proveedorId, esOC]);
+
+  // Guardar el borrador local cada vez que cambian los datos capturados.
+  useEffect(() => {
+    if (!draftListo.current || exito) return;
+    const vacio = !proveedorId && !folioProveedor && !importe && !ordenCompra && !subtotal && !iva && Object.keys(cantidades).length === 0;
+    try {
+      if (vacio) { localStorage.removeItem(DRAFT_KEY); return; }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        modo, proveedorId, provText, contratoId, folioProveedor, periodoInicio, periodoFin,
+        importe, ordenCompra, subtotal, iva, cantidades, paso,
+      }));
+    } catch { /* localStorage no disponible */ }
+  }, [modo, proveedorId, provText, contratoId, folioProveedor, periodoInicio, periodoFin, importe, ordenCompra, subtotal, iva, cantidades, paso, exito]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
@@ -261,6 +307,16 @@ export default function NuevaFacturaPage() {
 
     setCargando(true);
     try {
+      // Asegurar sesión válida (refrescar el token) antes de guardar. Si expiró
+      // y no se puede refrescar, NO se pierde la captura: queda en el borrador.
+      try { await supabase.auth.refreshSession(); } catch { /* sin refresh token */ }
+      const { data: sess } = await supabase.auth.getSession();
+      if (!sess?.session) {
+        setMensaje("Tu sesión expiró. Vuelve a iniciar sesión (en otra pestaña) y regresa aquí: tus datos siguen guardados como borrador. Luego presiona «Guardar y validar» otra vez.");
+        setCargando(false);
+        return;
+      }
+
       const { data: userData } = await supabase.auth.getUser();
       const authId = userData?.user?.id ?? null;
       let createdBy = null;
@@ -330,6 +386,7 @@ export default function NuevaFacturaPage() {
         }
       }
 
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       if (avisoDetalle) setMensaje("Factura guardada" + avisoDetalle);
       setExito({ id: nueva.id, folio: nueva.folio_ingreso, validacion_ok: ok });
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -345,7 +402,8 @@ export default function NuevaFacturaPage() {
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
-    setOrdenCompra(""); setOcDup(""); setFolioDup(""); setMensaje("");
+    setOrdenCompra(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -382,6 +440,13 @@ export default function NuevaFacturaPage() {
       {/* Encabezado con pasos */}
       <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: 0 }}>Paso {paso} de 2</p>
       <h1 style={{ fontSize: 22, margin: "2px 0 4px" }}>{paso1 ? "Captura de factura" : "Validación de la factura"}</h1>
+
+      {borradorAviso && (
+        <div style={{ background: "var(--verde-claro)", color: "var(--verde-oscuro)", border: "1px solid var(--verde-oscuro)", borderRadius: 8, padding: "8px 12px", fontSize: 13, margin: "6px 0 10px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span>💾 Se restauró un <strong>borrador</strong> de una captura sin terminar. Revisa los datos y continúa.</span>
+          <button type="button" onClick={capturarOtra} style={{ marginLeft: "auto", background: "none", border: "1px solid var(--verde-oscuro)", color: "var(--verde-oscuro)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>Descartar borrador</button>
+        </div>
+      )}
 
       {/* ============ PASO 1 · DATOS ============ */}
       {paso1 && (
