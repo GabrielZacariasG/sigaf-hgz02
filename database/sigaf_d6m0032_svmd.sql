@@ -1,16 +1,17 @@
 -- =====================================================================
--- SIGAF · D6M0032: precios modificados (amarillos) + orden desde hoja SVMD
--- Actualiza precio_unitario SOLO de los conceptos en amarillo (166) y
--- fija el orden de los 248 conceptos segun el Excel. Empareja por nombre normalizado.
--- Correr en el SQL Editor de Supabase.
+-- SIGAF · D6M0032: precios (amarillos) + orden desde SVMD, con match por CONTENCION
+-- Los nombres del SVMD son cortos; los de SIGAF traen presentacion. Se empareja
+-- cuando el nombre de SIGAF CONTIENE el del SVMD y hay UNA sola coincidencia.
+-- Aplica orden (248) y precio (amarillos) SOLO en coincidencias unicas.
+-- Reporta ambiguos y sin-match para resolver a mano.
 -- =====================================================================
 
 create or replace function sigaf_norm(t text) returns text language sql immutable as $$
   select btrim(regexp_replace(lower(translate(coalesce(t,''),'ÁÀÂÄÉÈÊËÍÌÎÏÓÒÔÖÚÙÛÜÑáàâäéèêëíìîïóòôöúùûüñ','aaaaeeeeiiiioooouuuunaaaaeeeeiiiioooouuuun')),'[^a-z0-9]+',' ','g'));
 $$;
 
-create temp table stg_svmd(orden int, nombre text, precio_nuevo numeric);
-insert into stg_svmd(orden,nombre,precio_nuevo) values
+drop table if exists stg_all; create temp table stg_all(orden int, nombre text, precio_yellow numeric);
+insert into stg_all(orden,nombre,precio_yellow) values
 (1,'ACEITE DE MAIZ',68),
 (2,'ACEITE DE OLIVA',230),
 (3,'ACEITUNA VERDE CON SEMILLA',21.36),
@@ -260,24 +261,26 @@ insert into stg_svmd(orden,nombre,precio_nuevo) values
 (247,'Bebida pasteurizada lista para beber de naranja',null),
 (248,'Bebida pasteurizada lista para beber de naranja',null);
 
--- dedup por nombre normalizado (primera aparicion)
-create temp table stg_ded as select distinct on (sigaf_norm(nombre)) sigaf_norm(nombre) nn, orden, precio_nuevo from stg_svmd order by sigaf_norm(nombre), orden;
+drop table if exists cand; create temp table cand as
+  select s.orden, s.nombre svmd, s.precio_yellow, cs.id cs_id, cs.nombre_servicio sigaf
+  from stg_all s join contrato_servicios cs
+    on cs.contrato_id in (select id from contratos where numero_interno='D6M0032')
+   and sigaf_norm(cs.nombre_servicio) like '%'||sigaf_norm(s.nombre)||'%';
 
-update contrato_servicios cs set orden = d.orden, precio_unitario = coalesce(d.precio_nuevo, cs.precio_unitario)
-from stg_ded d, contratos c
-where cs.contrato_id=c.id and c.numero_interno='D6M0032' and sigaf_norm(cs.nombre_servicio)=d.nn;
+-- ORDEN: coincidencias unicas (un svmd -> un solo concepto)
+update contrato_servicios cs set orden = c.orden
+  from cand c where c.cs_id=cs.id and c.svmd in (select svmd from cand group by svmd having count(*)=1);
 
--- ============ VERIFICACIÓN ============
--- 1) Conceptos del contrato y cuántos quedaron con orden
-select count(*) as total_conceptos, count(orden) as con_orden
-from contrato_servicios cs join contratos c on c.id=cs.contrato_id
-where c.numero_interno='D6M0032';
+-- PRECIO: solo amarillos, coincidencia unica
+update contrato_servicios cs set precio_unitario = c.precio_yellow
+  from cand c where c.cs_id=cs.id and c.precio_yellow is not null and c.svmd in (select svmd from cand group by svmd having count(*)=1);
 
--- 2) Nombres del Excel que NO cruzaron con el catálogo (revisar / decidir)
-select s.orden, s.nombre
-from stg_svmd s
-where not exists (
-  select 1 from contrato_servicios cs join contratos c on c.id=cs.contrato_id
-  where c.numero_interno='D6M0032' and sigaf_norm(cs.nombre_servicio)=sigaf_norm(s.nombre)
-)
-order by s.orden;
+-- ============ REPORTES (revisar a mano) ============
+-- Amarillos AMBIGUOS (mas de un concepto de SIGAF los contiene)
+select s.orden, s.nombre as svmd_amarillo, count(c.cs_id) as candidatos, string_agg(c.sigaf,' | ') as opciones
+from stg_all s join cand c on c.svmd=s.nombre where s.precio_yellow is not null
+group by s.orden, s.nombre having count(c.cs_id)>1 order by s.orden;
+
+-- Amarillos SIN coincidencia en SIGAF
+select s.orden, s.nombre as svmd_amarillo_sin_match
+from stg_all s where s.precio_yellow is not null and not exists (select 1 from cand c where c.svmd=s.nombre) order by s.orden;
