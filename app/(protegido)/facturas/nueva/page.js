@@ -57,7 +57,6 @@ export default function NuevaFacturaPage() {
   const [clave, setClave] = useState("");                       // CLAVE de cuadro básico (compra emergente)
   const [claveInfo, setClaveInfo] = useState(null);             // { descripcion, cuenta_prei, centro_costo, precio }
   const [claveMsg, setClaveMsg] = useState("");                 // aviso del cruce de la clave
-  const [crEmergente, setCrEmergente] = useState("");           // CR / contrarecibo (compra emergente, manual)
   const [ocDup, setOcDup] = useState("");                       // folio de factura donde ya se usó esa OC
   const [folioDup, setFolioDup] = useState("");                 // folio de factura donde ya se usó ese folio de proveedor
 
@@ -133,7 +132,6 @@ export default function NuevaFacturaPage() {
         if (d.ordenCompra) setOrdenCompra(d.ordenCompra);
         if (d.clave) setClave(d.clave);
         if (d.claveInfo) setClaveInfo(d.claveInfo);
-        if (d.crEmergente) setCrEmergente(d.crEmergente);
         if (d.subtotal) setSubtotal(d.subtotal);
         if (d.iva) setIva(d.iva);
         if (d.cantidades) setCantidades(d.cantidades);
@@ -177,10 +175,10 @@ export default function NuevaFacturaPage() {
       if (vacio) { localStorage.removeItem(DRAFT_KEY); return; }
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin,
-        importe, ordenCompra, clave, claveInfo, crEmergente, subtotal, iva, cantidades, paso,
+        importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, paso,
       }));
     } catch { /* localStorage no disponible */ }
-  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, clave, claveInfo, crEmergente, subtotal, iva, cantidades, paso, exito]);
+  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, paso, exito]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
@@ -402,7 +400,6 @@ export default function NuevaFacturaPage() {
           orden_compra: esOC ? ordenCompra.trim() : null,
           clave_cbi: esOC && clave.trim() ? clave.trim() : null,
           centro_costo: esOC && claveInfo?.centro_costo ? claveInfo.centro_costo : null,
-          cr_contrarecibo: esOC && crEmergente.trim() ? crEmergente.trim() : null,
           estatus_general: "capturada",
           created_by: createdBy,
         })
@@ -446,7 +443,7 @@ export default function NuevaFacturaPage() {
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setFechaFactura(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
-    setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setCrEmergente(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
+    setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -499,7 +496,7 @@ export default function NuevaFacturaPage() {
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             {[["contrato", "Por contrato"], ["oc", "Compra emergente (OC)"]].map(([val, txt]) => (
               <button key={val} type="button"
-                onClick={() => { if (modo === val) return; setModo(val); setProveedorId(""); setProvText(""); setContratoId(""); setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setCrEmergente(""); setMensaje(""); }}
+                onClick={() => { if (modo === val) return; setModo(val); setProveedorId(""); setProvText(""); setContratoId(""); setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setMensaje(""); }}
                 style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontSize: 13,
                   border: `1px solid ${modo === val ? "var(--verde)" : "#d8dbd9"}`,
                   background: modo === val ? "var(--verde-claro)" : "#fff",
@@ -577,7 +574,6 @@ export default function NuevaFacturaPage() {
                   <div style={{ marginTop: 3 }}>
                     {claveInfo.cuenta_prei && <>Cuenta <strong>{claveInfo.cuenta_prei}</strong> · </>}
                     {claveInfo.centro_costo && <>Centro de costos <strong>{claveInfo.centro_costo}</strong></>}
-                    {claveInfo.precio != null && <> · Precio ref. {money(claveInfo.precio)}</>}
                   </div>
                 </div>
               )}
@@ -606,12 +602,6 @@ export default function NuevaFacturaPage() {
                 placeholder="Ej. OC-2026-0123"
                 style={ocDup ? { borderColor: "var(--rojo)" } : undefined} />
               {ocDup && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>🔒 Esta OC ya fue capturada en la factura <strong>{ocDup}</strong>. No se puede duplicar.</div>}
-
-              {/* CR / contrarecibo (opcional, no se deriva de la clave) */}
-              <label style={etiqueta}>CR / contrarecibo (opcional)</label>
-              <input type="text" value={crEmergente}
-                onChange={(e) => setCrEmergente(e.target.value)}
-                placeholder="Ej. 452743 (si ya lo tienes)" />
             </>
           ) : (
             <>
@@ -677,7 +667,7 @@ export default function NuevaFacturaPage() {
           <div style={{ ...card, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
             <div><strong>Proveedor:</strong> {proveedores.find((p) => p.id === proveedorId)?.razon_social || "—"}</div>
             <div><strong>Folio proveedor:</strong> {folioProveedor}</div>
-            {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}{crEmergente ? <> · <strong>CR:</strong> {crEmergente}</> : ""}</div>}
+            {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}</div>}
             {esOC && clave && <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}><strong>Clave:</strong> {clave}{claveInfo?.descripcion ? ` — ${claveInfo.descripcion}` : ""}{claveInfo?.centro_costo ? ` · CC ${claveInfo.centro_costo}` : ""}</div>}
             <div style={{ gridColumn: "1 / -1" }}><strong>{esOC ? "Compra emergente:" : "Contrato:"}</strong> {contratoSel?.numero_interno} — {contratoSel?.adquisicion_servicio}</div>
             <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}>{[capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`].filter(Boolean).join(" · ")}</div>
