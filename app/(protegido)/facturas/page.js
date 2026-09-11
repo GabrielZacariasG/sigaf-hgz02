@@ -299,6 +299,33 @@ export default function FacturasListaPage() {
     else if (accion === "pago") enviarOOAD([f]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, facturas, provJefes, deepHecho]);
+  // Reimpresión de un oficio YA emitido (mismo folio, sin volver a insertar).
+  // Enlace desde /oficios: /facturas?reimprimir=<oficioId>
+  const [reHecho, setReHecho] = useState(false);
+  useEffect(() => {
+    if (reHecho) return;
+    const rid = new URLSearchParams(window.location.search).get("reimprimir");
+    if (!rid) return;
+    setReHecho(true);
+    (async () => {
+      const { data: o } = await supabase.from("oficios")
+        .select("tipo, folio, destinatario, factura_ids, motivo, created_at").eq("id", rid).maybeSingle();
+      if (!o) { setMensaje("No se encontró el oficio a reimprimir."); return; }
+      const ids = (o.factura_ids && o.factura_ids.length) ? o.factura_ids : ["00000000-0000-0000-0000-000000000000"];
+      const { data: fs } = await supabase.from("facturas")
+        .select("id, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), partidas ( cuenta_finat, cuenta_prei )")
+        .in("id", ids);
+      const fil = (fs || []).map((f) => ({ ...f, prov: f.proveedores?.razon_social || "—", contrato: f.contratos?.numero_interno || "—", pp: f.partidas?.cuenta_finat || f.partidas?.cuenta_prei || "—" }));
+      const fecha = o.created_at ? new Date(o.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) : null;
+      if (o.tipo === "envio_servicio") {
+        setMemo({ reimpresion: true, fecha, grupos: [{ jefe: o.destinatario || "Jefe(a) de Servicio", jefatura: null, filas: fil, folio: o.folio }] });
+      } else {
+        setOficio({ tipo: o.tipo === "envio_pago" ? "pago" : "devolucion", reimpresion: true, fecha, docs: [{ filas: fil, folio: o.folio, prov: o.destinatario, motivo: o.motivo || "" }] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reHecho]);
+
   const setDoc = (i, campo, val) => setOficio((o) => ({ ...o, docs: o.docs.map((d, idx) => (idx === i ? { ...d, [campo]: val } : d)) }));
   const confirmarOficio = async () => {
     setEnviando(true);
@@ -334,7 +361,7 @@ export default function FacturasListaPage() {
   // ---- OFICIO(s) en hoja membretada (envío a pago / devolución) ----
   if (oficio) {
     const esPago = oficio.tipo === "pago";
-    const hoy = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+    const hoy = oficio.fecha || new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
     const fFact = (f) => (f.periodo_fin ? new Date(f.periodo_fin + "T00:00:00").toLocaleDateString("es-MX") : "—");
     const inp = { padding: "9px 12px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14 };
     const oTh = { fontSize: 11, textAlign: "left", padding: "5px 7px", border: "1px solid #333", background: "#f2f2f2", fontWeight: 700 };
@@ -342,14 +369,17 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); else if (oficio.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : oficio.reimpresion ? " a oficios" : ""}</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
-          <button className="boton" onClick={confirmarOficio} disabled={enviando}>
-            {enviando ? "Aplicando…" : esPago ? "Confirmar envío a OOAD" : "Confirmar devolución"}
-          </button>
-          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{oficio.docs.length} oficio(s) · hoja membretada</span>
+          {!oficio.reimpresion && (
+            <button className="boton" onClick={confirmarOficio} disabled={enviando}>
+              {enviando ? "Aplicando…" : esPago ? "Confirmar envío a OOAD" : "Confirmar devolución"}
+            </button>
+          )}
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{oficio.reimpresion ? "Reimpresión" : `${oficio.docs.length} oficio(s)`} · hoja membretada</span>
         </div>
         {/* Controles editables (no se imprimen) */}
+        {!oficio.reimpresion && (
         <div className="no-print" style={{ display: "grid", gap: 10, marginBottom: 14 }}>
           {oficio.docs.map((d, i) => (
             <div key={i} style={{ border: "1px solid var(--borde)", borderRadius: 6, padding: 10, display: "grid", gap: 8 }}>
@@ -363,6 +393,7 @@ export default function FacturasListaPage() {
             </div>
           ))}
         </div>
+        )}
         <div className="hoja">
           {/* oficio de pago/devolución — membrete por hoja (thead/tfoot); varios docs = salto entre ellos */}
           <div className="doc-hoja">
@@ -472,10 +503,10 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setMemo(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setMemo(null); if (d) router.push(`/facturas/${d}`); else if (memo.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : memo.reimpresion ? " a oficios" : ""}</button>
           <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
-          <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>
-          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.grupos.length} memo(s) · un jefe por hoja carta</span>
+          {!memo.reimpresion && <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>}
+          <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.reimpresion ? "Reimpresión" : `${memo.grupos.length} memo(s)`} · un jefe por hoja carta</span>
         </div>
         <div className="hoja">
           <div className="doc-hoja">
@@ -496,7 +527,7 @@ export default function FacturasListaPage() {
                   {/* Memorándum N° y fecha — arriba a la derecha */}
                   <div style={{ textAlign: "right", marginTop: 16, fontSize: 13.5, lineHeight: 1.7 }}>
                     <div>Memorándum N° <strong>{g.folio}</strong></div>
-                    <div>Aguascalientes, Ags., a {new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</div>
+                    <div>Aguascalientes, Ags., a {memo.fecha || new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.</div>
                   </div>
                   {/* Destinatario en bloque */}
                   <div style={{ marginTop: 8, fontSize: 14 }}>

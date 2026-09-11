@@ -84,11 +84,11 @@ export default function OficiosPage() {
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
           <thead><tr>
             <th style={th}>Folio</th><th style={th}>Tipo</th><th style={th}>Destinatario</th>
-            <th style={th}>Facturas</th><th style={{ ...th, textAlign: "right" }}>Total</th><th style={th}>Fecha</th><th style={th}></th>
+            <th style={th}>Facturas</th><th style={{ ...th, textAlign: "right" }}>Total</th><th style={th}>Fecha</th><th style={th}></th><th style={th}></th>
           </tr></thead>
           <tbody>
             {filtrados.length === 0 ? (
-              <tr><td style={{ ...td, color: "var(--texto-suave)" }} colSpan={7}>Sin oficios con ese criterio.</td></tr>
+              <tr><td style={{ ...td, color: "var(--texto-suave)" }} colSpan={8}>Sin oficios con ese criterio.</td></tr>
             ) : filtrados.map((o) => (
               <Fragment key={o.id}>
                 <tr style={{ cursor: "pointer" }} onClick={() => verDetalle(o)}>
@@ -98,11 +98,14 @@ export default function OficiosPage() {
                   <td style={td}>{(o.factura_ids || []).length}</td>
                   <td style={{ ...td, textAlign: "right" }}>{money(o.total)}</td>
                   <td style={td}>{new Date(o.created_at).toLocaleDateString("es-MX")}</td>
+                  <td style={td} onClick={(e) => e.stopPropagation()}>
+                    <Link href={`/facturas?reimprimir=${o.id}`} className="boton secundario" style={{ fontSize: 12, padding: "5px 10px", textDecoration: "none", whiteSpace: "nowrap" }}>🖨 Reimprimir</Link>
+                  </td>
                   <td style={{ ...td, color: "var(--texto-suave)" }}>{abierto === o.id ? "▲" : "▼"}</td>
                 </tr>
                 {abierto === o.id && (
                   <tr>
-                    <td style={{ ...td, background: "var(--fondo, #f8f8f8)" }} colSpan={7}>
+                    <td style={{ ...td, background: "var(--fondo, #f8f8f8)" }} colSpan={8}>
                       {o.motivo && <div style={{ marginBottom: 8, fontSize: 13 }}><strong>Motivo:</strong> {o.motivo}</div>}
                       {!facturas[o.id] ? <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>Cargando facturas…</span> : (
                         <table style={{ width: "100%", borderCollapse: "collapse" }}>
