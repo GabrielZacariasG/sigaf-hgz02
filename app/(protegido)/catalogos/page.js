@@ -106,20 +106,34 @@ function AltaContrato({ proveedores, partidas, flash, recargar }) {
   const [abierto, setAbierto] = useState(false);
   const [f, setF] = useState(vacio);
   const [guardando, setGuardando] = useState(false);
+  const [provNuevo, setProvNuevo] = useState(false);   // proveedor a dar de alta
+  const [provNombre, setProvNombre] = useState("");
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   const partidasOrd = useMemo(() => [...partidas].sort((a, b) => String(a.cuenta_finat || a.cuenta_prei || "").localeCompare(String(b.cuenta_finat || b.cuenta_prei || ""))), [partidas]);
 
   async function guardar() {
     if (!f.numero_interno.trim()) return flash("Captura el número de contrato.");
-    if (!f.proveedor_id) return flash("Elige el proveedor.");
+    if (provNuevo ? !provNombre.trim() : !f.proveedor_id) return flash("Elige o captura el proveedor.");
     if (!f.partida_id) return flash("Elige la cuenta (partida).");
     if (!f.vigencia_inicio || !f.vigencia_fin) return flash("Indica la vigencia (inicio y fin).");
     if (f.vigencia_fin < f.vigencia_inicio) return flash("La vigencia fin no puede ser anterior al inicio.");
     setGuardando(true);
+    // Resolver proveedor: si es nuevo, darlo de alta (o reutilizar si ya existe por nombre)
+    let proveedorId = f.proveedor_id;
+    if (provNuevo) {
+      const nom = provNombre.trim();
+      const { data: ex } = await supabase.from("proveedores").select("id").ilike("razon_social", nom).limit(1);
+      if (ex && ex.length) proveedorId = ex[0].id;
+      else {
+        const { data: nuevoProv, error: ep } = await supabase.from("proveedores").insert({ razon_social: nom }).select("id").single();
+        if (ep) { setGuardando(false); return flash("No se pudo crear el proveedor: " + ep.message); }
+        proveedorId = nuevoProv.id;
+      }
+    }
     const payload = {
       numero_interno: f.numero_interno.trim(),
-      proveedor_id: f.proveedor_id,
+      proveedor_id: proveedorId,
       partida_id: f.partida_id,
       administrador_contrato: f.administrador_contrato.trim() || null,
       adquisicion_servicio: f.adquisicion_servicio.trim() || null,
@@ -131,8 +145,8 @@ function AltaContrato({ proveedores, partidas, flash, recargar }) {
     const { error } = await supabase.from("contratos").insert(payload);
     setGuardando(false);
     if (error) return flash("No se pudo crear el contrato: " + error.message);
-    flash("✅ Contrato creado. Ábrelo en la lista para cargarle sus servicios/precios.");
-    setF(vacio); setAbierto(false); recargar();
+    flash("✅ Contrato creado" + (provNuevo ? " (con proveedor nuevo)" : "") + ". Ábrelo en la lista para cargarle sus servicios/precios.");
+    setF(vacio); setProvNuevo(false); setProvNombre(""); setAbierto(false); recargar();
   }
 
   const lbl = { fontSize: 12, color: "var(--texto-suave)", display: "block", marginBottom: 3 };
@@ -143,15 +157,25 @@ function AltaContrato({ proveedores, partidas, flash, recargar }) {
     <div style={{ ...card, marginBottom: 12, borderColor: "var(--verde)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <strong style={{ fontSize: 15 }}>Nuevo contrato</strong>
-        <button className="boton secundario" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setF(vacio); setAbierto(false); }}>Cancelar</button>
+        <button className="boton secundario" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setF(vacio); setProvNuevo(false); setProvNombre(""); setAbierto(false); }}>Cancelar</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
         <div><label style={lbl}>Número de contrato *</label><input value={f.numero_interno} onChange={(e) => set("numero_interno", e.target.value)} placeholder="Ej. 050GYR032N…-000-00" style={inp} /></div>
         <div><label style={lbl}>Proveedor *</label>
-          <select value={f.proveedor_id} onChange={(e) => set("proveedor_id", e.target.value)} style={inp}>
-            <option value="">Elige…</option>
-            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.razon_social}</option>)}
-          </select>
+          {provNuevo ? (
+            <>
+              <input value={provNombre} onChange={(e) => setProvNombre(e.target.value)} placeholder="Razón social del proveedor nuevo" style={inp} />
+              <button type="button" onClick={() => { setProvNuevo(false); setProvNombre(""); }} style={{ fontSize: 11, color: "var(--verde)", background: "none", border: "none", cursor: "pointer", padding: "3px 0" }}>← elegir uno existente</button>
+            </>
+          ) : (
+            <>
+              <select value={f.proveedor_id} onChange={(e) => set("proveedor_id", e.target.value)} style={inp}>
+                <option value="">Elige…</option>
+                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.razon_social}</option>)}
+              </select>
+              <button type="button" onClick={() => { setProvNuevo(true); set("proveedor_id", ""); }} style={{ fontSize: 11, color: "var(--verde)", background: "none", border: "none", cursor: "pointer", padding: "3px 0" }}>＋ proveedor nuevo</button>
+            </>
+          )}
         </div>
         <div><label style={lbl}>Cuenta (partida) *</label>
           <select value={f.partida_id} onChange={(e) => set("partida_id", e.target.value)} style={inp}>
