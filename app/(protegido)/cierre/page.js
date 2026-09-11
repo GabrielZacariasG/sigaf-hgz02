@@ -44,16 +44,72 @@ export default function CierrePage() {
   const [sel, setSel] = useState(() => new Set());
   const [crMap, setCrMap] = useState({});        // factura_id -> CR capturado
   const [aplicando, setAplicando] = useState(false);
+  const [dias, setDias] = useState([]);          // fechas de dispo guardadas (historial), desc
+  const [q, setQ] = useState("");                // buscador de factura
+  const [resultados, setResultados] = useState(null); // [{...factura}] | null
+  const [buscando, setBuscando] = useState(false);
 
-  // Catálogo de partidas para nombrar cuentas.
+  // Catálogo de partidas para nombrar cuentas + historial de días guardados.
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("partidas").select("cuenta_finat, nombre, capitulos ( nombre )");
       const m = {};
       (data || []).forEach((p) => { if (p.cuenta_finat) m[p.cuenta_finat] = { nombre: p.nombre, capitulo: p.capitulos?.nombre }; });
       setPartidasMap(m);
+      const ds = await cargarDias();
+      if (ds.length) verDia(ds[0]); // abre el día más reciente
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lista de fechas con dispo guardada (historial).
+  async function cargarDias() {
+    const { data } = await supabase.from("disponibilidad_diaria").select("fecha").order("fecha", { ascending: false });
+    const u = [...new Set((data || []).map((r) => r.fecha))];
+    setDias(u);
+    return u;
+  }
+
+  // Reconstruye los movimientos de un día YA guardado (contra el día anterior
+  // guardado). No requiere volver a subir el archivo.
+  async function verDia(f) {
+    if (!f) return;
+    setMensaje(""); setAbierto(null); setFacs({}); setSel(new Set()); setCrMap({});
+    const { data: hoyData } = await supabase.from("disponibilidad_diaria").select("cuenta_finat, gasto").eq("fecha", f);
+    const cuentas = hoyData || [];
+    const { data: prevRows } = await supabase.from("disponibilidad_diaria").select("fecha").lt("fecha", f).order("fecha", { ascending: false }).limit(1);
+    const fp = prevRows?.[0]?.fecha || null;
+    setFecha(f); setFechaPrev(fp || "");
+    if (!fp) { setMovs([]); setMensaje("Es el primer día registrado: no hay un día anterior con qué comparar."); return; }
+    const { data: prevData } = await supabase.from("disponibilidad_diaria").select("cuenta_finat, gasto").eq("fecha", fp);
+    const prevMap = {}; (prevData || []).forEach((r) => (prevMap[r.cuenta_finat] = Number(r.gasto) || 0));
+    const lista = [];
+    for (const c of cuentas) {
+      const gp = prevMap[c.cuenta_finat] ?? 0;
+      const d = Math.round((Number(c.gasto) - gp) * 100) / 100;
+      if (Math.abs(d) >= 0.01) lista.push({ cuenta: c.cuenta_finat, gastoPrev: gp, gastoHoy: Number(c.gasto), delta: d });
+    }
+    lista.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    setMovs(lista);
+    if (lista.length === 0) setMensaje("No hubo movimientos de gasto entre el " + fp + " y el " + f + ".");
+  }
+
+  // Buscar una factura (folio o CR) y ver en qué día se marcó (fecha_pago).
+  async function buscarFactura(e) {
+    if (e) e.preventDefault();
+    const t = q.trim();
+    if (!t) { setResultados(null); return; }
+    setBuscando(true);
+    const { data, error } = await supabase
+      .from("facturas")
+      .select("id, folio_ingreso, folio_proveedor, cr_contrarecibo, fecha_pago, importe_factura, estatus_general, proveedores ( razon_social ), partidas ( cuenta_finat )")
+      .or(`folio_ingreso.ilike.%${t}%,folio_proveedor.ilike.%${t}%,cr_contrarecibo.ilike.%${t}%`)
+      .neq("anulada", true)
+      .limit(25);
+    setBuscando(false);
+    if (error) { setMensaje("No pude buscar: " + error.message); return; }
+    setResultados(data || []);
+  }
 
   async function onFile(e) {
     const file = e.target.files?.[0];
@@ -68,7 +124,6 @@ export default function CierrePage() {
       const filas = cuentas.map((c) => ({ fecha: f, ...c }));
       const { error: eUp } = await supabase.from("disponibilidad_diaria").upsert(filas, { onConflict: "fecha,cuenta_finat" });
       if (eUp) { setMensaje("No se pudo guardar la foto del día: " + eUp.message); setSubiendo(false); return; }
-      setFecha(f);
       // Si esta dispo es la MÁS RECIENTE, también actualiza el módulo de
       // Disponibilidad presupuestal (misma agregación) para no cargar dos veces.
       const { data: maxRows } = await supabase.from("disponibilidad_diaria").select("fecha").order("fecha", { ascending: false }).limit(1);
@@ -80,23 +135,10 @@ export default function CierrePage() {
         }));
         await supabase.from("disponibilidad_presupuestal").upsert(payloadPres, { onConflict: "cuenta_prei,periodo" });
       }
-      // 2) Buscar la foto anterior (fecha < f)
-      const { data: prevRows } = await supabase.from("disponibilidad_diaria").select("fecha").lt("fecha", f).order("fecha", { ascending: false }).limit(1);
-      const fp = prevRows?.[0]?.fecha || null;
-      setFechaPrev(fp || "");
-      if (!fp) { setMensaje("Foto guardada. Aún no hay un día anterior para comparar — sube la del día siguiente para ver los movimientos."); setSubiendo(false); return; }
-      const { data: prevData } = await supabase.from("disponibilidad_diaria").select("cuenta_finat, gasto").eq("fecha", fp);
-      const prevMap = {}; (prevData || []).forEach((r) => (prevMap[r.cuenta_finat] = Number(r.gasto) || 0));
-      // 3) Variación de GASTO por cuenta
-      const lista = [];
-      for (const c of cuentas) {
-        const gp = prevMap[c.cuenta_finat] ?? 0;
-        const d = Math.round((c.gasto - gp) * 100) / 100;
-        if (Math.abs(d) >= 0.01) lista.push({ cuenta: c.cuenta_finat, gastoPrev: gp, gastoHoy: c.gasto, delta: d });
-      }
-      lista.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-      setMovs(lista);
-      if (lista.length === 0) setMensaje("Foto guardada. No hubo movimientos de gasto respecto al " + fp + ".");
+      // Refrescar el historial y mostrar el día recién subido (reconstruye movs
+      // desde lo guardado, igual que al consultar un día del historial).
+      await cargarDias();
+      await verDia(f);
     } catch (err) {
       setMensaje("Error al procesar el archivo: " + err.message);
     } finally {
@@ -180,14 +222,69 @@ export default function CierrePage() {
         Sube la disponibilidad del día (reporte FINAT IMKK022). SIGAF la compara con el día anterior y te muestra, por cuenta, dónde <strong>subió el gasto</strong> (se pagó) o <strong>bajó</strong> (se canceló un CR), y te sugiere las facturas que lo explican. Tú capturas el contra‑recibo y confirmas.
       </p>
 
-      {/* Cargar */}
+      {/* Cargar + historial de días */}
       <div style={{ ...card, marginTop: 12, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <label className="boton" style={{ cursor: "pointer" }}>
           {subiendo ? "Procesando…" : "＋ Subir disponibilidad (CSV)"}
           <input type="file" accept=".csv,text/csv" onChange={onFile} disabled={subiendo} style={{ display: "none" }} />
         </label>
-        {fecha && <div style={{ fontSize: 13 }}>Foto del <strong>{fecha}</strong>{fechaPrev ? <> · comparada contra <strong>{fechaPrev}</strong></> : ""}</div>}
+        {dias.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>Consultar día:</span>
+            <select value={fecha} onChange={(e) => verDia(e.target.value)}
+              style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid var(--borde)", fontSize: 13 }}>
+              {dias.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>({dias.length} día(s) guardado(s))</span>
+          </div>
+        )}
+        {fecha && <div style={{ fontSize: 13 }}>Mostrando el <strong>{fecha}</strong>{fechaPrev ? <> · vs <strong>{fechaPrev}</strong></> : ""}</div>}
       </div>
+
+      {/* Buscador de factura: en qué día se marcó con contra‑recibo */}
+      <form onSubmit={buscarFactura} style={{ ...card, marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input value={q} onChange={(e) => { setQ(e.target.value); if (resultados) setResultados(null); }}
+          placeholder="Buscar factura por folio de ingreso, folio de proveedor o contra‑recibo…"
+          style={{ flex: 1, minWidth: 280, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14 }} />
+        <button className="boton" type="submit" disabled={buscando}>{buscando ? "Buscando…" : "Buscar"}</button>
+        {resultados && <button type="button" className="boton secundario" onClick={() => { setQ(""); setResultados(null); }}>Limpiar</button>}
+      </form>
+
+      {resultados && (
+        <div style={{ ...card, marginTop: 8, padding: 0, overflow: "hidden" }}>
+          {resultados.length === 0 ? (
+            <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--texto-suave)" }}>Sin resultados para “{q}”.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>
+                  <th style={th}>Folio ingreso</th><th style={th}>Proveedor</th><th style={{ ...th, textAlign: "right" }}>Importe</th>
+                  <th style={th}>Contra‑recibo</th><th style={th}>Día marcado</th><th style={th}></th>
+                </tr></thead>
+                <tbody>
+                  {resultados.map((f) => {
+                    const dia = f.fecha_pago || null;
+                    return (
+                      <tr key={f.id}>
+                        <td style={{ ...td, fontWeight: 600 }}>{f.folio_ingreso}<div style={{ fontSize: 11, color: "var(--texto-suave)", fontWeight: 400 }}>{f.folio_proveedor}</div></td>
+                        <td style={{ ...td, fontSize: 12 }}>{f.proveedores?.razon_social || "—"}</td>
+                        <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(f.importe_factura)}</td>
+                        <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{String(f.cr_contrarecibo ?? "").trim() || "—"}</td>
+                        <td style={td}>{dia ? <strong>{dia}</strong> : <span style={{ color: "var(--texto-suave)" }}>sin pago aún</span>}</td>
+                        <td style={td}>
+                          {dia && dias.includes(dia)
+                            ? <button className="boton secundario" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => { verDia(dia); setResultados(null); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }}>Ver ese día →</button>
+                            : dia ? <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>(sin dispo de ese día)</span> : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {mensaje && <p style={{ fontSize: 13, color: mensaje.startsWith("✅") ? "var(--verde-oscuro)" : "var(--rojo)", marginTop: 10 }}>{mensaje}</p>}
 

@@ -298,7 +298,10 @@ export default function FacturaEstatusPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <Link href="/facturas" style={{ fontSize: 13, color: "var(--texto-suave)" }}>← Todas las facturas</Link>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
+        <button type="button" className="boton secundario" onClick={() => router.push("/facturas")} style={{ fontSize: 13 }}>← Regresar</button>
+        <Link href="/" style={{ fontSize: 13, color: "var(--texto-suave)" }}>Menú</Link>
+      </div>
       <h1 style={{ fontSize: 22, margin: "6px 0 2px" }}>{factura.folio_ingreso}</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 0 }}>Folio proveedor {factura.folio_proveedor}</p>
 

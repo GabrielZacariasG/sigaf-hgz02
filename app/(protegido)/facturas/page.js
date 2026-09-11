@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
@@ -71,6 +71,42 @@ export default function FacturasListaPage() {
   const [deepHecho, setDeepHecho] = useState(false); // enlace ?accion=memo|pago&id= (desde el detalle)
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de la que vino el enlace, para "Volver" al detalle
   const router = useRouter();
+  const filtrosRestaurados = useRef(false); // no persistir hasta terminar de restaurar
+
+  // Restaurar la búsqueda/filtros al volver (p. ej. desde el detalle de una
+  // factura), para no perder lo que ya se había filtrado.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("sigaf_facturas_filtros");
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.busqueda != null) setBusqueda(d.busqueda);
+        if (d.fProv != null) setFProv(d.fProv);
+        if (d.fContrato != null) setFContrato(d.fContrato);
+        if (d.fEstatus !== undefined) setFEstatus(d.fEstatus);
+        if (d.fEtapa !== undefined) setFEtapa(d.fEtapa);
+        if (d.fCapitulo !== undefined) setFCapitulo(d.fCapitulo);
+        if (d.soloCR != null) setSoloCR(d.soloCR);
+        if (d.soloEstancadas != null) setSoloEstancadas(d.soloEstancadas);
+        if (d.soloDiscrep != null) setSoloDiscrep(d.soloDiscrep);
+        if (d.ocultarCompl != null) setOcultarCompl(d.ocultarCompl);
+        if (d.agrupar != null) setAgrupar(d.agrupar);
+        if (d.verTodo != null) setVerTodo(d.verTodo);
+      }
+    } catch { /* sessionStorage no disponible */ }
+    filtrosRestaurados.current = true;
+  }, []);
+
+  // Guardar la búsqueda/filtros cada vez que cambian, para restaurarlos al volver.
+  useEffect(() => {
+    if (!filtrosRestaurados.current) return;
+    try {
+      sessionStorage.setItem("sigaf_facturas_filtros", JSON.stringify({
+        busqueda, fProv, fContrato, fEstatus, fEtapa, fCapitulo,
+        soloCR, soloEstancadas, soloDiscrep, ocultarCompl, agrupar, verTodo,
+      }));
+    } catch { /* noop */ }
+  }, [busqueda, fProv, fContrato, fEstatus, fEtapa, fCapitulo, soloCR, soloEstancadas, soloDiscrep, ocultarCompl, agrupar, verTodo]);
 
   useEffect(() => {
     (async () => {

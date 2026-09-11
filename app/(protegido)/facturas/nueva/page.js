@@ -478,6 +478,10 @@ export default function NuevaFacturaPage() {
 
   return (
     <div style={{ maxWidth: paso1 ? 520 : 720, margin: "0 auto" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+        <button type="button" className="boton secundario" onClick={() => router.push("/facturas")} style={{ fontSize: 13 }}>← Regresar</button>
+        <button type="button" onClick={() => router.push("/")} style={{ fontSize: 13, color: "var(--texto-suave)", background: "none", border: "none", cursor: "pointer" }}>Menú</button>
+      </div>
       {/* Encabezado con pasos */}
       <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: 0 }}>Paso {paso} de 2</p>
       <h1 style={{ fontSize: 22, margin: "2px 0 4px" }}>{paso1 ? "Captura de factura" : "Validación de la factura"}</h1>
