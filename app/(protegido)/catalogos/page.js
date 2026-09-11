@@ -91,7 +91,7 @@ export default function CatalogosPage() {
         ))}
       </div>
 
-      {tab === "contratos" && <TabContratos contratos={contratos} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
+      {tab === "contratos" && <TabContratos contratos={contratos} proveedores={proveedores} partidas={partidas} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
       {tab === "admins" && <TabAdministradores contratos={contratos} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
       {tab === "jefes" && <TabJefes jefes={jefes} proveedores={proveedores} jefeProv={jefeProv} flash={flash} recargar={cargar} />}
       {tab === "proveedores" && <TabProveedores proveedores={proveedores} esAdmin={esAdmin} flash={flash} recargar={cargar} />}
@@ -100,8 +100,82 @@ export default function CatalogosPage() {
   );
 }
 
+/* ---------------- ALTA de contrato nuevo ---------------- */
+function AltaContrato({ proveedores, partidas, flash, recargar }) {
+  const vacio = { numero_interno: "", proveedor_id: "", partida_id: "", administrador_contrato: "", adquisicion_servicio: "", vigencia_inicio: "", vigencia_fin: "", monto_minimo: "", monto_maximo: "" };
+  const [abierto, setAbierto] = useState(false);
+  const [f, setF] = useState(vacio);
+  const [guardando, setGuardando] = useState(false);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  const partidasOrd = useMemo(() => [...partidas].sort((a, b) => String(a.cuenta_finat || a.cuenta_prei || "").localeCompare(String(b.cuenta_finat || b.cuenta_prei || ""))), [partidas]);
+
+  async function guardar() {
+    if (!f.numero_interno.trim()) return flash("Captura el número de contrato.");
+    if (!f.proveedor_id) return flash("Elige el proveedor.");
+    if (!f.partida_id) return flash("Elige la cuenta (partida).");
+    if (!f.vigencia_inicio || !f.vigencia_fin) return flash("Indica la vigencia (inicio y fin).");
+    if (f.vigencia_fin < f.vigencia_inicio) return flash("La vigencia fin no puede ser anterior al inicio.");
+    setGuardando(true);
+    const payload = {
+      numero_interno: f.numero_interno.trim(),
+      proveedor_id: f.proveedor_id,
+      partida_id: f.partida_id,
+      administrador_contrato: f.administrador_contrato.trim() || null,
+      adquisicion_servicio: f.adquisicion_servicio.trim() || null,
+      vigencia_inicio: f.vigencia_inicio,
+      vigencia_fin: f.vigencia_fin,
+      monto_minimo: f.monto_minimo !== "" ? Number(f.monto_minimo) : null,
+      monto_maximo: f.monto_maximo !== "" ? Number(f.monto_maximo) : null,
+    };
+    const { error } = await supabase.from("contratos").insert(payload);
+    setGuardando(false);
+    if (error) return flash("No se pudo crear el contrato: " + error.message);
+    flash("✅ Contrato creado. Ábrelo en la lista para cargarle sus servicios/precios.");
+    setF(vacio); setAbierto(false); recargar();
+  }
+
+  const lbl = { fontSize: 12, color: "var(--texto-suave)", display: "block", marginBottom: 3 };
+  if (!abierto) {
+    return <div style={{ marginBottom: 10 }}><button className="boton" onClick={() => setAbierto(true)}>＋ Nuevo contrato</button></div>;
+  }
+  return (
+    <div style={{ ...card, marginBottom: 12, borderColor: "var(--verde)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <strong style={{ fontSize: 15 }}>Nuevo contrato</strong>
+        <button className="boton secundario" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setF(vacio); setAbierto(false); }}>Cancelar</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div><label style={lbl}>Número de contrato *</label><input value={f.numero_interno} onChange={(e) => set("numero_interno", e.target.value)} placeholder="Ej. 050GYR032N…-000-00" style={inp} /></div>
+        <div><label style={lbl}>Proveedor *</label>
+          <select value={f.proveedor_id} onChange={(e) => set("proveedor_id", e.target.value)} style={inp}>
+            <option value="">Elige…</option>
+            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.razon_social}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Cuenta (partida) *</label>
+          <select value={f.partida_id} onChange={(e) => set("partida_id", e.target.value)} style={inp}>
+            <option value="">Elige…</option>
+            {partidasOrd.map((p) => <option key={p.id} value={p.id}>{(p.cuenta_finat || p.cuenta_prei || "—") + " — " + (p.nombre || "") + (p.capitulos?.nombre ? " · " + p.capitulos.nombre : "")}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Administrador de contrato</label><input value={f.administrador_contrato} onChange={(e) => set("administrador_contrato", e.target.value)} style={inp} /></div>
+        <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Objeto / adquisición-servicio</label><input value={f.adquisicion_servicio} onChange={(e) => set("adquisicion_servicio", e.target.value)} placeholder="Ej. Subrogación de hemodiálisis…" style={inp} /></div>
+        <div><label style={lbl}>Vigencia — inicio *</label><input type="date" value={f.vigencia_inicio} onChange={(e) => set("vigencia_inicio", e.target.value)} style={inp} /></div>
+        <div><label style={lbl}>Vigencia — fin *</label><input type="date" value={f.vigencia_fin} onChange={(e) => set("vigencia_fin", e.target.value)} style={inp} /></div>
+        <div><label style={lbl}>Monto mínimo</label><input type="number" step="0.01" value={f.monto_minimo} onChange={(e) => set("monto_minimo", e.target.value)} style={inp} /></div>
+        <div><label style={lbl}>Monto máximo</label><input type="number" step="0.01" value={f.monto_maximo} onChange={(e) => set("monto_maximo", e.target.value)} style={inp} /></div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : "Crear contrato"}</button>
+        <span style={{ fontSize: 12, color: "var(--texto-suave)", marginLeft: 10 }}>Después ábrelo en la lista para cargarle sus servicios/precios.</span>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- CONTRATOS + servicios/precios ---------------- */
-function TabContratos({ contratos, esAdmin, flash, recargar }) {
+function TabContratos({ contratos, proveedores, partidas, esAdmin, flash, recargar }) {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState(null); // contrato_id expandido
   const filtrados = useMemo(() => {
@@ -112,6 +186,7 @@ function TabContratos({ contratos, esAdmin, flash, recargar }) {
 
   return (
     <div>
+      {esAdmin && <AltaContrato proveedores={proveedores} partidas={partidas} flash={flash} recargar={recargar} />}
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar contrato, proveedor, administrador…" style={{ ...inp, maxWidth: 420, marginBottom: 10 }} />
       <div style={{ ...card, padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
