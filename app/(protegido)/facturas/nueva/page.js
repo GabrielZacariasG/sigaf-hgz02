@@ -54,6 +54,10 @@ export default function NuevaFacturaPage() {
   const [modo, setModo] = useState("contrato"); // "contrato" | "oc" (compra emergente)
   const [todosProveedores, setTodosProveedores] = useState([]); // TODOS (para compra emergente)
   const [ordenCompra, setOrdenCompra] = useState("");           // número de OC (compra emergente)
+  const [clave, setClave] = useState("");                       // CLAVE de cuadro básico (compra emergente)
+  const [claveInfo, setClaveInfo] = useState(null);             // { descripcion, cuenta_prei, centro_costo, precio }
+  const [claveMsg, setClaveMsg] = useState("");                 // aviso del cruce de la clave
+  const [crEmergente, setCrEmergente] = useState("");           // CR / contrarecibo (compra emergente, manual)
   const [ocDup, setOcDup] = useState("");                       // folio de factura donde ya se usó esa OC
   const [folioDup, setFolioDup] = useState("");                 // folio de factura donde ya se usó ese folio de proveedor
 
@@ -127,6 +131,9 @@ export default function NuevaFacturaPage() {
         if (d.periodoFin) setPeriodoFin(d.periodoFin);
         if (d.importe) setImporte(d.importe);
         if (d.ordenCompra) setOrdenCompra(d.ordenCompra);
+        if (d.clave) setClave(d.clave);
+        if (d.claveInfo) setClaveInfo(d.claveInfo);
+        if (d.crEmergente) setCrEmergente(d.crEmergente);
         if (d.subtotal) setSubtotal(d.subtotal);
         if (d.iva) setIva(d.iva);
         if (d.cantidades) setCantidades(d.cantidades);
@@ -165,15 +172,15 @@ export default function NuevaFacturaPage() {
   // Guardar el borrador local cada vez que cambian los datos capturados.
   useEffect(() => {
     if (!draftListo.current || exito) return;
-    const vacio = !proveedorId && !folioProveedor && !importe && !ordenCompra && !subtotal && !iva && Object.keys(cantidades).length === 0;
+    const vacio = !proveedorId && !folioProveedor && !importe && !ordenCompra && !clave && !subtotal && !iva && Object.keys(cantidades).length === 0;
     try {
       if (vacio) { localStorage.removeItem(DRAFT_KEY); return; }
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin,
-        importe, ordenCompra, subtotal, iva, cantidades, paso,
+        importe, ordenCompra, clave, claveInfo, crEmergente, subtotal, iva, cantidades, paso,
       }));
     } catch { /* localStorage no disponible */ }
-  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, subtotal, iva, cantidades, paso, exito]);
+  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, clave, claveInfo, crEmergente, subtotal, iva, cantidades, paso, exito]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
@@ -256,6 +263,29 @@ export default function NuevaFacturaPage() {
     const { data } = await supabase.from("facturas")
       .select("folio_ingreso").eq("orden_compra", oc).eq("anulada", false).limit(1);
     setOcDup(data && data.length ? data[0].folio_ingreso : "");
+  }
+
+  // Cruce de la CLAVE (como en la cédula): teclea la clave -> resuelve
+  // descripción + cuenta (PREI) + centro de costos, y AUTOSELECCIONA el
+  // marco de compra emergente correcto (CE-<cuenta>).
+  async function buscarClave() {
+    const c = clave.trim();
+    if (!c) { setClaveInfo(null); setClaveMsg(""); return; }
+    const { data, error } = await supabase
+      .from("cb_claves")
+      .select("descripcion, partida_sai, cuenta_prei, centro_costo, precio")
+      .eq("clave", c)
+      .maybeSingle();
+    if (error) { setClaveMsg("No pude consultar el catálogo de claves (¿ya importaste cb_claves?): " + error.message); return; }
+    if (!data) { setClaveInfo(null); setClaveMsg(`La clave "${c}" no está en el catálogo. Revísala o selecciona la cuenta manualmente.`); return; }
+    setClaveInfo(data);
+    if (data.cuenta_prei) {
+      const marco = contratosCE.find((m) => (m.numero_interno || "") === "CE-" + data.cuenta_prei);
+      if (marco) { setContratoId(marco.id); setClaveMsg(""); }
+      else { setClaveMsg(`La clave resuelve la cuenta ${data.cuenta_prei}, pero no hay un marco de compra emergente CE-${data.cuenta_prei}. Selecciona la cuenta manualmente.`); }
+    } else {
+      setClaveMsg("Esta clave no tiene cuenta/centro de costos mapeado (familia fuera de compra emergente). Selecciona la cuenta manualmente.");
+    }
   }
 
   // Valida los datos del paso 1 (devuelve string de error o null).
@@ -370,6 +400,9 @@ export default function NuevaFacturaPage() {
           tasa_iva: tasa,
           validacion_ok: ok,
           orden_compra: esOC ? ordenCompra.trim() : null,
+          clave_cbi: esOC && clave.trim() ? clave.trim() : null,
+          centro_costo: esOC && claveInfo?.centro_costo ? claveInfo.centro_costo : null,
+          cr_contrarecibo: esOC && crEmergente.trim() ? crEmergente.trim() : null,
           estatus_general: "capturada",
           created_by: createdBy,
         })
@@ -413,7 +446,7 @@ export default function NuevaFacturaPage() {
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setFechaFactura(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
     setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
-    setOrdenCompra(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
+    setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setCrEmergente(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -466,7 +499,7 @@ export default function NuevaFacturaPage() {
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             {[["contrato", "Por contrato"], ["oc", "Compra emergente (OC)"]].map(([val, txt]) => (
               <button key={val} type="button"
-                onClick={() => { if (modo === val) return; setModo(val); setProveedorId(""); setProvText(""); setContratoId(""); setOrdenCompra(""); setMensaje(""); }}
+                onClick={() => { if (modo === val) return; setModo(val); setProveedorId(""); setProvText(""); setContratoId(""); setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setCrEmergente(""); setMensaje(""); }}
                 style={{ flex: 1, padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontSize: 13,
                   border: `1px solid ${modo === val ? "var(--verde)" : "#d8dbd9"}`,
                   background: modo === val ? "var(--verde-claro)" : "#fff",
@@ -530,7 +563,27 @@ export default function NuevaFacturaPage() {
 
           {esOC ? (
             <>
-              {/* Cuenta (partida) de la compra emergente — marco CE- */}
+              {/* CLAVE del producto — resuelve cuenta + centro de costos (como en la cédula) */}
+              <label style={etiqueta}>Clave del producto (cuadro básico)</label>
+              <input type="text" value={clave}
+                onChange={(e) => { setClave(e.target.value); if (claveMsg) setClaveMsg(""); }}
+                onBlur={buscarClave}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarClave(); } }}
+                placeholder="Ej. 010.000.0265.0000  (Enter para buscar)"
+                style={claveMsg ? { borderColor: "var(--rojo)" } : undefined} />
+              {claveInfo && claveInfo.descripcion && (
+                <div style={{ fontSize: 12.5, color: "var(--verde-oscuro)", background: "var(--verde-claro)", border: "1px solid var(--verde-oscuro)", borderRadius: 8, padding: "8px 10px", marginTop: 6 }}>
+                  <div><strong>{claveInfo.descripcion}</strong></div>
+                  <div style={{ marginTop: 3 }}>
+                    {claveInfo.cuenta_prei && <>Cuenta <strong>{claveInfo.cuenta_prei}</strong> · </>}
+                    {claveInfo.centro_costo && <>Centro de costos <strong>{claveInfo.centro_costo}</strong></>}
+                    {claveInfo.precio != null && <> · Precio ref. {money(claveInfo.precio)}</>}
+                  </div>
+                </div>
+              )}
+              {claveMsg && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>{claveMsg}</div>}
+
+              {/* Cuenta (partida) de la compra emergente — marco CE- (se autollena con la clave) */}
               <label style={etiqueta}>Cuenta (partida) de la compra emergente</label>
               <select required value={contratoId} onChange={(e) => setContratoId(e.target.value)} style={selectSty}>
                 <option value="">{contratosCE.length === 0 ? "No hay cuentas de Compra Emergente (corre el SQL)" : "Selecciona la cuenta…"}</option>
@@ -538,6 +591,12 @@ export default function NuevaFacturaPage() {
                   <option key={c.id} value={c.id}>{[c.partidas?.cuenta_finat, c.partidas?.nombre].filter(Boolean).join(" — ")}</option>
                 ))}
               </select>
+
+              {/* Centro de costos — automático desde la clave */}
+              <label style={etiqueta}>Centro de costos (automático)</label>
+              <input type="text" readOnly style={soloLectura}
+                value={claveInfo?.centro_costo || ""}
+                placeholder="Se completa al teclear la clave" />
 
               {/* Número de Orden de Compra */}
               <label style={etiqueta}>Número de Orden de Compra (OC)</label>
@@ -547,6 +606,12 @@ export default function NuevaFacturaPage() {
                 placeholder="Ej. OC-2026-0123"
                 style={ocDup ? { borderColor: "var(--rojo)" } : undefined} />
               {ocDup && <div style={{ fontSize: 12, color: "var(--rojo)", marginTop: 4 }}>🔒 Esta OC ya fue capturada en la factura <strong>{ocDup}</strong>. No se puede duplicar.</div>}
+
+              {/* CR / contrarecibo (opcional, no se deriva de la clave) */}
+              <label style={etiqueta}>CR / contrarecibo (opcional)</label>
+              <input type="text" value={crEmergente}
+                onChange={(e) => setCrEmergente(e.target.value)}
+                placeholder="Ej. 452743 (si ya lo tienes)" />
             </>
           ) : (
             <>
@@ -612,7 +677,8 @@ export default function NuevaFacturaPage() {
           <div style={{ ...card, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
             <div><strong>Proveedor:</strong> {proveedores.find((p) => p.id === proveedorId)?.razon_social || "—"}</div>
             <div><strong>Folio proveedor:</strong> {folioProveedor}</div>
-            {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}</div>}
+            {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}{crEmergente ? <> · <strong>CR:</strong> {crEmergente}</> : ""}</div>}
+            {esOC && clave && <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}><strong>Clave:</strong> {clave}{claveInfo?.descripcion ? ` — ${claveInfo.descripcion}` : ""}{claveInfo?.centro_costo ? ` · CC ${claveInfo.centro_costo}` : ""}</div>}
             <div style={{ gridColumn: "1 / -1" }}><strong>{esOC ? "Compra emergente:" : "Contrato:"}</strong> {contratoSel?.numero_interno} — {contratoSel?.adquisicion_servicio}</div>
             <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}>{[capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`].filter(Boolean).join(" · ")}</div>
             <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)" }}>
