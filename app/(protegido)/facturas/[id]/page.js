@@ -161,7 +161,7 @@ export default function FacturaEstatusPage() {
   async function cargar() {
     const [rFac, rHist, rAlertas] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -316,7 +316,17 @@ export default function FacturaEstatusPage() {
             : factura.validacion_ok === false ? <span style={{ color: "var(--rojo)" }}>✗ dif. {money(factura.diferencia_importe)}</span>
             : <span style={{ color: "var(--texto-suave)" }}>sin detalle capturado</span>}
         </div>
-        <div><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
+        {(factura.estatus_general === "gasto_reflejado" || String(factura.cr_contrarecibo ?? "").trim()) && (
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)", display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <div><strong>Contra‑recibo (CR):</strong>{" "}
+              {String(factura.cr_contrarecibo ?? "").trim()
+                ? <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.cr_contrarecibo}</span>
+                : <span style={{ color: "var(--texto-suave)" }}>—</span>}
+            </div>
+            {factura.fecha_pago && <div><strong>Gasto reflejado:</strong> {factura.fecha_pago}</div>}
+          </div>
+        )}
+        <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
       </div>
 
       {factura.vigencia_alerta === "sin_vigencia" && (
