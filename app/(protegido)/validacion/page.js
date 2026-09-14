@@ -22,6 +22,7 @@ export default function ValidacionServicioPage() {
   const [motivo, setMotivo] = useState("");
   const [oficio, setOficio] = useState(null); // { jefe, dictamen, motivo, filas, folio }
   const [guardando, setGuardando] = useState(false);
+  const [avisoNoConfirmado, setAvisoNoConfirmado] = useState(false); // imprimió borrador sin confirmar
   const [esJefeSesion, setEsJefeSesion] = useState(false); // el usuario logueado ES un jefe (bloquea a él)
   const [deepHecho, setDeepHecho] = useState(false); // reimpresión por enlace ?accion=oficio&id=
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de origen para "Volver"
@@ -135,7 +136,7 @@ export default function ValidacionServicioPage() {
     setOficio({ jefe, dictamen, motivo, filas: seleccionadas, folio });
   };
 
-  const confirmar = async () => {
+  const confirmar = async (imprimir = false) => {
     setGuardando(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -151,7 +152,8 @@ export default function ValidacionServicioPage() {
         await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: nuevoFirmas }).eq("id", id)));
       }
       setFacturas((prev) => prev.filter((f) => !ids.includes(f.id)));
-      setSel({}); setOficio(null); setMotivo("");
+      if (imprimir) window.print();
+      setSel({}); setOficio(null); setMotivo(""); setAvisoNoConfirmado(false);
       setMensaje(`Oficio ${oficio.folio} registrado · ${ids.length} factura(s) ${oficio.dictamen === "cumplimiento" ? "validadas (cumplimiento)" : "marcadas por incumplimiento"}.`);
     } catch (e) { setMensaje("No se pudo guardar: " + e.message); }
     setGuardando(false);
@@ -181,15 +183,22 @@ export default function ValidacionServicioPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
-          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); setAvisoNoConfirmado(false); if (d) router.push(`/facturas/${d}`); }}>← Volver{deepOrigenId ? " a la factura" : ""}</button>
           {oficio.reimpresion ? (
-            <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Reimpresión (ya registrado).</span>
+            <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
           ) : (
-            <button className="boton" onClick={confirmar} disabled={guardando}>{guardando ? "Guardando…" : "Confirmar y registrar"}</button>
+            <>
+              <button className="boton" onClick={() => confirmar(true)} disabled={guardando}>{guardando ? "Guardando…" : "🖨 Imprimir y registrar"}</button>
+              <button className="boton secundario" onClick={() => { setAvisoNoConfirmado(true); window.print(); }} disabled={guardando} title="Solo imprime para revisar; NO registra el oficio ni cambia el estatus">Solo imprimir (borrador)</button>
+            </>
           )}
           {variosProv && <span style={{ fontSize: 12, color: "var(--ambar)" }}>⚠️ Varios proveedores; el encabezado usa el primero. Ideal: un oficio por proveedor.</span>}
         </div>
+        {avisoNoConfirmado && !oficio.reimpresion && (
+          <div className="no-print" style={{ background: "var(--rojo-claro)", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>
+            ⚠️ Imprimiste un <strong>borrador</strong>: el oficio <strong>todavía NO está registrado</strong> ni cambió el estatus. Usa <strong>«Imprimir y registrar»</strong> para dejarlo asentado.
+          </div>
+        )}
         <div className="hoja">
           {/* HOJA 1 — Oficio de remisión: la jefatura del servicio envía a Finanzas las facturas validadas, adjuntando el oficio de cumplimiento/incumplimiento */}
           <div className="doc-hoja">

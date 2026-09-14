@@ -67,6 +67,7 @@ export default function FacturasListaPage() {
   const [memo, setMemo] = useState(null);      // { grupos: [{ jefe, jefatura, filas, folio }] }
   const [oficio, setOficio] = useState(null);  // { tipo:'pago'|'devolucion', docs:[{ prov?, filas, folio, motivo? }] }
   const [enviando, setEnviando] = useState(false);
+  const [avisoNoConfirmado, setAvisoNoConfirmado] = useState(false); // imprimieron borrador sin confirmar
   const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
   const [deepHecho, setDeepHecho] = useState(false); // enlace ?accion=memo|pago&id= (desde el detalle)
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de la que vino el enlace, para "Volver" al detalle
@@ -267,7 +268,7 @@ export default function FacturasListaPage() {
     const grupos = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "envio_servicio", anio, consecutivo: c, folio: fmtFolio("envio_servicio", c, anio) }; });
     setMemo({ grupos });
   };
-  const confirmarEnvio = async () => {
+  const confirmarEnvio = async (imprimir = false) => {
     setEnviando(true);
     try {
       for (const gr of memo.grupos) {
@@ -283,8 +284,9 @@ export default function FacturasListaPage() {
         await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
       }
       setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
+      if (imprimir) window.print();
       const d = deepOrigenId;
-      setSel({}); setMemo(null);
+      setSel({}); setMemo(null); setAvisoNoConfirmado(false);
       setMensaje(`✅ ${ids.length} factura(s) cambiaron de estatus · ahora en "${LABEL_FIRMAS.envio_firmas_servicio}" (en validación por el servicio).`);
       if (d) router.push(`/facturas/${d}`);
     } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
@@ -363,7 +365,7 @@ export default function FacturasListaPage() {
   }, [reHecho]);
 
   const setDoc = (i, campo, val) => setOficio((o) => ({ ...o, docs: o.docs.map((d, idx) => (idx === i ? { ...d, [campo]: val } : d)) }));
-  const confirmarOficio = async () => {
+  const confirmarOficio = async (imprimir = false) => {
     setEnviando(true);
     try {
       const patchBase = oficio.tipo === "pago"
@@ -382,8 +384,9 @@ export default function FacturasListaPage() {
       }
       const allIds = new Set(oficio.docs.flatMap((d) => d.filas.map((f) => f.id)));
       setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
+      if (imprimir) window.print();
       const d = deepOrigenId;
-      setSel({}); setOficio(null);
+      setSel({}); setOficio(null); setAvisoNoConfirmado(false);
       setMensaje(oficio.tipo === "pago"
         ? `✅ ${allIds.size} factura(s) cambiaron de estatus · ahora en "${LABEL_GENERAL.en_tramite_ooad}" (enviadas a OOAD para pago).`
         : `✅ ${allIds.size} factura(s) devueltas al proveedor para corrección.`);
@@ -405,15 +408,24 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); if (d) router.push(`/facturas/${d}`); else if (oficio.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : oficio.reimpresion ? " a oficios" : ""}</button>
-          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
-          {!oficio.reimpresion && (
-            <button className="boton" onClick={confirmarOficio} disabled={enviando}>
-              {enviando ? "Aplicando…" : esPago ? "Confirmar envío a OOAD" : "Confirmar devolución"}
-            </button>
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setOficio(null); setAvisoNoConfirmado(false); if (d) router.push(`/facturas/${d}`); else if (oficio.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : oficio.reimpresion ? " a oficios" : ""}</button>
+          {oficio.reimpresion ? (
+            <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+          ) : (
+            <>
+              <button className="boton" onClick={() => confirmarOficio(true)} disabled={enviando}>
+                {enviando ? "Aplicando…" : esPago ? "🖨 Imprimir y confirmar envío a OOAD" : "🖨 Imprimir y confirmar devolución"}
+              </button>
+              <button className="boton secundario" onClick={() => { setAvisoNoConfirmado(true); window.print(); }} disabled={enviando} title="Solo imprime para revisar; NO registra el oficio ni cambia el estatus">Solo imprimir (borrador)</button>
+            </>
           )}
           <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{oficio.reimpresion ? "Reimpresión" : `${oficio.docs.length} oficio(s)`} · hoja membretada</span>
         </div>
+        {avisoNoConfirmado && !oficio.reimpresion && (
+          <div className="no-print" style={{ background: "var(--rojo-claro)", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>
+            ⚠️ Imprimiste un <strong>borrador</strong>: el oficio <strong>todavía NO está confirmado</strong> ni cambió el estatus. Usa <strong>«{esPago ? "Imprimir y confirmar envío a OOAD" : "Imprimir y confirmar devolución"}»</strong> para dejarlo registrado.
+          </div>
+        )}
         {/* Controles editables (no se imprimen) */}
         {!oficio.reimpresion && (
         <div className="no-print" style={{ display: "grid", gap: 10, marginBottom: 14 }}>
@@ -539,11 +551,22 @@ export default function FacturasListaPage() {
     return (
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setMemo(null); if (d) router.push(`/facturas/${d}`); else if (memo.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : memo.reimpresion ? " a oficios" : ""}</button>
-          <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
-          {!memo.reimpresion && <button className="boton" onClick={confirmarEnvio} disabled={enviando}>{enviando ? "Enviando…" : "Confirmar envío al servicio"}</button>}
+          <button className="boton secundario" onClick={() => { const d = deepOrigenId; setMemo(null); setAvisoNoConfirmado(false); if (d) router.push(`/facturas/${d}`); else if (memo.reimpresion) router.push("/oficios"); }}>← Volver{deepOrigenId ? " a la factura" : memo.reimpresion ? " a oficios" : ""}</button>
+          {memo.reimpresion ? (
+            <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+          ) : (
+            <>
+              <button className="boton" onClick={() => confirmarEnvio(true)} disabled={enviando}>{enviando ? "Enviando…" : "🖨 Imprimir y confirmar envío al servicio"}</button>
+              <button className="boton secundario" onClick={() => { setAvisoNoConfirmado(true); window.print(); }} disabled={enviando} title="Solo imprime para revisar; NO registra el memo ni cambia el estatus">Solo imprimir (borrador)</button>
+            </>
+          )}
           <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>{memo.reimpresion ? "Reimpresión" : `${memo.grupos.length} memo(s)`} · un jefe por hoja carta</span>
         </div>
+        {avisoNoConfirmado && !memo.reimpresion && (
+          <div className="no-print" style={{ background: "var(--rojo-claro)", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>
+            ⚠️ Imprimiste un <strong>borrador</strong>: el memo <strong>todavía NO está confirmado</strong> ni cambió el estatus. Usa <strong>«Imprimir y confirmar envío al servicio»</strong> para dejarlo registrado.
+          </div>
+        )}
         <div className="hoja">
           <div className="doc-hoja">
           <table className="wrap">
