@@ -263,11 +263,12 @@ export default function ValidacionServicioPage() {
                   <div>Aguascalientes, Ags., a {hoy()}.</div>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 14 }}>
-                  <div style={{ fontWeight: 700 }}>Oficina de Presupuesto — HGZ No. 02</div>
+                  <div style={{ fontWeight: 700 }}>L.A. Nayeli Alonso Orozco</div>
+                  <div>Jefa del Departamento de Finanzas del HGZ No. 02</div>
                   <div style={{ marginTop: 16 }}>Presente</div>
                 </div>
                 <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
-                  Por medio del presente, el <strong>Servicio de {oficio.jefe?.jefatura || "—"}</strong> solicita la <strong>DEVOLUCIÓN AL PROVEEDOR</strong> de la(s) siguiente(s) factura(s), por el motivo que se indica, para que esa Oficina realice el trámite correspondiente:
+                  Por medio del presente, el <strong>Servicio de {oficio.jefe?.jefatura || "—"}</strong> solicita la <strong>DEVOLUCIÓN AL PROVEEDOR</strong> de la(s) siguiente(s) factura(s), por el motivo que a continuación se indica, para que por su conducto se realice el trámite correspondiente:
                 </p>
                 <div style={{ margin: "14px 0", padding: "10px 14px", border: "1px solid #333", borderRadius: 4, fontSize: 14 }}>
                   <strong>Motivo:</strong> {oficio.motivo || "—"}
@@ -281,8 +282,10 @@ export default function ValidacionServicioPage() {
                     <tr><td style={{ ...tblD, borderTop: "2px solid #333", borderBottom: "2px solid #333" }} colSpan={3}><strong>TOTAL</strong></td><td style={{ ...tblD, textAlign: "right", fontWeight: 700, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>{money(totD)}</td></tr>
                   </tbody>
                 </table>
-                <div className="firma-bloque" style={{ marginTop: 48, textAlign: "center", width: 360 }}>
-                  <div style={{ borderTop: "1px solid #333", paddingTop: 6, fontSize: 13 }}>
+                <div className="firma-bloque" style={{ marginTop: 60, textAlign: "center" }}>
+                  <div style={{ fontWeight: 700 }}>Atentamente</div>
+                  <div style={{ fontStyle: "italic", fontSize: 12, color: "#555", marginBottom: 44 }}>&ldquo;Seguridad y Solidaridad Social&rdquo;</div>
+                  <div style={{ borderTop: "1px solid #333", width: 320, margin: "0 auto", paddingTop: 6, fontSize: 13 }}>
                     <div style={{ fontWeight: 700 }}>{[oficio.jefe?.cargo, oficio.jefe?.nombre].filter(Boolean).join(" ") || "Jefe(a) de Servicio"}</div>
                     <div>{oficio.jefe?.jefatura ? `Jefe(a) del Servicio de ${oficio.jefe.jefatura}` : "Jefe(a) de Servicio"}</div>
                   </div>
