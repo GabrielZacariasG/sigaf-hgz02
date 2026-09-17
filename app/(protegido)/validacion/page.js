@@ -148,10 +148,11 @@ export default function ValidacionServicioPage() {
     return [...pend, ...val].filter(pasa);
   }, [pendientes, validadas, busqueda, fProv]);
 
-  // Reimprimir el oficio con el que se validó una factura.
+  // Reimprimir el oficio/acuse con el que se dictaminó una factura.
   const verOficioValidacion = (f) => {
     if (!f._val) return;
-    setOficio({ jefe, dictamen: f._val.dictamen, motivo: f._val.motivo || "", filas: [f], folio: f._val.oficio_folio, reimpresion: true });
+    const base = { jefe, dictamen: f._val.dictamen, motivo: f._val.motivo || "", filas: [f], folio: f._val.oficio_folio, reimpresion: true };
+    setOficio(f._val.dictamen === "devolucion" ? { ...base, tipoDoc: "devolucion_solicitud" } : base);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -190,16 +191,12 @@ export default function ValidacionServicioPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sesión no iniciada.");
       const ids0 = oficio.filas.map((f) => f.id);
-      // --- Solicitud de DEVOLUCIÓN al proveedor: marca y regresa a Presupuesto ---
+      // --- Solicitud de DEVOLUCIÓN al proveedor: se guarda en validaciones_servicio
+      // (que el jefe SÍ puede escribir); el trigger marca dev_solicitada en la factura. ---
       if (oficio.tipoDoc === "devolucion_solicitud") {
-        for (let i = 0; i < ids0.length; i += 25) {
-          const lote = ids0.slice(i, i + 25);
-          await Promise.all(lote.map((id) => supabase.from("facturas").update({
-            dev_solicitada: true, dev_solicitada_motivo: oficio.motivo || null,
-            dev_solicitada_jefe_id: jefeId, dev_solicitada_at: new Date().toISOString(),
-            estatus_firmas: "pendiente",
-          }).eq("id", id)));
-        }
+        const rows = ids0.map((id) => ({ factura_id: id, jefe_id: jefeId, dictamen: "devolucion", motivo: oficio.motivo || null, oficio_folio: oficio.folio }));
+        const { error: eDev } = await supabase.from("validaciones_servicio").upsert(rows, { onConflict: "factura_id" });
+        if (eDev) throw new Error(eDev.message);
         setFacturas((prev) => prev.filter((f) => !ids0.includes(f.id)));
         if (imprimir) window.print();
         setSel({}); setOficio(null); setMotivo(""); setAvisoNoConfirmado(false);
@@ -240,8 +237,14 @@ export default function ValidacionServicioPage() {
       <div>
         <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
           <button className="boton secundario" onClick={() => { setOficio(null); setAvisoNoConfirmado(false); }}>← Volver</button>
-          <button className="boton" onClick={() => confirmar(true)} disabled={guardando}>{guardando ? "Guardando…" : "🖨 Imprimir y enviar a Presupuesto"}</button>
-          <button className="boton secundario" onClick={() => { setAvisoNoConfirmado(true); window.print(); }} disabled={guardando} title="Solo imprime; NO registra la solicitud">Solo imprimir (borrador)</button>
+          {oficio.reimpresion ? (
+            <button className="boton secundario" onClick={() => window.print()}>Imprimir / Guardar PDF</button>
+          ) : (
+            <>
+              <button className="boton" onClick={() => confirmar(true)} disabled={guardando}>{guardando ? "Guardando…" : "🖨 Imprimir y enviar a Presupuesto"}</button>
+              <button className="boton secundario" onClick={() => { setAvisoNoConfirmado(true); window.print(); }} disabled={guardando} title="Solo imprime; NO registra la solicitud">Solo imprimir (borrador)</button>
+            </>
+          )}
         </div>
         {avisoNoConfirmado && (
           <div className="no-print" style={{ background: "var(--rojo-claro)", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 12, fontWeight: 600 }}>
@@ -690,7 +693,9 @@ export default function ValidacionServicioPage() {
                         <tr key={f.id}>
                           <td style={td}>
                             {f._estado === "validada"
-                              ? <span style={{ fontSize: 12, fontWeight: 700, color: f._val?.dictamen === "incumplimiento" ? "var(--rojo)" : "var(--verde-oscuro)" }}>{f._val?.dictamen === "incumplimiento" ? "✗ Incumplimiento" : "✓ Validada"}</span>
+                              ? (f._val?.dictamen === "devolucion"
+                                  ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ambar)" }}>↩ Devolución solicitada</span>
+                                  : <span style={{ fontSize: 12, fontWeight: 700, color: f._val?.dictamen === "incumplimiento" ? "var(--rojo)" : "var(--verde-oscuro)" }}>{f._val?.dictamen === "incumplimiento" ? "✗ Incumplimiento" : "✓ Validada"}</span>)
                               : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ambar)" }}>⏳ Pendiente</span>}
                           </td>
                           <td style={td}><span style={{ fontWeight: 600 }}>{f.folio_ingreso}</span><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td>
