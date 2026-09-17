@@ -28,6 +28,8 @@ export default function ValidacionServicioPage() {
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de origen para "Volver"
   const [detAbierto, setDetAbierto] = useState(null);   // factura con su detalle de servicios desplegado
   const [detData, setDetData] = useState({});           // factura_id -> filas | "load"
+  const [vista, setVista] = useState("pendientes");      // 'pendientes' | 'todas'
+  const [validadas, setValidadas] = useState(null);      // facturas ya validadas por este jefe (con su oficio)
   const router = useRouter();
 
   useEffect(() => {
@@ -60,6 +62,22 @@ export default function ValidacionServicioPage() {
     (async () => {
       const { data } = await supabase.from("jefe_proveedor").select("proveedor_id").eq("jefe_id", jefeId);
       setAsignados(new Set((data || []).map((r) => r.proveedor_id)));
+    })();
+  }, [jefeId]);
+
+  // Facturas YA validadas por este jefe (con el oficio que usaron), para el apartado "Todas".
+  useEffect(() => {
+    if (!jefeId) { setValidadas(null); return; }
+    (async () => {
+      const { data, error } = await supabase
+        .from("validaciones_servicio")
+        .select("factura_id, dictamen, motivo, oficio_folio, created_at, facturas ( id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social ) )")
+        .eq("jefe_id", jefeId)
+        .order("created_at", { ascending: false });
+      if (error) { setValidadas([]); return; }
+      setValidadas((data || [])
+        .filter((v) => v.facturas)
+        .map((v) => ({ ...v.facturas, _val: { dictamen: v.dictamen, motivo: v.motivo, oficio_folio: v.oficio_folio, created_at: v.created_at } })));
     })();
   }, [jefeId]);
 
@@ -111,6 +129,31 @@ export default function ValidacionServicioPage() {
       return true;
     });
   }, [facturas, jefeId, asignados, busqueda, fProv]);
+
+  // "Todas las enviadas": pendientes (⏳) + validadas (✓/✗), con su oficio.
+  const todas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    const pv = fProv.trim().toLowerCase();
+    const pasa = (f) => {
+      if (pv && !(f.proveedores?.razon_social || "").toLowerCase().includes(pv)) return false;
+      if (q) {
+        const blob = `${f.folio_ingreso} ${f.folio_proveedor} ${f.proveedores?.razon_social ?? ""} ${f.contratos?.numero_interno ?? ""} ${f._val?.oficio_folio ?? ""}`.toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    };
+    const pend = pendientes.map((f) => ({ ...f, _estado: "pendiente" }));
+    const idsP = new Set(pend.map((f) => f.id));
+    const val = (validadas || []).filter((f) => !idsP.has(f.id)).map((f) => ({ ...f, _estado: "validada" }));
+    return [...pend, ...val].filter(pasa);
+  }, [pendientes, validadas, busqueda, fProv]);
+
+  // Reimprimir el oficio con el que se validó una factura.
+  const verOficioValidacion = (f) => {
+    if (!f._val) return;
+    setOficio({ jefe, dictamen: f._val.dictamen, motivo: f._val.motivo || "", filas: [f], folio: f._val.oficio_folio, reimpresion: true });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const proveedores = useMemo(() => [...new Set(pendientes.map((f) => f.proveedores?.razon_social).filter(Boolean))].sort(), [pendientes]);
   const seleccionadas = useMemo(() => pendientes.filter((f) => sel[f.id]), [pendientes, sel]);
@@ -397,6 +440,18 @@ export default function ValidacionServicioPage() {
             <datalist id="lp">{proveedores.map((p) => <option key={p} value={p} />)}</datalist>
           </div>
 
+          {/* Pestañas: pendientes por validar / todas las enviadas */}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            {[["pendientes", `Pendientes de validar (${pendientes.length})`], ["todas", `Todas las enviadas (${todas.length})`]].map(([v, txt]) => (
+              <button key={v} type="button" onClick={() => setVista(v)}
+                style={{ padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: vista === v ? 700 : 400,
+                  border: `1px solid ${vista === v ? "var(--verde)" : "var(--borde)"}`, background: vista === v ? "var(--verde-claro)" : "#fff", color: vista === v ? "var(--verde-oscuro)" : "var(--texto)" }}>
+                {txt}
+              </button>
+            ))}
+          </div>
+
+          {vista === "pendientes" && (<>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 700 }}>{pendientes.length} por validar · {seleccionadas.length} seleccionada(s)</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -499,6 +554,45 @@ export default function ValidacionServicioPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+          </>)}
+
+          {vista === "todas" && (
+            <div style={{ ...card, padding: 0, marginTop: 12, overflow: "hidden" }}>
+              {validadas == null ? (
+                <div style={{ padding: 14, fontSize: 13, color: "var(--texto-suave)" }}>Cargando…</div>
+              ) : todas.length === 0 ? (
+                <div style={{ padding: 14, fontSize: 13, color: "var(--texto-suave)" }}>No hay facturas enviadas con estos filtros.</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead><tr>
+                      <th style={th}>Estado</th><th style={th}>Factura</th><th style={th}>Proveedor</th>
+                      <th style={{ ...th, textAlign: "right" }}>Importe</th><th style={th}>Oficio de validación</th>
+                    </tr></thead>
+                    <tbody>
+                      {todas.map((f) => (
+                        <tr key={f.id}>
+                          <td style={td}>
+                            {f._estado === "validada"
+                              ? <span style={{ fontSize: 12, fontWeight: 700, color: f._val?.dictamen === "incumplimiento" ? "var(--rojo)" : "var(--verde-oscuro)" }}>{f._val?.dictamen === "incumplimiento" ? "✗ Incumplimiento" : "✓ Validada"}</span>
+                              : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ambar)" }}>⏳ Pendiente</span>}
+                          </td>
+                          <td style={td}><span style={{ fontWeight: 600 }}>{f.folio_ingreso}</span><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td>
+                          <td style={{ ...td, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedores?.razon_social ?? "—"}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
+                          <td style={td}>
+                            {f._estado === "validada" && f._val?.oficio_folio
+                              ? <button className="boton secundario" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => verOficioValidacion(f)}>🖨 Ver oficio {f._val.oficio_folio}</button>
+                              : <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </>
