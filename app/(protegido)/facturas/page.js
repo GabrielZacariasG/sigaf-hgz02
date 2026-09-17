@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
@@ -271,12 +272,16 @@ export default function FacturasListaPage() {
   const confirmarEnvio = async (imprimir = false) => {
     setEnviando(true);
     try {
-      for (const gr of memo.grupos) {
-        await supabase.from("oficios").insert({
-          tipo: "envio_servicio", folio: gr.folio, anio: gr.anio, consecutivo: gr.consecutivo,
-          destinatario: gr.jefe, total: gr.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0),
+      const foliosFinales = {}; // índice de grupo -> folio definitivo
+      for (let gi = 0; gi < memo.grupos.length; gi++) {
+        const gr = memo.grupos[gi];
+        // Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
+        const { folio } = await insertarOficioUnico({
+          tipo: "envio_servicio", anio: gr.anio, destinatario: gr.jefe,
+          total: gr.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0),
           factura_ids: gr.filas.map((f) => f.id),
         });
+        foliosFinales[gi] = folio;
       }
       const ids = [...new Set(memo.grupos.flatMap((gr) => gr.filas.map((f) => f.id)))];
       for (let i = 0; i < ids.length; i += 25) {
@@ -284,7 +289,10 @@ export default function FacturasListaPage() {
         await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
       }
       setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
-      if (imprimir) window.print();
+      if (imprimir) {
+        flushSync(() => setMemo((m) => m && ({ ...m, grupos: m.grupos.map((g, i) => ({ ...g, folio: foliosFinales[i] || g.folio })) })));
+        window.print();
+      }
       const d = deepOrigenId;
       setSel({}); setMemo(null); setAvisoNoConfirmado(false);
       setMensaje(`✅ ${ids.length} factura(s) cambiaron de estatus · ahora en "${LABEL_FIRMAS.envio_firmas_servicio}" (en validación por el servicio).`);
@@ -301,6 +309,20 @@ export default function FacturasListaPage() {
   const proximoConsec = async (tipoDb, anio) => {
     const { data } = await supabase.from("oficios").select("consecutivo").eq("tipo", tipoDb).eq("anio", anio).order("consecutivo", { ascending: false }).limit(1);
     return (data?.[0]?.consecutivo || 0) + 1;
+  };
+  // Inserta un oficio asignando el consecutivo/folio DE FORMA ATÓMICA al guardar:
+  // si dos personas generan a la vez y chocan con el candado de unicidad, reintenta
+  // con el siguiente número. Devuelve el folio definitivo (el que debe imprimirse).
+  const insertarOficioUnico = async (base) => {
+    for (let intento = 0; intento < 12; intento++) {
+      const consec = await proximoConsec(base.tipo, base.anio);
+      const folio = fmtFolio(base.tipo, consec, base.anio);
+      const { error } = await supabase.from("oficios").insert({ ...base, consecutivo: consec, folio });
+      if (!error) return { folio, consecutivo: consec };
+      if (error.code === "23505" || /duplicate key|unique/i.test(error.message || "")) continue; // choque de folio → reintenta
+      throw error;
+    }
+    throw new Error("No se pudo asignar un folio único (demasiados intentos simultáneos).");
   };
   const enviarOOAD = async (lista) => {
     const items = lista && lista.length ? lista : seleccionadas;
@@ -371,10 +393,14 @@ export default function FacturasListaPage() {
       const patchBase = oficio.tipo === "pago"
         ? { estatus_general: "en_tramite_ooad" }
         : { estatus_general: "devuelta_proveedor", fecha_devolucion: new Date().toISOString() };
-      for (const d of oficio.docs) {
+      const foliosFinales = {}; // índice de doc -> folio definitivo
+      for (let di = 0; di < oficio.docs.length; di++) {
+        const d = oficio.docs[di];
         const totalDoc = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
         const dest = oficio.tipo === "pago" ? "Mtra. Farlyn Isabel Hernández Arias (Depto. Presupuesto, Contabilidad y Erogaciones)" : d.prov;
-        await supabase.from("oficios").insert({ tipo: d.tipoDb, folio: d.folio, anio: d.anio, consecutivo: d.consecutivo, destinatario: dest, total: totalDoc, factura_ids: d.filas.map((f) => f.id), motivo: d.motivo || null });
+        // Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
+        const { folio } = await insertarOficioUnico({ tipo: d.tipoDb, anio: d.anio, destinatario: dest, total: totalDoc, factura_ids: d.filas.map((f) => f.id), motivo: d.motivo || null });
+        foliosFinales[di] = folio;
         const ids = d.filas.map((f) => f.id);
         const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null } : patchBase;
         for (let i = 0; i < ids.length; i += 25) {
@@ -384,7 +410,11 @@ export default function FacturasListaPage() {
       }
       const allIds = new Set(oficio.docs.flatMap((d) => d.filas.map((f) => f.id)));
       setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
-      if (imprimir) window.print();
+      if (imprimir) {
+        // Estampar el folio DEFINITIVO en la hoja antes de imprimir.
+        flushSync(() => setOficio((o) => o && ({ ...o, docs: o.docs.map((d, i) => ({ ...d, folio: foliosFinales[i] || d.folio })) })));
+        window.print();
+      }
       const d = deepOrigenId;
       setSel({}); setOficio(null); setAvisoNoConfirmado(false);
       setMensaje(oficio.tipo === "pago"
