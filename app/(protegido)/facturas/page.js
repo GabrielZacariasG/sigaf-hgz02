@@ -58,6 +58,7 @@ export default function FacturasListaPage() {
   const [fEtapa, setFEtapa] = useState(null);       // etapa del proceso (pipeline ejecutivo)
   const [fCapitulo, setFCapitulo] = useState(null);
   const [soloCR, setSoloCR] = useState(false);
+  const [soloDevSolic, setSoloDevSolic] = useState(false); // devoluciones solicitadas por el servicio
   const [soloEstancadas, setSoloEstancadas] = useState(false);
   const [soloDiscrep, setSoloDiscrep] = useState(false);
   const [ocultarCompl, setOcultarCompl] = useState(false);
@@ -139,7 +140,7 @@ export default function FacturasListaPage() {
       for (;;) {
         const [rFac, a, h] = await Promise.all([
           supabase.from("facturas").select(
-            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
+            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
           ).eq("anulada", false).range(desde, desde + 999),
           desde === 0 ? supabase.from("alertas_config").select("circuito, estatus, dias_umbral") : Promise.resolve({ data: rAlertas }),
           desde === 0 ? supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha") : Promise.resolve({ data: rHist }),
@@ -167,6 +168,7 @@ export default function FacturasListaPage() {
         return {
           ...f, capNom: f.capitulos?.nombre || "—", prov: f.proveedores?.razon_social || "—",
           contrato: f.contratos?.numero_interno || "—", tieneCR: !!String(f.cr_contrarecibo ?? "").trim(),
+          devSolic: !!f.dev_solicitada, devSolicMotivo: f.dev_solicitada_motivo || "",
           pp: f.partidas?.cuenta_finat || f.partidas?.cuenta_prei || "—",
           gen, fir, ped, generaPR, estancada, etapa: etapaDe(f),
         };
@@ -187,7 +189,7 @@ export default function FacturasListaPage() {
 
   const resumen = useMemo(() => {
     const porEstatus = {}, porCapitulo = {}, porEtapa = {};
-    let estancadas = 0, montoTotal = 0, conCR = 0, devueltas = 0;
+    let estancadas = 0, montoTotal = 0, conCR = 0, devueltas = 0, devSolic = 0;
     for (const f of facturas) {
       const e = (porEstatus[f.estatus_general] ||= { n: 0, monto: 0 });
       e.n++; e.monto += Number(f.importe_factura) || 0;
@@ -200,9 +202,10 @@ export default function FacturasListaPage() {
       if (f.etapa === "devuelta") devueltas++;
       if (f.estancada) estancadas++;
       if (f.tieneCR) conCR++;
+      if (f.devSolic && f.estatus_general !== "devuelta_proveedor") devSolic++;
       montoTotal += Number(f.importe_factura) || 0;
     }
-    return { porEstatus, porCapitulo, porEtapa, estancadas, montoTotal, conCR, devueltas };
+    return { porEstatus, porCapitulo, porEtapa, estancadas, montoTotal, conCR, devueltas, devSolic };
   }, [facturas]);
 
   const capitulos = useMemo(() => Object.keys(resumen.porCapitulo).sort(), [resumen]);
@@ -218,6 +221,7 @@ export default function FacturasListaPage() {
       if (fEtapa && f.etapa !== fEtapa) return false;
       if (fCapitulo && f.capNom !== fCapitulo) return false;
       if (soloCR && !f.tieneCR) return false;
+      if (soloDevSolic && (!f.devSolic || f.estatus_general === "devuelta_proveedor")) return false;
       if (soloEstancadas && !f.estancada) return false;
       if (soloDiscrep && f.validacion_ok !== false) return false;
       if (ocultarCompl && f.estatus_general === "gasto_reflejado") return false;
@@ -231,7 +235,7 @@ export default function FacturasListaPage() {
     }).sort((a, b) => (a.estancada !== b.estancada ? (a.estancada ? -1 : 1)
       : (a.estatus_general === "gasto_reflejado") !== (b.estatus_general === "gasto_reflejado") ? (a.estatus_general === "gasto_reflejado" ? 1 : -1)
       : (b.gen.dias ?? -1) - (a.gen.dias ?? -1)));
-  }, [facturas, busqueda, fProv, fContrato, fEstatus, fEtapa, fCapitulo, soloCR, soloEstancadas, soloDiscrep, ocultarCompl]);
+  }, [facturas, busqueda, fProv, fContrato, fEstatus, fEtapa, fCapitulo, soloCR, soloDevSolic, soloEstancadas, soloDiscrep, ocultarCompl]);
 
   // Agrupación
   const grupos = useMemo(() => {
@@ -242,7 +246,7 @@ export default function FacturasListaPage() {
     return Object.entries(g).sort((a, b) => b[1].filas.length - a[1].filas.length);
   }, [filtradas, agrupar]);
 
-  const hayFiltro = fEstatus || fEtapa || fCapitulo || busqueda || fProv || fContrato || soloCR || soloEstancadas || soloDiscrep || ocultarCompl;
+  const hayFiltro = fEstatus || fEtapa || fCapitulo || busqueda || fProv || fContrato || soloCR || soloDevSolic || soloEstancadas || soloDiscrep || ocultarCompl;
   // La lista solo aparece cuando el usuario entra a algo (etapa/capítulo/estatus/búsqueda/chip) o pide ver todo.
   const mostrarLista = hayFiltro || verTodo;
   const montoFiltrado = useMemo(() => filtradas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0), [filtradas]);
@@ -337,7 +341,12 @@ export default function FacturasListaPage() {
     for (const f of seleccionadas) { const grp = g.get(f.prov) || { prov: f.prov, filas: [] }; grp.filas.push(f); g.set(f.prov, grp); }
     const anio = new Date().getFullYear();
     let consec = await proximoConsec("devolucion", anio);
-    const docs = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "devolucion", anio, consecutivo: c, folio: fmtFolio("devolucion", c, anio), motivo: "" }; });
+    const docs = [...g.values()].map((x) => {
+      const c = consec++;
+      // Prellenar el motivo con el(los) que puso el jefe de servicio (si la devolución la solicitó el servicio).
+      const motivos = [...new Set(x.filas.map((f) => f.devSolicMotivo).filter(Boolean))];
+      return { ...x, tipoDb: "devolucion", anio, consecutivo: c, folio: fmtFolio("devolucion", c, anio), motivo: motivos.join(" · ") };
+    });
     setOficio({ tipo: "devolucion", docs });
   };
 
@@ -402,7 +411,7 @@ export default function FacturasListaPage() {
         const { folio } = await insertarOficioUnico({ tipo: d.tipoDb, anio: d.anio, destinatario: dest, total: totalDoc, factura_ids: d.filas.map((f) => f.id), motivo: d.motivo || null });
         foliosFinales[di] = folio;
         const ids = d.filas.map((f) => f.id);
-        const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null } : patchBase;
+        const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null, dev_solicitada: false } : patchBase;
         for (let i = 0; i < ids.length; i += 25) {
           const lote = ids.slice(i, i + 25);
           await Promise.all(lote.map((id) => supabase.from("facturas").update(patch).eq("id", id)));
@@ -775,6 +784,10 @@ export default function FacturasListaPage() {
         <button style={filtroChip(soloEstancadas)} onClick={() => setSoloEstancadas((v) => !v)}>⚠️ Estancadas ({resumen.estancadas})</button>
         <button style={filtroChip(soloCR)} onClick={() => setSoloCR((v) => !v)}>Con contrarecibo ({resumen.conCR})</button>
         <button style={filtroChip(soloDiscrep)} onClick={() => setSoloDiscrep((v) => !v)}>Con discrepancia ✗</button>
+        {resumen.devSolic > 0 && (
+          <button style={{ ...filtroChip(soloDevSolic), borderColor: "var(--ambar)", color: soloDevSolic ? "#fff" : "var(--ambar)", background: soloDevSolic ? "var(--ambar)" : "transparent", fontWeight: 700 }}
+            onClick={() => setSoloDevSolic((v) => !v)}>↩ Devoluciones solicitadas por el servicio ({resumen.devSolic})</button>
+        )}
       </div>
 
       {/* CAPÍTULOS */}
