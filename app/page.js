@@ -30,10 +30,14 @@ export default function Portal() {
       if (!session) { router.replace('/login'); return; }
 
       // Si quien entra es un jefe de servicio (por correo), va directo a su panel de validación.
+      // Si es un administrador (Subdirector), va directo a su panel /admin.
       try {
         const email = (session.user?.email || '').toLowerCase();
         if (email) {
           const matricula = email.includes('@') ? email.split('@')[0] : email;
+          const { data: adm } = await supabase.from('administradores').select('id')
+            .or(`email.eq.${email},matricula.eq.${matricula}`).eq('activo', true).limit(1);
+          if (adm && adm.length) { router.replace('/admin'); return; }
           const { data: js } = await supabase.from('jefes_servicio').select('id')
             .or(`email.eq.${email},matricula.eq.${matricula}`).eq('activo', true).limit(1);
           if (js && js.length) { router.replace('/validacion'); return; }

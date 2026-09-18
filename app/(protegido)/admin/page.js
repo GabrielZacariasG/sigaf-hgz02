@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -28,9 +29,22 @@ export default function AdminPanel() {
   const [facturas, setFacturas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [q, setQ] = useState("");
+  const [adminSesion, setAdminSesion] = useState(null); // { nombre, cargo } si el usuario ES un administrador
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
+      // ¿El usuario logueado es un administrador? (para su encabezado y "solo de él")
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const email = (session?.user?.email || "").toLowerCase();
+        if (email) {
+          const matricula = email.includes("@") ? email.split("@")[0] : email;
+          const { data: adm } = await supabase.from("administradores").select("nombre, cargo")
+            .or(`email.eq.${email},matricula.eq.${matricula}`).eq("activo", true).limit(1);
+          if (adm && adm.length) setAdminSesion(adm[0]);
+        }
+      } catch { /* tabla aún no existe */ }
       let todas = [], desde = 0;
       for (;;) {
         const { data, error } = await supabase
@@ -87,7 +101,15 @@ export default function AdminPanel() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/" style={{ color: "var(--verde)" }}>← Panel</Link></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+        {adminSesion
+          ? <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Sesión de <strong style={{ color: "var(--texto)" }}>{[adminSesion.cargo, adminSesion.nombre].filter(Boolean).join(" · ")}</strong></div>
+          : <Link href="/" style={{ fontSize: 13, color: "var(--verde)" }}>← Panel</Link>}
+        {adminSesion && (
+          <button type="button" className="boton secundario" style={{ fontSize: 12 }}
+            onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }}>Cerrar sesión</button>
+        )}
+      </div>
       <h1 style={{ fontSize: 22, margin: 0 }}>Panel del Subdirector Administrativo</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 4 }}>Estado de la facturación (solo consulta). {agg.nTotal.toLocaleString("es-MX")} factura(s) activas.</p>
 
