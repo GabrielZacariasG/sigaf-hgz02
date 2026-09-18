@@ -101,15 +101,7 @@ export default function AdminPanel() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-        {adminSesion
-          ? <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Sesión de <strong style={{ color: "var(--texto)" }}>{[adminSesion.cargo, adminSesion.nombre].filter(Boolean).join(" · ")}</strong></div>
-          : <Link href="/" style={{ fontSize: 13, color: "var(--verde)" }}>← Panel</Link>}
-        {adminSesion && (
-          <button type="button" className="boton secundario" style={{ fontSize: 12 }}
-            onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }}>Cerrar sesión</button>
-        )}
-      </div>
+      {!adminSesion && <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/" style={{ color: "var(--verde)" }}>← Panel</Link></div>}
       <h1 style={{ fontSize: 22, margin: 0 }}>Panel del Subdirector Administrativo</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 4 }}>Estado de la facturación (solo consulta). {agg.nTotal.toLocaleString("es-MX")} factura(s) activas.</p>
 

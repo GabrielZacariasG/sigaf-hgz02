@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
@@ -12,7 +12,10 @@ import { supabase } from "../../lib/supabaseClient";
 export default function ProtegidoLayout({ children }) {
   const [estado, setEstado] = useState("verificando"); // 'verificando' | 'ok'
   const [usuario, setUsuario] = useState(null);
+  const [esAdmin, setEsAdmin] = useState(null);   // null=desconocido, true/false
+  const [nombreAdmin, setNombreAdmin] = useState("");
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     let activo = true;
@@ -62,6 +65,26 @@ export default function ProtegidoLayout({ children }) {
     };
   }, []);
 
+  // ¿El usuario es un administrador (Subdirector)? Solo puede estar en /admin.
+  useEffect(() => {
+    if (!usuario) return;
+    (async () => {
+      try {
+        const email = (usuario.email || "").toLowerCase();
+        const matricula = email.includes("@") ? email.split("@")[0] : email;
+        const { data } = await supabase.from("administradores").select("nombre")
+          .or(`email.eq.${email},matricula.eq.${matricula}`).eq("activo", true).limit(1);
+        if (data && data.length) { setEsAdmin(true); setNombreAdmin(data[0].nombre || ""); }
+        else setEsAdmin(false);
+      } catch { setEsAdmin(false); }
+    })();
+  }, [usuario]);
+
+  // Candado: un administrador solo puede estar en /admin (si va a otra, regresa).
+  useEffect(() => {
+    if (esAdmin === true && pathname && pathname !== "/admin") router.replace("/admin");
+  }, [esAdmin, pathname, router]);
+
   async function cerrarSesion() {
     await supabase.auth.signOut();
     router.replace("/login");
@@ -95,27 +118,21 @@ export default function ProtegidoLayout({ children }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
+          <Link href={esAdmin ? "/admin" : "/"} style={{ color: "#fff", textDecoration: "none" }}>
             <strong style={{ fontSize: 15, letterSpacing: 0.2 }}>
               SIGAF · HGZ No. 02
             </strong>
           </Link>
-          <Link
-            href="/"
-            style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}
-          >
-            Panel
-          </Link>
-          <Link
-            href="/facturas"
-            style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}
-          >
-            Facturas
-          </Link>
+          {esAdmin === false && (
+            <>
+              <Link href="/" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Panel</Link>
+              <Link href="/facturas" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Facturas</Link>
+            </>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontSize: 13, color: "rgba(255,255,255,0.9)" }}>
-            {nombre}
+            {nombreAdmin || nombre}
           </span>
           <button
             onClick={cerrarSesion}
