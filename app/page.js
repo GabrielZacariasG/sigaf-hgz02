@@ -156,6 +156,12 @@ export default function Portal() {
       ruta: '/reportes', listo: true,
     },
     {
+      paso: 'Dirección', titulo: 'Panel del Administrador',
+      desc: 'Estado de la facturación para el Subdirector Administrativo: por etapa y por capítulo (solo consulta).',
+      cifra: '📋', etiqueta: 'estado de facturación',
+      ruta: '/admin', listo: true,
+    },
+    {
       paso: 'Automatizar', titulo: 'Conciliar reportes',
       desc: 'Suspendido temporalmente — el cierre de pago se hace ahora desde "Cierre por disponibilidad".',
       cifra: '⛔', etiqueta: 'suspendido',
