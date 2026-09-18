@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
@@ -30,7 +30,9 @@ export default function AdminPanel() {
   const [cargando, setCargando] = useState(true);
   const [q, setQ] = useState("");
   const [adminSesion, setAdminSesion] = useState(null); // { nombre, cargo } si el usuario ES un administrador
+  const [filtro, setFiltro] = useState(null); // { tipo, valor, label } para ver el detalle
   const router = useRouter();
+  const detalleRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -91,6 +93,25 @@ export default function AdminPanel() {
     return facturas.filter((f) => `${f.folio_ingreso} ${f.folio_proveedor} ${f.prov} ${f.cuenta}`.toLowerCase().includes(t)).slice(0, 40);
   }, [q, facturas]);
 
+  // Lista de facturas del filtro activo (clic en etapa/capítulo/tarjeta).
+  const detalle = useMemo(() => {
+    if (!filtro) return [];
+    const match = (f) => {
+      if (filtro.tipo === "etapa") return f.etapa === filtro.valor;
+      if (filtro.tipo === "capitulo") return f.cap === filtro.valor;
+      if (filtro.tipo === "tramite") return f.etapa !== "pagada" && f.etapa !== "devuelta";
+      if (filtro.tipo === "devuelta") return f.etapa === "devuelta";
+      if (filtro.tipo === "pagada") return f.etapa === "pagada";
+      return false;
+    };
+    return facturas.filter(match).sort((a, b) => (Number(b.importe_factura) || 0) - (Number(a.importe_factura) || 0));
+  }, [filtro, facturas]);
+
+  const abrir = (f) => { setFiltro(f); };
+  useEffect(() => {
+    if (filtro && detalleRef.current) detalleRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [filtro]);
+
   const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px" };
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "2px solid var(--borde)", whiteSpace: "nowrap" };
   const td = { padding: "8px 10px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, verticalAlign: "middle" };
@@ -108,20 +129,22 @@ export default function AdminPanel() {
       {/* Totales */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginTop: 12 }}>
         <div style={card}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Facturado (activo)</div><div style={{ fontSize: 22, fontWeight: 800 }}>{money(agg.total)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nTotal} factura(s)</div></div>
-        <div style={card}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Pagado (gasto reflejado)</div><div style={{ fontSize: 22, fontWeight: 800, color: "var(--verde-oscuro)" }}>{money(agg.pagado)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nPagado} · {pct(agg.pagado, agg.total)}% del total</div></div>
-        <div style={card}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>En trámite (por pagar)</div><div style={{ fontSize: 22, fontWeight: 800, color: "#2563eb" }}>{money(agg.tramite)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nTramite} · {pct(agg.tramite, agg.total)}% del total</div></div>
-        <div style={card}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Devueltas al proveedor</div><div style={{ fontSize: 22, fontWeight: 800, color: "var(--ambar)" }}>{money(agg.devuelta)}</div></div>
+        <div style={{ ...card, cursor: "pointer" }} onClick={() => abrir({ tipo: "pagada", label: "Pagadas (gasto reflejado)" })}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Pagado (gasto reflejado) →</div><div style={{ fontSize: 22, fontWeight: 800, color: "var(--verde-oscuro)" }}>{money(agg.pagado)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nPagado} · {pct(agg.pagado, agg.total)}% del total</div></div>
+        <div style={{ ...card, cursor: "pointer" }} onClick={() => abrir({ tipo: "tramite", label: "En trámite (por pagar)" })}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>En trámite (por pagar) →</div><div style={{ fontSize: 22, fontWeight: 800, color: "#2563eb" }}>{money(agg.tramite)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nTramite} · {pct(agg.tramite, agg.total)}% del total</div></div>
+        <div style={{ ...card, cursor: "pointer" }} onClick={() => abrir({ tipo: "devuelta", label: "Devueltas al proveedor" })}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Devueltas al proveedor →</div><div style={{ fontSize: 22, fontWeight: 800, color: "var(--ambar)" }}>{money(agg.devuelta)}</div></div>
       </div>
 
       {/* Pipeline por etapa */}
       <div style={{ ...card, marginTop: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>¿Dónde está detenida la facturación? — por etapa del proceso</div>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>¿Dónde está detenida la facturación? — por etapa del proceso</div>
+        <div style={{ fontSize: 12, color: "var(--texto-suave)", marginBottom: 10 }}>Haz clic en una etapa para ver sus facturas.</div>
         <div style={{ display: "grid", gap: 8 }}>
           {ETAPAS.map((e) => {
             const v = agg.porEtapa[e.key] || { n: 0, monto: 0 };
             const p = pct(v.monto, agg.total);
             return (
-              <div key={e.key} style={{ display: "grid", gridTemplateColumns: "180px 1fr 150px", gap: 10, alignItems: "center" }}>
+              <div key={e.key} onClick={() => abrir({ tipo: "etapa", valor: e.key, label: e.label })}
+                style={{ display: "grid", gridTemplateColumns: "180px 1fr 150px", gap: 10, alignItems: "center", cursor: "pointer", borderRadius: 6, padding: "2px 4px" }}>
                 <div><div style={{ fontSize: 13, fontWeight: 600 }}>{e.label}</div><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{e.sub} · {v.n}</div></div>
                 <div style={{ background: "var(--fondo, #f0f2f1)", borderRadius: 6, height: 22, position: "relative", overflow: "hidden" }}>
                   <div style={{ background: e.color, height: "100%", width: `${p}%`, minWidth: v.monto > 0 ? 3 : 0, transition: "width .3s" }} />
@@ -135,7 +158,8 @@ export default function AdminPanel() {
 
       {/* Por capítulo */}
       <div style={{ ...card, marginTop: 14, padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", fontSize: 14, fontWeight: 700 }}>Por capítulo</div>
+        <div style={{ padding: "12px 16px 4px", fontSize: 14, fontWeight: 700 }}>Por capítulo</div>
+        <div style={{ padding: "0 16px 10px", fontSize: 12, color: "var(--texto-suave)" }}>Haz clic en un capítulo para ver sus facturas.</div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>
@@ -145,8 +169,8 @@ export default function AdminPanel() {
             </tr></thead>
             <tbody>
               {agg.caps.map((c) => (
-                <tr key={c.cap}>
-                  <td style={{ ...td, fontWeight: 600 }}>{c.cap}</td>
+                <tr key={c.cap} onClick={() => abrir({ tipo: "capitulo", valor: c.cap, label: "Capítulo: " + c.cap })} style={{ cursor: "pointer" }}>
+                  <td style={{ ...td, fontWeight: 600, color: "var(--verde)" }}>{c.cap}</td>
                   <td style={{ ...td, textAlign: "right" }}>{c.n}</td>
                   <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(c.monto)}</td>
                   <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--verde-oscuro)" }}>{money(c.pagado)}</td>
@@ -158,6 +182,40 @@ export default function AdminPanel() {
           </table>
         </div>
       </div>
+
+      {/* Detalle del filtro activo (clic en etapa/capítulo/tarjeta) */}
+      {filtro && (
+        <div ref={detalleRef} style={{ ...card, marginTop: 14, padding: 0, overflow: "hidden", scrollMarginTop: 70 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{filtro.label}</div>
+              <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{detalle.length} factura(s) · {money(detalle.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0))}</div>
+            </div>
+            <button type="button" className="boton secundario" style={{ fontSize: 12 }} onClick={() => setFiltro(null)}>✕ Cerrar</button>
+          </div>
+          <div style={{ overflowX: "auto", maxHeight: 460, overflowY: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>
+                <th style={th}>Folio</th><th style={th}>Proveedor</th><th style={th}>Cuenta</th>
+                <th style={th}>Capítulo</th><th style={th}>Etapa</th><th style={{ ...th, textAlign: "right" }}>Importe</th><th style={th}></th>
+              </tr></thead>
+              <tbody>
+                {detalle.map((f) => (
+                  <tr key={f.id}>
+                    <td style={{ ...td, fontWeight: 600 }}>{f.folio_ingreso}<div style={{ fontSize: 11, color: "var(--texto-suave)", fontWeight: 400 }}>{f.folio_proveedor}</div></td>
+                    <td style={{ ...td, fontSize: 12, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.prov}</td>
+                    <td style={{ ...td, fontSize: 12 }}>{f.cuenta}</td>
+                    <td style={{ ...td, fontSize: 12 }}>{f.cap}</td>
+                    <td style={td}><span style={{ fontSize: 12, fontWeight: 700, color: etapaColor[f.etapa] || "var(--texto)" }}>{etapaLabel[f.etapa] || f.etapa}</span></td>
+                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(f.importe_factura)}</td>
+                    <td style={td}><Link href={`/facturas/${f.id}`} style={{ fontSize: 12, color: "var(--verde)" }}>Ver →</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Buscador */}
       <div style={{ ...card, marginTop: 14 }}>
