@@ -146,6 +146,7 @@ export default function FacturaEstatusPage() {
   const [factura, setFactura] = useState(null);
   const [historial, setHistorial] = useState([]);
   const [alertasMap, setAlertasMap] = useState({});
+  const [detalle, setDetalle] = useState([]);   // servicios capturados (desglose)
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(null); // qué eje se está guardando
@@ -159,12 +160,13 @@ export default function FacturaEstatusPage() {
   const [rfFin, setRfFin] = useState("");
 
   async function cargar() {
-    const [rFac, rHist, rAlertas] = await Promise.all([
+    const [rFac, rHist, rAlertas, rDet] = await Promise.all([
       supabase.from("facturas").select(
         "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
+      supabase.from("factura_detalle").select("cantidad, contrato_servicios ( nombre_servicio, precio_unitario )").eq("factura_id", facturaId),
     ]);
 
     if (rFac.error || !rFac.data) {
@@ -177,6 +179,11 @@ export default function FacturaEstatusPage() {
     const m = {};
     (rAlertas.data || []).forEach((a) => (m[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
     setAlertasMap(m);
+    setDetalle((rDet.data || []).map((d) => {
+      const precio = Number(d.contrato_servicios?.precio_unitario) || 0;
+      const cant = Number(d.cantidad) || 0;
+      return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant, precio, importe: cant * precio };
+    }));
     setCargando(false);
   }
 
@@ -327,6 +334,42 @@ export default function FacturaEstatusPage() {
           </div>
         )}
         <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
+      </div>
+
+      {/* Servicios capturados (desglose) */}
+      <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+          <h2 style={{ fontSize: 15, margin: 0 }}>Servicios capturados</h2>
+          <Link href={`/facturas/${factura.id}/detalle`} style={{ fontSize: 12 }}>Editar desglose →</Link>
+        </div>
+        {detalle.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--texto-suave)", margin: "10px 0 0" }}>Esta factura no tiene desglose de servicios capturado.</p>
+        ) : (
+          <div style={{ overflowX: "auto", marginTop: 10 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>
+                <th style={{ textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Concepto</th>
+                <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Cantidad</th>
+                <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Precio</th>
+                <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Importe</th>
+              </tr></thead>
+              <tbody>
+                {detalle.map((d, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5 }}>{d.nombre}</td>
+                    <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{d.cant}</td>
+                    <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(d.precio)}</td>
+                    <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(d.importe)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700 }} colSpan={3}>Total del desglose</td>
+                  <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(detalle.reduce((s, d) => s + d.importe, 0))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {factura.vigencia_alerta === "sin_vigencia" && (
