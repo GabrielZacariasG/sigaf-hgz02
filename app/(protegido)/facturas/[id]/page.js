@@ -151,6 +151,8 @@ export default function FacturaEstatusPage() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(null); // qué eje se está guardando
   const [mensaje, setMensaje] = useState("");
+  const [rol, setRol] = useState(null);              // rol del usuario (para permiso de eliminar)
+  const [eliminando, setEliminando] = useState(false);
 
   // Resolución de devolución
   const [accionDev, setAccionDev] = useState(null); // null | 'refactura'
@@ -184,6 +186,15 @@ export default function FacturaEstatusPage() {
       const cant = Number(d.cantidad) || 0;
       return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant, precio, importe: cant * precio };
     }));
+    // Rol del usuario (para el permiso de eliminar)
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const authId = userData?.user?.id;
+      if (authId) {
+        const { data: perfil } = await supabase.from("usuarios").select("rol").eq("auth_id", authId).maybeSingle();
+        setRol(perfil?.rol || null);
+      }
+    } catch { /* sin perfil */ }
     setCargando(false);
   }
 
@@ -285,6 +296,16 @@ export default function FacturaEstatusPage() {
     } catch (err) { setMensaje("No se pudo crear la re-factura: " + err.message); setGuardando(null); }
   }
 
+  const puedeEliminar = rol === "jefe_presupuesto" || rol === "jefa_finanzas";
+  async function eliminarFactura() {
+    if (!factura) return;
+    if (!window.confirm(`¿Eliminar DEFINITIVAMENTE la factura ${factura.folio_ingreso} (folio ${factura.folio_proveedor})?\n\nEsta acción NO se puede deshacer.`)) return;
+    setEliminando(true); setMensaje("");
+    const { error } = await supabase.rpc("fn_eliminar_factura", { p_factura_id: factura.id });
+    if (error) { setMensaje("No se pudo eliminar: " + error.message); setEliminando(false); return; }
+    router.push("/facturas");
+  }
+
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
   if (!factura) {
     return (
@@ -305,9 +326,15 @@ export default function FacturaEstatusPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
         <button type="button" className="boton secundario" onClick={() => router.push("/facturas")} style={{ fontSize: 13 }}>← Regresar</button>
         <Link href="/" style={{ fontSize: 13, color: "var(--texto-suave)" }}>Menú</Link>
+        {puedeEliminar && (
+          <button type="button" onClick={eliminarFactura} disabled={eliminando}
+            style={{ marginLeft: "auto", fontSize: 13, background: "transparent", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+            {eliminando ? "Eliminando…" : "🗑 Eliminar factura"}
+          </button>
+        )}
       </div>
       <h1 style={{ fontSize: 22, margin: "6px 0 2px" }}>{factura.folio_ingreso}</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 0 }}>Folio proveedor {factura.folio_proveedor}</p>
