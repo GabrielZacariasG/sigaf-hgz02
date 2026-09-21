@@ -147,6 +147,7 @@ export default function FacturaEstatusPage() {
   const [historial, setHistorial] = useState([]);
   const [alertasMap, setAlertasMap] = useState({});
   const [detalle, setDetalle] = useState([]);   // servicios capturados (desglose)
+  const [claveInfo, setClaveInfo] = useState(null); // cruce de la clave (compra emergente)
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(null); // qué eje se está guardando
@@ -164,7 +165,7 @@ export default function FacturaEstatusPage() {
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -186,6 +187,15 @@ export default function FacturaEstatusPage() {
       const cant = Number(d.cantidad) || 0;
       return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant, precio, importe: cant * precio };
     }));
+    // Cruce de la clave (compra emergente): descripción + cuenta desde cb_claves.
+    const clave = String(rFac.data.clave_cbi ?? "").trim();
+    if (clave) {
+      const { data: ci } = await supabase.from("cb_claves")
+        .select("descripcion, cuenta_prei, centro_costo, precio").eq("clave", clave).maybeSingle();
+      setClaveInfo(ci ? { ...ci, clave } : { clave, centro_costo: rFac.data.centro_costo || null });
+    } else {
+      setClaveInfo(null);
+    }
     // Rol del usuario (para el permiso de eliminar)
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -375,6 +385,20 @@ export default function FacturaEstatusPage() {
         )}
         <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
       </div>
+
+      {/* Clave de cuadro básico (compra emergente): producto, cuenta y centro de costos */}
+      {claveInfo && (
+        <div style={{ background: "var(--verde-claro)", border: "1px solid var(--verde-oscuro)", borderRadius: 10, padding: "12px 16px", margin: "12px 0", color: "var(--verde-oscuro)" }}>
+          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.8, marginBottom: 4 }}>Clave del producto</div>
+          <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 15 }}>{claveInfo.clave}</div>
+          {claveInfo.descripcion && <div style={{ fontSize: 13.5, marginTop: 4 }}><strong>{claveInfo.descripcion}</strong></div>}
+          <div style={{ fontSize: 13, marginTop: 6, display: "flex", gap: 18, flexWrap: "wrap" }}>
+            {claveInfo.cuenta_prei && <span>Cuenta <strong>{claveInfo.cuenta_prei}</strong></span>}
+            {claveInfo.centro_costo && <span>Centro de costos <strong>{claveInfo.centro_costo}</strong></span>}
+            {claveInfo.precio != null && <span>Precio ref. <strong>{money(claveInfo.precio)}</strong></span>}
+          </div>
+        </div>
+      )}
 
       {/* Servicios capturados (desglose) */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0" }}>
