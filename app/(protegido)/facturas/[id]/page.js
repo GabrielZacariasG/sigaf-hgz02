@@ -212,11 +212,22 @@ export default function FacturaEstatusPage() {
       setMensaje("Tu sesión no es válida. Vuelve a iniciar sesión e inténtalo de nuevo.");
       return;
     }
+    // Al marcar GASTO REFLEJADO es OBLIGATORIO el contra-recibo (CR).
+    const extra = {};
+    if (campo === "estatus_general" && valor === "gasto_reflejado") {
+      let cr = String(factura?.cr_contrarecibo ?? "").trim();
+      if (!cr) {
+        cr = (window.prompt("Para marcar GASTO REFLEJADO es obligatorio el contra-recibo (CR).\n\nCaptura el número de CR:", "") || "").trim();
+        if (!cr) { setMensaje("No se marcó gasto reflejado: es obligatorio capturar el contra‑recibo (CR)."); return; }
+        extra.cr_contrarecibo = cr;
+      }
+      if (!factura?.fecha_pago) extra.fecha_pago = new Date().toISOString().slice(0, 10);
+    }
     setGuardando(campo);
     try {
       const { data, error } = await supabase
         .from("facturas")
-        .update({ [campo]: valor })
+        .update({ [campo]: valor, ...extra })
         .eq("id", facturaId)
         .select("id");
       if (error) {
