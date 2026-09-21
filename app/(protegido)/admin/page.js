@@ -123,7 +123,7 @@ export default function AdminPanel() {
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       {!adminSesion && <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/" style={{ color: "var(--verde)" }}>← Panel</Link></div>}
-      <h1 style={{ fontSize: 22, margin: 0 }}>Panel del Subdirector Administrativo</h1>
+      <h1 style={{ fontSize: 22, margin: 0 }}>{adminSesion?.cargo ? `Panel del ${adminSesion.cargo}` : "Panel del Administrador"}</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 4 }}>Estado de la facturación (solo consulta). {agg.nTotal.toLocaleString("es-MX")} factura(s) activas.</p>
 
       {/* Totales */}
