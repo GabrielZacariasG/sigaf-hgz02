@@ -749,8 +749,8 @@ export default function FacturasListaPage() {
               <tr key={f.id} style={sel[f.id] ? { background: "var(--verde-claro)" } : f.estancada ? { background: "var(--rojo-claro)" } : f.estatus_general === "gasto_reflejado" ? { opacity: 0.72 } : {}}>
                 <td style={{ ...td, textAlign: "center" }}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggleSel(f.id)} /></td>
                 <td style={td}>
-                  <Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)", fontWeight: 600 }}>{f.folio_ingreso}</Link>
-                  <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}{f.tieneCR ? <span style={{ color: "var(--verde-oscuro)" }}> · CR {f.cr_contrarecibo}</span> : ""}</div>
+                  <Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)", fontWeight: 600 }}>{f.folio_proveedor || "(sin folio)"}</Link>
+                  <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_ingreso}{f.tieneCR ? <span style={{ color: "var(--verde-oscuro)" }}> · CR {f.cr_contrarecibo}</span> : ""}</div>
                 </td>
                 <td style={{ ...td, maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.prov}</td>
                 <td style={{ ...td, fontSize: 12, color: "var(--texto-suave)", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.contrato}<div>{f.capNom}</div></td>
