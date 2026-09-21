@@ -8,7 +8,7 @@ import {
   FLUJO_GENERAL, LABEL_GENERAL,
   FLUJO_FIRMAS, LABEL_FIRMAS,
   FLUJO_PEDIDO, LABEL_PEDIDO,
-  puedeEnviarOoad,
+  puedeEnviarOoad, flujoFirmasDe,
 } from "../../../../lib/estatus";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
@@ -345,6 +345,7 @@ export default function FacturaEstatusPage() {
   const nextGen = idxGen >= 0 && idxGen < FLUJO_GENERAL.length - 1 ? FLUJO_GENERAL[idxGen + 1] : null;
   const capNombre = factura.capitulos?.nombre;
   const sinAdminContrato = capNombre === "Compra Emergente";
+  const flujoFirmas = flujoFirmasDe(capNombre); // circuito corto en CE (sin admin de contrato)
   const bloqueoOoad = nextGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado", capNombre);
 
   return (
@@ -527,7 +528,7 @@ export default function FacturaEstatusPage() {
 
       {/* Circuitos en paralelo */}
       <div style={{ display: "flex", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
-        <Stepper titulo="Circuito de firmas" flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas} historial={historial} circuito="firmas" alertasMap={alertasMap} />
+        <Stepper titulo="Circuito de firmas" flujo={flujoFirmas} labels={LABEL_FIRMAS} actual={factura.estatus_firmas} historial={historial} circuito="firmas" alertasMap={alertasMap} />
         {generaPR && <Stepper titulo="Circuito de pedido-recepción" flujo={FLUJO_PEDIDO} labels={LABEL_PEDIDO} actual={factura.estatus_pedido_recepcion} historial={historial} circuito="pedido_recepcion" alertasMap={alertasMap} />}
       </div>
 
@@ -549,7 +550,7 @@ export default function FacturaEstatusPage() {
 
         <GuidedControl
           label="Circuito de firmas"
-          flujo={FLUJO_FIRMAS} labels={LABEL_FIRMAS} actual={factura.estatus_firmas}
+          flujo={flujoFirmas} labels={LABEL_FIRMAS} actual={factura.estatus_firmas}
           onSet={(v) => cambiar("estatus_firmas", v)} guardando={guardando === "estatus_firmas"}
           oficio={factura.estatus_firmas === "envio_firmas_servicio"
             ? <BotonOficio href={`/facturas?accion=memo&id=${factura.id}`} texto="Imprimir memo de envío al servicio" />
