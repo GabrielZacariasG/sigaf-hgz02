@@ -277,10 +277,11 @@ export default function FacturasListaPage() {
   // Enviar al Adm. de Contrato: solo AVANZA el estatus de firmas (el oficio ya
   // lo generó el servicio al validar). Solo aplica a las ya validadas por servicio.
   const enviarAdmContrato = async () => {
-    const elegibles = seleccionadas.filter((f) => f.estatus_firmas === "autorizada_servicio");
+    // Compra Emergente NO ocupa firma del Adm. de Contrato: se excluye.
+    const elegibles = seleccionadas.filter((f) => f.estatus_firmas === "autorizada_servicio" && f.capNom !== "Compra Emergente");
     const noAplica = seleccionadas.length - elegibles.length;
     if (elegibles.length === 0) {
-      setMensaje("Solo se pueden enviar al Adm. de Contrato las facturas ya validadas por el servicio (estatus de firmas: «Autorizada (servicio)»). Ninguna de las seleccionadas lo está.");
+      setMensaje("Solo se pueden enviar al Adm. de Contrato las facturas ya validadas por el servicio (y que NO sean Compra Emergente, que no requiere esa firma). Ninguna de las seleccionadas aplica.");
       return;
     }
     setEnviando(true); setMensaje("");

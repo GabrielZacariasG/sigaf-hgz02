@@ -333,7 +333,9 @@ export default function FacturaEstatusPage() {
   // Candado cruzado: solo se puede AVANZAR general a "enviada_ooad" si firmas (y pedido en Integrales) están completos.
   const idxGen = FLUJO_GENERAL.indexOf(factura.estatus_general);
   const nextGen = idxGen >= 0 && idxGen < FLUJO_GENERAL.length - 1 ? FLUJO_GENERAL[idxGen + 1] : null;
-  const bloqueoOoad = nextGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado");
+  const capNombre = factura.capitulos?.nombre;
+  const sinAdminContrato = capNombre === "Compra Emergente";
+  const bloqueoOoad = nextGen === "enviada_ooad" && !puedeEnviarOoad(factura.estatus_firmas, generaPR ? factura.estatus_pedido_recepcion : "generado", capNombre);
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -515,7 +517,7 @@ export default function FacturaEstatusPage() {
           flujo={FLUJO_GENERAL} labels={LABEL_GENERAL} actual={factura.estatus_general}
           onSet={(v) => cambiar("estatus_general", v)} guardando={guardando === "estatus_general"}
           avanzarBloqueado={bloqueoOoad}
-          hint={generaPR ? "Requiere firmas y pedido-recepción completos para enviar a OOAD" : "Requiere firmas completas para enviar a OOAD"}
+          hint={sinAdminContrato ? "Compra Emergente: requiere solo la validación del servicio para enviar a OOAD" : generaPR ? "Requiere firmas y pedido-recepción completos para enviar a OOAD" : "Requiere firmas completas para enviar a OOAD"}
           oficio={factura.estatus_general === "enviada_ooad"
             ? <BotonOficio href={`/facturas?accion=pago&id=${factura.id}`} texto="Imprimir oficio de envío a pago (OOAD)" />
             : null}
