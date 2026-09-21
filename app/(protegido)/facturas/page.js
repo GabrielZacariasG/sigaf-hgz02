@@ -273,6 +273,32 @@ export default function FacturasListaPage() {
     const grupos = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "envio_servicio", anio, consecutivo: c, folio: fmtFolio("envio_servicio", c, anio) }; });
     setMemo({ grupos });
   };
+
+  // Enviar al Adm. de Contrato: solo AVANZA el estatus de firmas (el oficio ya
+  // lo generó el servicio al validar). Solo aplica a las ya validadas por servicio.
+  const enviarAdmContrato = async () => {
+    const elegibles = seleccionadas.filter((f) => f.estatus_firmas === "autorizada_servicio");
+    const noAplica = seleccionadas.length - elegibles.length;
+    if (elegibles.length === 0) {
+      setMensaje("Solo se pueden enviar al Adm. de Contrato las facturas ya validadas por el servicio (estatus de firmas: «Autorizada (servicio)»). Ninguna de las seleccionadas lo está.");
+      return;
+    }
+    setEnviando(true); setMensaje("");
+    try {
+      const ids = elegibles.map((f) => f.id);
+      for (let i = 0; i < ids.length; i += 25) {
+        const lote = ids.slice(i, i + 25);
+        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_admin_contrato" }).eq("id", id)));
+      }
+      setFacturas((prev) => prev.map((f) => (ids.includes(f.id)
+        ? { ...f, estatus_firmas: "envio_firmas_admin_contrato", etapa: etapaDe({ ...f, estatus_firmas: "envio_firmas_admin_contrato" }) }
+        : f)));
+      setSel({});
+      setMensaje(`✅ ${ids.length} factura(s) enviadas a firma del Adm. de Contrato${noAplica > 0 ? ` · ${noAplica} no aplicaba(n) (no estaban validadas por servicio)` : ""}.`);
+    } catch (e) { setMensaje("No se pudo enviar al Adm. de Contrato: " + e.message); }
+    setEnviando(false);
+  };
+
   const confirmarEnvio = async (imprimir = false) => {
     setEnviando(true);
     try {
@@ -866,6 +892,7 @@ export default function FacturasListaPage() {
                 <span style={{ fontSize: 13, color: "var(--texto-suave)" }}>{seleccionadas.length} seleccionada(s)</span>
                 <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
                 <button className="boton secundario" onClick={enviarServicio}>Enviar al servicio →</button>
+                <button className="boton secundario" onClick={enviarAdmContrato} disabled={enviando}>Enviar al Adm. de Contrato →</button>
                 <button className="boton secundario" onClick={devolverProveedor}>Devolver al proveedor →</button>
                 <button className="boton" onClick={enviarOOAD}>Enviar a OOAD (pago) →</button>
               </div>
