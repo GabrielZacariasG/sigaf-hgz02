@@ -8,7 +8,7 @@ import {
   FLUJO_GENERAL, LABEL_GENERAL,
   FLUJO_FIRMAS, LABEL_FIRMAS,
   FLUJO_PEDIDO, LABEL_PEDIDO,
-  puedeEnviarOoad, flujoFirmasDe,
+  puedeEnviarOoad, flujoFirmasDe, generaPedidoRecepcion,
 } from "../../../../lib/estatus";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
@@ -165,7 +165,7 @@ export default function FacturaEstatusPage() {
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -232,6 +232,21 @@ export default function FacturaEstatusPage() {
         extra.cr_contrarecibo = cr;
       }
       if (!factura?.fecha_pago) extra.fecha_pago = new Date().toISOString().slice(0, 10);
+    }
+    // Al marcar P&R como RECIBIDO, capturar número de pedido y de recepción.
+    if (campo === "estatus_pedido_recepcion" && valor === "generado") {
+      let ped = String(factura?.numero_pedido ?? "").trim();
+      let rec = String(factura?.numero_recepcion ?? "").trim();
+      if (!ped) {
+        ped = (window.prompt("Llegó el Pedido y Recepción.\n\nNúmero de PEDIDO:", "") || "").trim();
+        if (!ped) { setMensaje("No se registró: falta el número de pedido."); return; }
+        extra.numero_pedido = ped;
+      }
+      if (!rec) {
+        rec = (window.prompt("Número de RECEPCIÓN:", "") || "").trim();
+        if (!rec) { setMensaje("No se registró: falta el número de recepción."); return; }
+        extra.numero_recepcion = rec;
+      }
     }
     setGuardando(campo);
     try {
@@ -337,9 +352,9 @@ export default function FacturaEstatusPage() {
     );
   }
 
-  // Solo Integrales (PREI II, módulo de compras) genera pedido-recepción.
-  // Los demás capítulos (PREI I: Área Médica, Subrogados, Compra Emergente) no.
-  const generaPR = ["Integrales", "Servicios Integrales"].includes(factura.capitulos?.nombre);
+  // Genera pedido-recepción: Integrales + cuentas de Área Médica 51251019/06/18.
+  const cuentaFactura = factura.partidas?.cuenta_finat || factura.partidas?.cuenta_prei;
+  const generaPR = generaPedidoRecepcion(factura.capitulos?.nombre, cuentaFactura);
   // Candado cruzado: solo se puede AVANZAR general a "enviada_ooad" si firmas (y pedido en Integrales) están completos.
   const idxGen = FLUJO_GENERAL.indexOf(factura.estatus_general);
   const nextGen = idxGen >= 0 && idxGen < FLUJO_GENERAL.length - 1 ? FLUJO_GENERAL[idxGen + 1] : null;
@@ -382,6 +397,12 @@ export default function FacturaEstatusPage() {
                 : <span style={{ color: "var(--texto-suave)" }}>—</span>}
             </div>
             {factura.fecha_pago && <div><strong>Gasto reflejado:</strong> {factura.fecha_pago}</div>}
+          </div>
+        )}
+        {generaPR && (String(factura.numero_pedido ?? "").trim() || String(factura.numero_recepcion ?? "").trim()) && (
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)", display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <div><strong>Pedido:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_pedido || "—"}</span></div>
+            <div><strong>Recepción:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_recepcion || "—"}</span></div>
           </div>
         )}
         <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
