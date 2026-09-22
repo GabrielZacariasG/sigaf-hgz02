@@ -290,6 +290,7 @@ export default function NuevaFacturaPage() {
   function validarPaso1() {
     if (esOC) {
       if (!proveedorId) return "Elige el proveedor de la compra emergente.";
+      if (!clave.trim()) return "Captura la clave del producto (obligatoria en compra emergente).";
       if (!contratoId || !contratoSel) return "Elige la cuenta (partida) de la compra emergente.";
       if (!ordenCompra.trim()) return "Captura el número de Orden de Compra (OC).";
     } else {

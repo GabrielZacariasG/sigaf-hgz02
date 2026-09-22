@@ -377,6 +377,12 @@ export default function FacturaEstatusPage() {
       </div>
       <h1 style={{ fontSize: 22, margin: "6px 0 2px" }}>{factura.folio_ingreso}</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 0 }}>Folio proveedor {factura.folio_proveedor}</p>
+      {factura.orden_compra && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--verde-claro)", color: "var(--verde-oscuro)", border: "1px solid var(--verde-oscuro)", borderRadius: 8, padding: "6px 12px", fontSize: 13.5, margin: "2px 0 4px" }}>
+          <span style={{ textTransform: "uppercase", fontSize: 11, letterSpacing: 0.4, opacity: 0.85 }}>Orden de Compra</span>
+          <strong style={{ fontFamily: "monospace", fontSize: 15 }}>{factura.orden_compra}</strong>
+        </div>
+      )}
 
       {/* Resumen */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
