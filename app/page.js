@@ -186,6 +186,14 @@ export default function Portal() {
   // Saludo de bienvenida según la hora (sin el nombre de la cuenta).
   const hora = new Date().getHours();
   const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  // Cargo según el rol, para personalizar el portal.
+  const CARGO = {
+    jefa_finanzas: 'Jefa del Departamento de Finanzas',
+    jefe_presupuesto: 'Jefe de la Oficina de Presupuesto',
+    auo: 'Ventanilla de facturación',
+  };
+  const cargo = CARGO[usuario?.rol] || '';
+  const primerNombre = (usuario?.nombre || '').trim().split(/\s+/)[0] || '';
 
   return (
     <>
@@ -195,19 +203,24 @@ export default function Portal() {
           <div className="sede">Hospital General de Zona No. 02 · Oficina de Presupuesto</div>
         </div>
         <div className="usuario">
-          <span>{usuario?.nombre}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
+            <span style={{ fontWeight: 600 }}>{usuario?.nombre || 'Usuario'}</span>
+            {cargo && <span style={{ fontSize: 11, opacity: 0.85 }}>{cargo}</span>}
+          </div>
           <button className="boton secundario" onClick={salir}>Salir</button>
         </div>
       </header>
 
       <main className="contenedor">
         <h1 className="titulo">
-          {esAuo ? `${saludo} 👋` : 'Panel principal'}
+          {saludo}{primerNombre ? `, ${primerNombre}` : ''} 👋
         </h1>
         <p className="subtitulo">
-          {esAuo
-            ? 'Captura tus facturas y dales seguimiento.'
-            : 'Seguimiento de facturas desde su ingreso en ventanilla hasta que se refleja el gasto.'}
+          {usuario?.nombre && cargo
+            ? `${usuario.nombre} · ${cargo} — HGZ No. 02`
+            : esAuo
+              ? 'Captura tus facturas y dales seguimiento.'
+              : 'Seguimiento de facturas desde su ingreso en ventanilla hasta que se refleja el gasto.'}
         </p>
 
         {esAuo && (
