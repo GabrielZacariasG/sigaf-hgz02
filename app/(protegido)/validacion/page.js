@@ -39,7 +39,7 @@ export default function ValidacionServicioPage() {
       const [rJ, rF] = await Promise.all([
         supabase.from("jefes_servicio").select("id, nombre, jefatura, cargo, email, matricula").eq("activo", true).order("nombre"),
         supabase.from("facturas")
-          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )")
+          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
       ]);
       if (rJ.error) setMensaje("No pude cargar jefes: " + rJ.error.message + " (¿ya corriste sigaf_jefes_servicio.sql?)");
@@ -110,7 +110,9 @@ export default function ValidacionServicioPage() {
       }
       const folio = val.oficio_folio || `OF-${val.dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
       if (val.jefe_id) setJefeId(val.jefe_id);
-      setOficio({ jefe: jefeObj, dictamen: val.dictamen, motivo: val.motivo || "", filas: [fac], folio, reimpresion: true });
+      // Reimprimir el oficio COMPLETO: todas las facturas que comparten ese folio.
+      const filas = await facturasDeOficio(val.oficio_folio, [fac]);
+      setOficio({ jefe: jefeObj, dictamen: val.dictamen, motivo: val.motivo || "", filas, folio, reimpresion: true });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, jefes, deepHecho]);
@@ -148,18 +150,42 @@ export default function ValidacionServicioPage() {
     return [...pend, ...val].filter(pasa);
   }, [pendientes, validadas, busqueda, fProv]);
 
+  // Facturas que comparten un mismo folio de oficio (para reimprimir el oficio
+  // COMPLETO, con todas sus facturas — no solo la que se abrió).
+  const facturasDeOficio = async (oficioFolio, respaldo) => {
+    if (!oficioFolio) return respaldo;
+    const { data } = await supabase.from("validaciones_servicio")
+      .select("facturas ( id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social ) )")
+      .eq("oficio_folio", oficioFolio);
+    const fs = (data || []).map((r) => r.facturas).filter(Boolean);
+    return fs.length ? fs : respaldo;
+  };
+
   // Reimprimir el oficio/acuse con el que se dictaminó una factura.
-  const verOficioValidacion = (f) => {
+  const verOficioValidacion = async (f) => {
     if (!f._val) return;
-    const base = { jefe, dictamen: f._val.dictamen, motivo: f._val.motivo || "", filas: [f], folio: f._val.oficio_folio, reimpresion: true };
+    const filas = await facturasDeOficio(f._val.oficio_folio, [f]);
+    const base = { jefe, dictamen: f._val.dictamen, motivo: f._val.motivo || "", filas, folio: f._val.oficio_folio, reimpresion: true };
     setOficio(f._val.dictamen === "devolucion" ? { ...base, tipoDoc: "devolucion_solicitud" } : base);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const proveedores = useMemo(() => [...new Set(pendientes.map((f) => f.proveedores?.razon_social).filter(Boolean))].sort(), [pendientes]);
   const seleccionadas = useMemo(() => pendientes.filter((f) => sel[f.id]), [pendientes, sel]);
+  // Candado: un oficio = un solo contrato. La clave del contrato agrupa la selección.
+  const contratoKey = (f) => f?.contrato_id ?? f?.contratos?.numero_interno ?? null;
+  const contratoLabel = (f) => f?.contratos?.numero_interno ?? "(sin contrato)";
+  // Contrato "activo": el de la primera factura seleccionada (si hay selección).
+  const contratoActivo = useMemo(() => {
+    const first = pendientes.find((f) => sel[f.id]);
+    return first ? contratoKey(first) : null;
+  }, [pendientes, sel]);
+  // Grupo sobre el que actúa "seleccionar todas": el contrato activo, o el del primer renglón.
+  const grupoContrato = contratoActivo != null ? contratoActivo : (pendientes[0] ? contratoKey(pendientes[0]) : null);
+  const grupo = useMemo(() => pendientes.filter((f) => contratoKey(f) === grupoContrato), [pendientes, grupoContrato]);
+  const bloqueada = (f) => contratoActivo != null && contratoKey(f) !== contratoActivo; // de otro contrato → no seleccionable
   const toggle = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
-  const toggleTodas = () => { const all = pendientes.every((f) => sel[f.id]); const n = {}; pendientes.forEach((f) => (n[f.id] = !all)); setSel(n); };
+  const toggleTodas = () => { const all = grupo.length > 0 && grupo.every((f) => sel[f.id]); const n = { ...sel }; grupo.forEach((f) => (n[f.id] = !all)); setSel(n); };
   const verDetalle = async (f) => {
     if (detAbierto === f.id) { setDetAbierto(null); return; }
     setDetAbierto(f.id);
@@ -175,6 +201,12 @@ export default function ValidacionServicioPage() {
     if (!jefeId) { setMensaje("Elige el jefe de servicio."); return; }
     if (!seleccionadas.length) { setMensaje("Selecciona al menos una factura."); return; }
     if ((dictamen === "incumplimiento" || dictamen === "devolucion") && !motivo.trim()) { setMensaje("Captura el motivo."); return; }
+    // Candado: un oficio no puede mezclar contratos (va dirigido a un solo Administrador del Contrato).
+    const contratos = new Set(seleccionadas.map(contratoKey));
+    if (contratos.size > 1) {
+      setMensaje("Un oficio no puede mezclar contratos. Selecciona facturas de un solo contrato y genera un oficio por cada uno.");
+      return;
+    }
     setMensaje("");
     if (dictamen === "devolucion") {
       const folio = `ACU-DEV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
@@ -572,6 +604,15 @@ export default function ValidacionServicioPage() {
               <button className="boton" onClick={generar} disabled={!seleccionadas.length}>{dictamen === "devolucion" ? "Solicitar devolución" : "Generar oficio"}</button>
             </div>
           </div>
+          {contratoActivo != null ? (
+            <p style={{ fontSize: 12, color: "var(--verde-oscuro)", marginTop: 6 }}>
+              🔒 Oficio del contrato <strong>{contratoLabel(seleccionadas[0])}</strong>. Las facturas de otros contratos quedan bloqueadas; para otro contrato genera un oficio aparte.
+            </p>
+          ) : (
+            <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>
+              Un oficio = un solo contrato. Al elegir la primera factura, las de otros contratos se bloquean.
+            </p>
+          )}
           {(dictamen === "incumplimiento" || dictamen === "devolucion") && (
             <input value={motivo} onChange={(e) => setMotivo(e.target.value)}
               placeholder={dictamen === "devolucion" ? "Motivo de la devolución al proveedor (qué no está bien)…" : "Motivo del incumplimiento…"}
@@ -590,14 +631,14 @@ export default function ValidacionServicioPage() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr>
-                    <th style={{ ...th, width: 34 }}><input type="checkbox" checked={pendientes.length > 0 && pendientes.every((f) => sel[f.id])} onChange={toggleTodas} /></th>
+                    <th style={{ ...th, width: 34 }}><input type="checkbox" checked={grupo.length > 0 && grupo.every((f) => sel[f.id])} onChange={toggleTodas} title="Seleccionar todas las de este contrato" /></th>
                     <th style={th}>Factura</th><th style={th}>Proveedor</th><th style={th}>Contrato</th><th style={th}>Periodo</th><th style={{ ...th, textAlign: "right" }}>Importe</th>
                   </tr></thead>
                   <tbody>
                     {pendientes.map((f) => (
                       <Fragment key={f.id}>
-                      <tr style={sel[f.id] ? { background: "var(--verde-claro)" } : {}}>
-                        <td style={td}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggle(f.id)} /></td>
+                      <tr style={sel[f.id] ? { background: "var(--verde-claro)" } : bloqueada(f) ? { opacity: 0.45 } : {}}>
+                        <td style={td}><input type="checkbox" checked={!!sel[f.id]} disabled={bloqueada(f)} onChange={() => toggle(f.id)} title={bloqueada(f) ? "Otro contrato: un oficio no puede mezclar contratos" : ""} /></td>
                         <td style={td}>
                           <span style={{ fontWeight: 600 }}>{f.folio_ingreso}</span>
                           <div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div>
