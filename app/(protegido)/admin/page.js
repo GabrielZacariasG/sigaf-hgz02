@@ -126,6 +126,12 @@ export default function AdminPanel() {
       <h1 style={{ fontSize: 22, margin: 0 }}>{adminSesion?.cargo ? `Panel del ${adminSesion.cargo}` : "Panel del Administrador"}</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 4 }}>Estado de la facturación (solo consulta). {agg.nTotal.toLocaleString("es-MX")} factura(s) activas.</p>
 
+      {/(subdirector)/i.test(adminSesion?.cargo || "") && (
+        <Link href="/admin/validacion" className="boton" style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 12, textDecoration: "none" }}>
+          ✔ Validación de facturas · Compra Emergente →
+        </Link>
+      )}
+
       {/* Totales */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginTop: 12 }}>
         <div style={card}><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Facturado (activo)</div><div style={{ fontSize: 22, fontWeight: 800 }}>{money(agg.total)}</div><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{agg.nTotal} factura(s)</div></div>

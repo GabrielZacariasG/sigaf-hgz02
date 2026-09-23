@@ -80,9 +80,9 @@ export default function ProtegidoLayout({ children }) {
     })();
   }, [usuario]);
 
-  // Candado: un administrador solo puede estar en /admin (si va a otra, regresa).
+  // Candado: un administrador solo puede estar en su portal /admin (y subrutas).
   useEffect(() => {
-    if (esAdmin === true && pathname && pathname !== "/admin") router.replace("/admin");
+    if (esAdmin === true && pathname && !pathname.startsWith("/admin")) router.replace("/admin");
   }, [esAdmin, pathname, router]);
 
   async function cerrarSesion() {
