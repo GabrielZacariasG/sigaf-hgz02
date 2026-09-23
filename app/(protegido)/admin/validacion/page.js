@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../../lib/supabaseClient";
 
@@ -14,6 +14,8 @@ export default function AdminValidacionCE() {
   const [cargando, setCargando] = useState(true);
   const [sel, setSel] = useState({});
   const [busqueda, setBusqueda] = useState("");
+  const [detAbierto, setDetAbierto] = useState(null); // factura con detalle desplegado
+  const [detInfo, setDetInfo] = useState({});          // id -> { ...clave } | "load"
   const [oficio, setOficio] = useState(null);    // { filas, folio }
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(false);     // imprimió borrador
@@ -39,7 +41,7 @@ export default function AdminValidacionCE() {
   async function cargar() {
     // Compra Emergente pendiente de validar (enviada al servicio).
     const { data } = await supabase.from("facturas")
-      .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, orden_compra, proveedores ( razon_social ), capitulos!inner ( nombre ), partidas ( cuenta_finat, cuenta_prei )")
+      .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, orden_compra, clave_cbi, centro_costo, contratos ( numero_interno ), proveedores ( razon_social ), capitulos!inner ( nombre ), partidas ( cuenta_finat, cuenta_prei, nombre )")
       .eq("estatus_firmas", "envio_firmas_servicio")
       .eq("capitulos.nombre", "Compra Emergente")
       .eq("anulada", false);
@@ -51,6 +53,17 @@ export default function AdminValidacionCE() {
     if (!q) return facturas;
     return facturas.filter((f) => `${f.folio_ingreso} ${f.folio_proveedor} ${f.proveedores?.razon_social ?? ""} ${f.orden_compra ?? ""}`.toLowerCase().includes(q));
   }, [facturas, busqueda]);
+
+  const verDetalle = async (f) => {
+    if (detAbierto === f.id) { setDetAbierto(null); return; }
+    setDetAbierto(f.id);
+    const clave = String(f.clave_cbi ?? "").trim();
+    if (clave && detInfo[f.id] == null) {
+      setDetInfo((p) => ({ ...p, [f.id]: "load" }));
+      const { data } = await supabase.from("cb_claves").select("descripcion, cuenta_prei, centro_costo, precio").eq("clave", clave).maybeSingle();
+      setDetInfo((p) => ({ ...p, [f.id]: data || {} }));
+    }
+  };
 
   const seleccionadas = useMemo(() => filtradas.filter((f) => sel[f.id]), [filtradas, sel]);
   const toggle = (id) => setSel((p) => ({ ...p, [id]: !p[id] }));
@@ -83,6 +96,8 @@ export default function AdminValidacionCE() {
   const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px" };
   const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "2px solid var(--borde)", whiteSpace: "nowrap" };
   const td = { padding: "8px 10px", borderBottom: "1px solid var(--borde)", fontSize: 13.5 };
+  const dLabel = { fontSize: 11, color: "var(--texto-suave)", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2 };
+  const dVal = { fontWeight: 600, color: "#222" };
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
   if (!autorizado) {
@@ -188,16 +203,46 @@ export default function AdminValidacionCE() {
                 <th style={th}>Factura</th><th style={th}>Proveedor</th><th style={th}>OC</th><th style={th}>Periodo</th><th style={{ ...th, textAlign: "right" }}>Importe</th>
               </tr></thead>
               <tbody>
-                {filtradas.map((f) => (
-                  <tr key={f.id} style={sel[f.id] ? { background: "var(--verde-claro)" } : {}}>
-                    <td style={td}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggle(f.id)} /></td>
-                    <td style={td}><span style={{ fontWeight: 600 }}>{f.folio_proveedor}</span><div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_ingreso}</div></td>
-                    <td style={{ ...td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedores?.razon_social ?? "—"}</td>
-                    <td style={{ ...td, fontSize: 12 }}>{f.orden_compra || "—"}</td>
-                    <td style={{ ...td, fontSize: 12 }}>{f.periodo_inicio} → {f.periodo_fin}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
-                  </tr>
-                ))}
+                {filtradas.map((f) => {
+                  const abierto = detAbierto === f.id;
+                  const info = detInfo[f.id];
+                  const cuenta = f.partidas?.cuenta_prei || f.partidas?.cuenta_finat || (info && info !== "load" ? info.cuenta_prei : "") || "—";
+                  const cc = f.centro_costo || (info && info !== "load" ? info.centro_costo : "") || "—";
+                  const desc = info && info !== "load" ? info.descripcion : "";
+                  return (
+                    <Fragment key={f.id}>
+                      <tr style={sel[f.id] ? { background: "var(--verde-claro)" } : {}}>
+                        <td style={td}><input type="checkbox" checked={!!sel[f.id]} onChange={() => toggle(f.id)} /></td>
+                        <td style={td}>
+                          <button type="button" onClick={() => verDetalle(f)} title="Ver detalle" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "var(--verde-oscuro)", fontWeight: 600 }}>
+                            {abierto ? "▾ " : "▸ "}{f.folio_proveedor}
+                          </button>
+                          <div style={{ fontSize: 11, color: "var(--texto-suave)" }}>{f.folio_ingreso}</div>
+                        </td>
+                        <td style={{ ...td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedores?.razon_social ?? "—"}</td>
+                        <td style={{ ...td, fontSize: 12 }}>{f.orden_compra || "—"}</td>
+                        <td style={{ ...td, fontSize: 12 }}>{f.periodo_inicio} → {f.periodo_fin}</td>
+                        <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
+                      </tr>
+                      {abierto && (
+                        <tr>
+                          <td></td>
+                          <td colSpan={5} style={{ ...td, background: "var(--gris-claro, #f6f7f9)", padding: "12px 14px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px 22px", fontSize: 13 }}>
+                              <div><div style={dLabel}>Clave del producto</div><div style={dVal}>{f.clave_cbi || "—"}</div></div>
+                              <div><div style={dLabel}>Orden de compra</div><div style={dVal}>{f.orden_compra || "—"}</div></div>
+                              <div><div style={dLabel}>Cuenta</div><div style={dVal}>{cuenta}</div></div>
+                              <div><div style={dLabel}>Centro de costos</div><div style={dVal}>{cc}</div></div>
+                              <div><div style={dLabel}>Contrato</div><div style={dVal}>{f.contratos?.numero_interno || "—"}</div></div>
+                              <div><div style={dLabel}>Importe</div><div style={dVal}>{money(f.importe_factura)}</div></div>
+                              <div style={{ gridColumn: "1 / -1" }}><div style={dLabel}>Descripción</div><div style={dVal}>{info === "load" ? "Cargando…" : (desc || (f.clave_cbi ? "(clave no encontrada en catálogo)" : "—"))}</div></div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
