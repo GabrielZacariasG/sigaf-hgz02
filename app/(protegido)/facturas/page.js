@@ -284,25 +284,20 @@ export default function FacturasListaPage() {
     setMemo({ grupos });
   };
 
-  // Compra Emergente: enviar a la bandeja del destino elegido (Abastecimiento / Administrador).
+  // Compra Emergente: arma el memorándum de envío al destino elegido
+  // (Abastecimiento / Administrador). Se confirma en la vista del memo, donde
+  // además se marca ce_destino en las facturas.
   const enviarServicioCE = async (destino) => {
     const items = ceEnvio?.items || [];
     if (!items.length) return;
-    setEnviando(true); setMensaje("");
-    try {
-      const ids = items.map((f) => f.id);
-      for (let i = 0; i < ids.length; i += 25) {
-        const lote = ids.slice(i, i + 25);
-        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio", ce_destino: destino }).eq("id", id)));
-      }
-      setFacturas((prev) => prev.map((f) => (ids.includes(f.id)
-        ? { ...f, estatus_firmas: "envio_firmas_servicio", ce_destino: destino, etapa: etapaDe({ ...f, estatus_firmas: "envio_firmas_servicio" }) }
-        : f)));
-      setSel({}); setCeEnvio(null);
-      const nom = destino === "abastecimiento" ? "Jefatura de Abastecimiento (Lic. Juan Ramón)" : "el Administrador (Subdirector)";
-      setMensaje(`✅ ${ids.length} Compra(s) Emergente(s) enviada(s) a ${nom} · aparece(n) en su bandeja de validación.`);
-    } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
-    setEnviando(false);
+    setCeEnvio(null); setMensaje("");
+    const dest = destino === "abastecimiento"
+      ? { jefe: "Lic. Juan Ramón", jefatura: "Abasto", destLinea: "Jefatura de Abastecimiento · HGZ No. 02" }
+      : { jefe: "Subdirector Administrativo", jefatura: null, destLinea: "Subdirección Administrativa · HGZ No. 02" };
+    const anio = new Date().getFullYear();
+    const consec = await proximoConsec("envio_servicio", anio);
+    const grupo = { ...dest, filas: [...items], esCE: true, tipoDb: "envio_servicio", anio, consecutivo: consec, folio: fmtFolio("envio_servicio", consec, anio) };
+    setMemo({ grupos: [grupo], ceDestino: destino, esCE: true });
   };
 
   // Enviar al Adm. de Contrato: solo AVANZA el estatus de firmas (el oficio ya
@@ -346,11 +341,13 @@ export default function FacturasListaPage() {
         foliosFinales[gi] = folio;
       }
       const ids = [...new Set(memo.grupos.flatMap((gr) => gr.filas.map((f) => f.id)))];
+      const patch = { estatus_firmas: "envio_firmas_servicio" };
+      if (memo.ceDestino) patch.ce_destino = memo.ceDestino; // Compra Emergente: destino elegido
       for (let i = 0; i < ids.length; i += 25) {
         const lote = ids.slice(i, i + 25);
-        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio" }).eq("id", id)));
+        await Promise.all(lote.map((id) => supabase.from("facturas").update(patch).eq("id", id)));
       }
-      setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, estatus_firmas: "envio_firmas_servicio" } : f)));
+      setFacturas((prev) => prev.map((f) => (ids.includes(f.id) ? { ...f, ...patch } : f)));
       if (imprimir) {
         flushSync(() => setMemo((m) => m && ({ ...m, grupos: m.grupos.map((g, i) => ({ ...g, folio: foliosFinales[i] || g.folio })) })));
         window.print();
@@ -688,12 +685,13 @@ export default function FacturasListaPage() {
                   {/* Destinatario en bloque */}
                   <div style={{ marginTop: 8, fontSize: 14 }}>
                     <div style={{ fontWeight: 700 }}>{g.jefe}</div>
-                    <div>{g.jefatura ? `Jefatura de ${g.jefatura}` : "Jefe(a) de Servicio"}</div>
+                    <div>{g.destLinea ? g.destLinea : (g.jefatura ? `Jefatura de ${g.jefatura}` : "Jefe(a) de Servicio")}</div>
                     <div style={{ marginTop: 16 }}>Presente</div>
                   </div>
                   <p style={{ marginTop: 30, textAlign: "justify", fontSize: 15, lineHeight: 1.7 }}>
-                    Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso,
-                    el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.
+                    {g.esCE
+                      ? <>Por este medio se remiten las siguientes facturas de <strong>Compra Emergente</strong> <strong>para su validación</strong>. Se solicita atentamente devolver el <strong>oficio de remisión a Finanzas</strong> con las facturas validadas.</>
+                      : <>Por este medio se remiten las siguientes facturas <strong>para su validación</strong>. Se solicita atentamente devolver, según sea el caso, el <strong>oficio de cumplimiento o de incumplimiento</strong> dirigido al <strong>administrador del contrato</strong>.</>}
                   </p>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
                     <thead><tr><th style={mH}>Folio</th><th style={mH}>Proveedor</th><th style={mH}>Contrato</th><th style={mH}>Periodo</th><th style={{ ...mH, textAlign: "right" }}>Importe</th></tr></thead>
