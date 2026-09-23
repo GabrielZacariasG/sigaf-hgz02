@@ -39,7 +39,7 @@ export default function ValidacionServicioPage() {
       const [rJ, rF] = await Promise.all([
         supabase.from("jefes_servicio").select("id, nombre, jefatura, cargo, email, matricula").eq("activo", true).order("nombre"),
         supabase.from("facturas")
-          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, estatus_firmas, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social )")
+          .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, estatus_firmas, ce_destino, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social ), capitulos ( nombre )")
           .eq("estatus_firmas", "envio_firmas_servicio"),
       ]);
       if (rJ.error) setMensaje("No pude cargar jefes: " + rJ.error.message + " (¿ya corriste sigaf_jefes_servicio.sql?)");
@@ -117,9 +117,17 @@ export default function ValidacionServicioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, jefes, deepHecho]);
 
+  // ¿Este jefe es la Jefatura de Abastecimiento (Lic. Juan Ramón)? Recibe las CE
+  // que Presupuesto le haya dirigido (ce_destino='abastecimiento').
+  const esAbasto = /abast/i.test(jefe?.jefatura || "");
   const pendientes = useMemo(() => {
-    let base = facturas;
-    if (jefeId && asignados && asignados.size > 0) base = facturas.filter((f) => asignados.has(f.proveedor_id));
+    const esCE = (f) => (f.capitulos?.nombre || "") === "Compra Emergente";
+    const visible = (f) => {
+      if (esCE(f)) return f.ce_destino === "abastecimiento" && esAbasto; // CE solo si va a Abasto y este jefe ES Abasto
+      if (asignados && asignados.size > 0) return asignados.has(f.proveedor_id); // no-CE: por proveedor asignado
+      return true; // sin asignación: todas las no-CE
+    };
+    let base = facturas.filter(visible);
     const q = busqueda.trim().toLowerCase();
     const pv = fProv.trim().toLowerCase();
     return base.filter((f) => {
@@ -130,7 +138,7 @@ export default function ValidacionServicioPage() {
       }
       return true;
     });
-  }, [facturas, jefeId, asignados, busqueda, fProv]);
+  }, [facturas, jefeId, asignados, busqueda, fProv, esAbasto]);
 
   // "Todas las enviadas": pendientes (⏳) + validadas (✓/✗), con su oficio.
   const todas = useMemo(() => {
@@ -155,7 +163,7 @@ export default function ValidacionServicioPage() {
   const facturasDeOficio = async (oficioFolio, respaldo) => {
     if (!oficioFolio) return respaldo;
     const { data } = await supabase.from("validaciones_servicio")
-      .select("facturas ( id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social ) )")
+      .select("facturas ( id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, proveedor_id, contrato_id, contratos ( numero_interno, adquisicion_servicio, administrador_contrato ), proveedores ( razon_social ), capitulos ( nombre ) )")
       .eq("oficio_folio", oficioFolio);
     const fs = (data || []).map((r) => r.facturas).filter(Boolean);
     return fs.length ? fs : respaldo;
@@ -173,8 +181,11 @@ export default function ValidacionServicioPage() {
   const proveedores = useMemo(() => [...new Set(pendientes.map((f) => f.proveedores?.razon_social).filter(Boolean))].sort(), [pendientes]);
   const seleccionadas = useMemo(() => pendientes.filter((f) => sel[f.id]), [pendientes, sel]);
   // Candado: un oficio = un solo contrato. La clave del contrato agrupa la selección.
-  const contratoKey = (f) => f?.contrato_id ?? f?.contratos?.numero_interno ?? null;
-  const contratoLabel = (f) => f?.contratos?.numero_interno ?? "(sin contrato)";
+  // Compra Emergente se agrupa como una sola llave "CE" (no lleva Adm de Contrato,
+  // así que varias CE pueden ir juntas en una remisión a Finanzas).
+  const esCEf = (f) => (f?.capitulos?.nombre || "") === "Compra Emergente";
+  const contratoKey = (f) => esCEf(f) ? "CE" : (f?.contrato_id ?? f?.contratos?.numero_interno ?? null);
+  const contratoLabel = (f) => esCEf(f) ? "Compra Emergente" : (f?.contratos?.numero_interno ?? "(sin contrato)");
   // Contrato "activo": el de la primera factura seleccionada (si hay selección).
   const contratoActivo = useMemo(() => {
     const first = pendientes.find((f) => sel[f.id]);
@@ -353,6 +364,8 @@ export default function ValidacionServicioPage() {
   // ---- Vista del OFICIO (formato real, imprimible) ----
   if (oficio) {
     const esCum = oficio.dictamen === "cumplimiento";
+    // Compra Emergente: la remisión va SOLO a Finanzas (sin hoja de Adm de Contrato).
+    const esCE = oficio.filas.length > 0 && oficio.filas.every((f) => (f.capitulos?.nombre || "") === "Compra Emergente");
     const f0 = oficio.filas[0] || {};
     const admin = f0.contratos?.administrador_contrato || "(administrador del contrato)";
     const proveedor = f0.proveedores?.razon_social || "(proveedor)";
@@ -404,7 +417,9 @@ export default function ValidacionServicioPage() {
                   <div style={{ marginTop: 16 }}>Presente</div>
                 </div>
                 <p style={{ marginTop: 26, textAlign: "justify", fontSize: 15, lineHeight: 1.75 }}>
-                  Por medio del presente le remito las siguientes facturas del proveedor <strong>{proveedor}</strong>, debidamente <strong>validadas por este servicio</strong>, adjuntando el <strong>oficio de {esCum ? "cumplimiento" : "incumplimiento"}</strong> dirigido al <strong>Administrador del Contrato</strong> {contratoNum}, para que por su conducto se realice el envío correspondiente.
+                  {esCE
+                    ? <>Por medio del presente le remito las siguientes facturas de <strong>Compra Emergente</strong> del proveedor <strong>{proveedor}</strong>, debidamente <strong>validadas por este servicio</strong>, para su trámite de pago.</>
+                    : <>Por medio del presente le remito las siguientes facturas del proveedor <strong>{proveedor}</strong>, debidamente <strong>validadas por este servicio</strong>, adjuntando el <strong>oficio de {esCum ? "cumplimiento" : "incumplimiento"}</strong> dirigido al <strong>Administrador del Contrato</strong> {contratoNum}, para que por su conducto se realice el envío correspondiente.</>}
                 </p>
                 <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 22 }}>
                   <thead><tr><th style={tblH}>FACTURA</th><th style={tblH}>PROVEEDOR</th><th style={tblH}>PERIODO</th><th style={{ ...tblH, textAlign: "right" }}>IMPORTE</th></tr></thead>
@@ -426,6 +441,7 @@ export default function ValidacionServicioPage() {
                     </div>
                   </div>
                 </div>
+                {!esCE && (<>
                 {/* Salto de página: la HOJA 2 (oficio al Adm de Contrato) empieza en hoja nueva */}
                 <div className="salto" />
                 {/* Encabezado institucional (arriba a la izquierda) */}
@@ -506,6 +522,7 @@ export default function ValidacionServicioPage() {
                     Se revisó conforme a los requisitos indicados en el Artículo 29-A del Código Fiscal de la Federación, requisitos de la Normativa de Pago de las cuentas contables (Anexo 2) y requisitos para pago incluidos en el Instrumento Legal.
                   </div>
                 </div>
+                </>)}
               </td></tr></tbody>
             </table>
           </div>

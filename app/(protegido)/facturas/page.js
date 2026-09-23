@@ -67,6 +67,7 @@ export default function FacturasListaPage() {
   const [abiertos, setAbiertos] = useState({});
   const [sel, setSel] = useState({});         // facturaId -> bool (para enviar al servicio)
   const [memo, setMemo] = useState(null);      // { grupos: [{ jefe, jefatura, filas, folio }] }
+  const [ceEnvio, setCeEnvio] = useState(null); // { items } — Compra Emergente esperando elegir destino
   const [oficio, setOficio] = useState(null);  // { tipo:'pago'|'devolucion', docs:[{ prov?, filas, folio, motivo? }] }
   const [enviando, setEnviando] = useState(false);
   const [avisoNoConfirmado, setAvisoNoConfirmado] = useState(false); // imprimieron borrador sin confirmar
@@ -256,6 +257,15 @@ export default function FacturasListaPage() {
   const enviarServicio = async (lista) => {
     const items = lista && lista.length ? lista : seleccionadas;
     if (!items.length) return;
+    // Compra Emergente tiene destino propio (Abastecimiento o Administrador):
+    // se pregunta a quién va antes de mandarla.
+    const ce = items.filter((f) => f.capNom === "Compra Emergente");
+    const noCE = items.filter((f) => f.capNom !== "Compra Emergente");
+    if (ce.length && noCE.length) {
+      setMensaje("Envía las de Compra Emergente por separado de las demás: tienen destino propio (Abastecimiento o Administrador).");
+      return;
+    }
+    if (ce.length) { setMensaje(""); setCeEnvio({ items: ce }); return; }
     const g = new Map();
     const nk = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
     for (const f of items) {
@@ -272,6 +282,27 @@ export default function FacturasListaPage() {
     let consec = await proximoConsec("envio_servicio", anio);
     const grupos = [...g.values()].map((x) => { const c = consec++; return { ...x, tipoDb: "envio_servicio", anio, consecutivo: c, folio: fmtFolio("envio_servicio", c, anio) }; });
     setMemo({ grupos });
+  };
+
+  // Compra Emergente: enviar a la bandeja del destino elegido (Abastecimiento / Administrador).
+  const enviarServicioCE = async (destino) => {
+    const items = ceEnvio?.items || [];
+    if (!items.length) return;
+    setEnviando(true); setMensaje("");
+    try {
+      const ids = items.map((f) => f.id);
+      for (let i = 0; i < ids.length; i += 25) {
+        const lote = ids.slice(i, i + 25);
+        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "envio_firmas_servicio", ce_destino: destino }).eq("id", id)));
+      }
+      setFacturas((prev) => prev.map((f) => (ids.includes(f.id)
+        ? { ...f, estatus_firmas: "envio_firmas_servicio", ce_destino: destino, etapa: etapaDe({ ...f, estatus_firmas: "envio_firmas_servicio" }) }
+        : f)));
+      setSel({}); setCeEnvio(null);
+      const nom = destino === "abastecimiento" ? "Jefatura de Abastecimiento (Lic. Juan Ramón)" : "el Administrador (Subdirector)";
+      setMensaje(`✅ ${ids.length} Compra(s) Emergente(s) enviada(s) a ${nom} · aparece(n) en su bandeja de validación.`);
+    } catch (e) { setMensaje("No se pudo enviar: " + e.message); }
+    setEnviando(false);
   };
 
   // Enviar al Adm. de Contrato: solo AVANZA el estatus de firmas (el oficio ya
@@ -899,6 +930,33 @@ export default function FacturasListaPage() {
               </div>
             )}
           </div>
+
+          {ceEnvio && (
+            <div onClick={() => !enviando && setCeEnvio(null)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+              <div onClick={(e) => e.stopPropagation()}
+                style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 12, padding: 20, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>Enviar Compra Emergente a validación</div>
+                <div style={{ fontSize: 13, color: "var(--texto-suave)", marginTop: 4 }}>
+                  {ceEnvio.items.length} factura(s). ¿A qué bandeja la(s) mandas?
+                </div>
+                <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+                  <button className="boton" disabled={enviando} onClick={() => enviarServicioCE("abastecimiento")}
+                    style={{ textAlign: "left", padding: "12px 14px" }}>
+                    🏬 Jefatura de Abastecimiento
+                    <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>Lic. Juan Ramón · valida en su portal</div>
+                  </button>
+                  <button className="boton" disabled={enviando} onClick={() => enviarServicioCE("administrador")}
+                    style={{ textAlign: "left", padding: "12px 14px" }}>
+                    🏛 El Administrador
+                    <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>Subdirector Administrativo · panel /admin</div>
+                  </button>
+                </div>
+                <button className="boton secundario" disabled={enviando} onClick={() => setCeEnvio(null)}
+                  style={{ marginTop: 14, fontSize: 13 }}>Cancelar</button>
+              </div>
+            </div>
+          )}
 
           {filtradas.length === 0 ? (
             <p style={{ color: "var(--texto-suave)", fontSize: 13, marginTop: 8 }}>Ninguna factura con estos filtros. <Link href="/facturas/nueva">Capturar una</Link>.</p>

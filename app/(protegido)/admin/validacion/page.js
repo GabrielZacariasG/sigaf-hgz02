@@ -44,6 +44,7 @@ export default function AdminValidacionCE() {
       .select("id, folio_ingreso, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, orden_compra, clave_cbi, centro_costo, contratos ( numero_interno ), proveedores ( razon_social ), capitulos!inner ( nombre ), partidas ( cuenta_finat, cuenta_prei, nombre )")
       .eq("estatus_firmas", "envio_firmas_servicio")
       .eq("capitulos.nombre", "Compra Emergente")
+      .or("ce_destino.eq.administrador,ce_destino.is.null") // solo las dirigidas al Administrador (o sin destino, compat.)
       .eq("anulada", false);
     setFacturas(data || []);
   }
