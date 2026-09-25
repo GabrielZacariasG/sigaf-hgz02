@@ -405,10 +405,17 @@ export default function FacturaEstatusPage() {
             {factura.fecha_pago && <div><strong>Gasto reflejado:</strong> {factura.fecha_pago}</div>}
           </div>
         )}
-        {generaPR && (String(factura.numero_pedido ?? "").trim() || String(factura.numero_recepcion ?? "").trim()) && (
-          <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)", display: "flex", gap: 24, flexWrap: "wrap" }}>
-            <div><strong>Pedido:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_pedido || "—"}</span></div>
-            <div><strong>Recepción:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_recepcion || "—"}</span></div>
+        {generaPR && (
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)", display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--texto-suave)" }}>Pedido‑recepción</span>
+            {(String(factura.numero_pedido ?? "").trim() || String(factura.numero_recepcion ?? "").trim()) ? (
+              <>
+                <div><strong>Pedido:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_pedido || "—"}</span></div>
+                <div><strong>Recepción:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.numero_recepcion || "—"}</span></div>
+              </>
+            ) : (
+              <span style={{ color: "var(--ambar)", fontWeight: 600 }}>Aún sin asignar · {LABEL_PEDIDO[factura.estatus_pedido_recepcion] || factura.estatus_pedido_recepcion}</span>
+            )}
           </div>
         )}
         <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
