@@ -267,8 +267,15 @@ export default function NuevaFacturaPage() {
   // descripción + cuenta (PREI) + centro de costos, y AUTOSELECCIONA el
   // marco de compra emergente correcto (CE-<cuenta>).
   async function buscarClave() {
-    const c = clave.trim();
-    if (!c) { setClaveInfo(null); setClaveMsg(""); return; }
+    const raw = clave.trim();
+    if (!raw) { setClaveInfo(null); setClaveMsg(""); return; }
+    // Normaliza al formato del catálogo: 080.823.0130.1001 (14 dígitos, 3.3.4.4).
+    // Acepta que la tecleen con espacios, guiones, puntos o sin separador.
+    const dig = raw.replace(/\D/g, "");
+    const c = dig.length === 14
+      ? `${dig.slice(0, 3)}.${dig.slice(3, 6)}.${dig.slice(6, 10)}.${dig.slice(10, 14)}`
+      : raw;
+    if (c !== clave) setClave(c);   // deja la clave en formato canónico
     const { data, error } = await supabase
       .from("cb_claves")
       .select("descripcion, partida_sai, cuenta_prei, centro_costo, precio")
