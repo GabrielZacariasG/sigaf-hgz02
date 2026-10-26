@@ -161,11 +161,17 @@ export default function FacturaEstatusPage() {
   const [rfImporte, setRfImporte] = useState("");   // nuevo importe (total con IVA)
   const [rfIni, setRfIni] = useState("");
   const [rfFin, setRfFin] = useState("");
+  // edición de fechas (corregir captura)
+  const [editFechas, setEditFechas] = useState(false);
+  const [fFact, setFFact] = useState("");
+  const [fIni, setFIni] = useState("");
+  const [fFin, setFFin] = useState("");
+  const [guardandoFechas, setGuardandoFechas] = useState(false);
 
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, fecha_factura, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -342,6 +348,26 @@ export default function FacturaEstatusPage() {
     router.push("/facturas");
   }
 
+  // Corregir fechas de captura (fecha de factura / periodo)
+  const puedeEditar = ["auo", "jefe_presupuesto", "jefa_finanzas"].includes(rol);
+  function abrirEditFechas() {
+    setFFact(factura.fecha_factura || "");
+    setFIni(factura.periodo_inicio || "");
+    setFFin(factura.periodo_fin || "");
+    setEditFechas(true);
+  }
+  async function guardarFechas() {
+    setGuardandoFechas(true); setMensaje("");
+    const { error } = await supabase.from("facturas").update({
+      fecha_factura: fFact || null,
+      periodo_inicio: fIni || factura.periodo_inicio,
+      periodo_fin: fFin || factura.periodo_fin,
+    }).eq("id", factura.id);
+    if (error) { setMensaje("No se pudo actualizar la fecha: " + error.message); setGuardandoFechas(false); return; }
+    setEditFechas(false); setGuardandoFechas(false);
+    await cargar();
+  }
+
   if (cargando) return <p style={{ padding: 8 }}>Cargando…</p>;
   if (!factura) {
     return (
@@ -388,8 +414,23 @@ export default function FacturaEstatusPage() {
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
         <div><strong>Proveedor:</strong> {factura.proveedores?.razon_social ?? "—"}</div>
         <div><strong>Contrato:</strong> {factura.contratos?.numero_interno ?? "—"}</div>
-        <div><strong>Periodo:</strong> {factura.periodo_inicio} → {factura.periodo_fin}</div>
+        <div>
+          <strong>Fecha de factura:</strong> {factura.fecha_factura || "—"}
+          {puedeEditar && !editFechas && (
+            <button type="button" onClick={abrirEditFechas} style={{ marginLeft: 8, fontSize: 12, padding: "1px 8px", border: "1px solid var(--borde)", borderRadius: 6, background: "var(--blanco)", cursor: "pointer" }}>✏️ editar</button>
+          )}
+          <div style={{ marginTop: 2 }}><strong>Periodo:</strong> {factura.periodo_inicio} → {factura.periodo_fin}</div>
+        </div>
         <div><strong>Importe:</strong> {money(factura.importe_factura)}</div>
+        {editFechas && (
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, padding: "12px", border: "1px solid var(--borde)", borderRadius: 8, background: "var(--fondo, #f8f8f8)", display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label style={{ fontSize: 12.5 }}>Fecha de factura<br /><input type="date" value={fFact} onChange={(e) => setFFact(e.target.value)} /></label>
+            <label style={{ fontSize: 12.5 }}>Periodo inicio<br /><input type="date" value={fIni} onChange={(e) => setFIni(e.target.value)} /></label>
+            <label style={{ fontSize: 12.5 }}>Periodo fin<br /><input type="date" value={fFin} onChange={(e) => setFFin(e.target.value)} /></label>
+            <button type="button" className="boton" onClick={guardarFechas} disabled={guardandoFechas}>{guardandoFechas ? "Guardando…" : "Guardar fechas"}</button>
+            <button type="button" className="boton secundario" onClick={() => setEditFechas(false)} disabled={guardandoFechas}>Cancelar</button>
+          </div>
+        )}
         <div><strong>Validación:</strong>{" "}
           {factura.validacion_ok === true ? <span style={{ color: "var(--verde-oscuro)" }}>✓ dentro de tolerancia</span>
             : factura.validacion_ok === false ? <span style={{ color: "var(--rojo)" }}>✗ dif. {money(factura.diferencia_importe)}</span>
