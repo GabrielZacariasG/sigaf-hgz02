@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
+import { leerTodo } from '../lib/paginar';
 
 const diasEntre = (desde) =>
   Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 86400000));
@@ -68,9 +69,10 @@ export default function Portal() {
       const seguimiento = async () => {
         try {
           const [rF, rA, rH] = await Promise.all([
-            supabase.from('facturas').select('id, estatus_general, estatus_firmas, estatus_pedido_recepcion'),
-            supabase.from('alertas_config').select('circuito, estatus, dias_umbral'),
-            supabase.from('factura_estatus_historial').select('factura_id, circuito, estatus, fecha'),
+            // Por páginas: Supabase corta en 1,000 filas (facturas e historial ya pasan de eso).
+            leerTodo((d, h) => supabase.from('facturas').select('id, estatus_general, estatus_firmas, estatus_pedido_recepcion').eq('anulada', false).order('id').range(d, h)),
+            leerTodo((d, h) => supabase.from('alertas_config').select('circuito, estatus, dias_umbral').range(d, h)),
+            leerTodo((d, h) => supabase.from('factura_estatus_historial').select('factura_id, circuito, estatus, fecha').order('id').range(d, h)),
           ]);
           if (rF.error) return { activas: 0, estancadas: 0 };
           const umbralMap = {};

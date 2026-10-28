@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
+import { insertarFacturaConFolio } from "../../../../lib/folios";
 
 const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
@@ -26,24 +27,6 @@ function prefijoDe(nombre) {
   return s.split(/\s+/).map((w) => w[0]).join("").slice(0, 3) || "GEN";
 }
 
-// Siguiente folio: HGZ2-{PREFIJO}-{anio}-{consecutivo 6 díg.}
-async function generarFolioIngreso(prefijoCap, anio) {
-  const prefijo = `HGZ2-${prefijoCap}-${anio}-`;
-  const { data, error } = await supabase
-    .from("facturas")
-    .select("folio_ingreso")
-    .like("folio_ingreso", `${prefijo}%`)
-    .order("folio_ingreso", { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  let consecutivo = 1;
-  if (data && data.length > 0) {
-    const ultimo = data[0].folio_ingreso.slice(prefijo.length);
-    const n = parseInt(ultimo, 10);
-    if (!Number.isNaN(n)) consecutivo = n + 1;
-  }
-  return prefijo + String(consecutivo).padStart(6, "0");
-}
 
 export default function NuevaFacturaPage() {
   const router = useRouter();
@@ -385,12 +368,8 @@ export default function NuevaFacturaPage() {
       const periIni = esOC ? fechaFactura : periodoInicio;
       const periFin = esOC ? fechaFactura : periodoFin;
       const anio = new Date(periIni + "T00:00:00").getFullYear();
-      const folioIngreso = await generarFolioIngreso(prefijoDe(capituloSel?.nombre), anio);
-
-      const { data: nueva, error } = await supabase
-        .from("facturas")
-        .insert({
-          folio_ingreso: folioIngreso,
+      // El folio de ingreso se asigna al guardar (reintenta si choca con otra captura simultánea).
+      const { data: nueva, error } = await insertarFacturaConFolio({
           folio_proveedor: folioProveedor,
           fecha_factura: fechaFactura,
           capitulo_id: capituloSel.id,
@@ -410,9 +389,7 @@ export default function NuevaFacturaPage() {
           centro_costo: esOC && claveInfo?.centro_costo ? claveInfo.centro_costo : null,
           estatus_general: "capturada",
           created_by: createdBy,
-        })
-        .select("id, folio_ingreso")
-        .single();
+        }, prefijoDe(capituloSel?.nombre), anio);
 
       if (error) { setMensaje("No se pudo guardar la factura: " + error.message); setCargando(false); return; }
 

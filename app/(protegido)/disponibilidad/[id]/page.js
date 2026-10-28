@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO } from "../../../../lib/estatus";
+import { leerTodo } from "../../../../lib/paginar";
 
 const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -37,9 +38,10 @@ export default function DetalleCuentaPage() {
       const cuenta = rP.data.cuenta_finat;
 
       const [rF, rD, rDev, rC] = await Promise.all([
-        supabase.from("facturas").select(
+        // Gasto real: sin anuladas (re-facturadas) ni devueltas; por páginas (51251019 ya pasa de 1,000 facturas).
+        leerTodo((d, h) => supabase.from("facturas").select(
           "id, folio_ingreso, folio_proveedor, importe_factura, es_pasivo, mes_presupuestal, anio_presupuestal, tipo_entrega, num_pacientes, cr_contrarecibo, periodo_inicio, periodo_fin, estatus_general, estatus_firmas, estatus_pedido_recepcion, contratos ( numero_interno, vigencia_inicio, vigencia_fin )"
-        ).eq("partida_id", id),
+        ).eq("partida_id", id).eq("anulada", false).neq("estatus_general", "devuelta_proveedor").order("id").range(d, h)),
         cuenta ? supabase.from("disponibilidad_presupuestal").select("*").eq("cuenta_prei", cuenta).eq("periodo", "2026").maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("ajustes_devengo").select("importe, contratos!inner(partida_id)").eq("contratos.partida_id", id),
         supabase.from("contratos").select("numero_interno, vigencia_inicio, vigencia_fin, monto_maximo, proveedores ( razon_social )").eq("partida_id", id),

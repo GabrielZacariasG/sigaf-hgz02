@@ -20,8 +20,12 @@ async function leerTodasLasFacturas() {
     const { data, error } = await supabase
       .from("facturas")
       .select(
-        "importe_factura, es_pasivo, estatus_general, partida_id, partidas ( id, cuenta_finat, nombre, capitulo_id, capitulos ( nombre ) )"
+        "id, importe_factura, es_pasivo, estatus_general, partida_id, partidas ( id, cuenta_finat, nombre, capitulo_id, capitulos ( nombre ) )"
       )
+      // Gasto real: sin facturas anuladas (re-facturadas) ni devueltas al proveedor.
+      .eq("anulada", false)
+      .neq("estatus_general", "devuelta_proveedor")
+      .order("id")
       .range(desde, desde + pageSize - 1);
     if (error) throw error;
     todas.push(...(data || []));

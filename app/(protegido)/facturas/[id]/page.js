@@ -10,6 +10,7 @@ import {
   FLUJO_PEDIDO, LABEL_PEDIDO,
   puedeEnviarOoad, flujoFirmasDe, generaPedidoRecepcion,
 } from "../../../../lib/estatus";
+import { insertarFacturaConFolio } from "../../../../lib/folios";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -17,14 +18,6 @@ function prefijoDe(nombre) {
   if (PREFIJO_CAPITULO[nombre]) return PREFIJO_CAPITULO[nombre];
   const s = (nombre || "GEN").normalize("NFD").replace(/[^\w\s]/g, "").trim().toUpperCase();
   return s.split(/\s+/).map((w) => w[0]).join("").slice(0, 3) || "GEN";
-}
-async function generarFolioIngreso(prefijoCap, anio) {
-  const prefijo = `HGZ2-${prefijoCap}-${anio}-`;
-  const { data, error } = await supabase.from("facturas").select("folio_ingreso").like("folio_ingreso", `${prefijo}%`).order("folio_ingreso", { ascending: false }).limit(1);
-  if (error) throw error;
-  let consec = 1;
-  if (data && data.length > 0) { const n = parseInt(data[0].folio_ingreso.slice(prefijo.length), 10); if (!Number.isNaN(n)) consec = n + 1; }
-  return prefijo + String(consec).padStart(6, "0");
 }
 
 const money = (n) =>
@@ -309,10 +302,8 @@ export default function FacturaEstatusPage() {
       if (!createdBy) { setMensaje("Tu usuario no está dado de alta en 'usuarios'."); setGuardando(null); return; }
 
       const anio = new Date(rfIni + "T00:00:00").getFullYear();
-      const folioIngreso = await generarFolioIngreso(prefijoDe(factura.capitulos?.nombre), anio);
-
-      const { data: nueva, error: eIns } = await supabase.from("facturas").insert({
-        folio_ingreso: folioIngreso,
+      // El folio de ingreso se asigna al guardar (reintenta si choca con otra captura simultánea).
+      const { data: nueva, error: eIns } = await insertarFacturaConFolio({
         folio_proveedor: rfFolio.trim(),
         capitulo_id: factura.capitulo_id,
         partida_id: factura.partida_id,
@@ -325,7 +316,7 @@ export default function FacturaEstatusPage() {
         estatus_general: "capturada",
         sustituye_a_id: factura.id,
         created_by: createdBy,
-      }).select("id, folio_ingreso").single();
+      }, prefijoDe(factura.capitulos?.nombre), anio);
       if (eIns) throw eIns;
 
       // Anular la original y enlazarla a la re-factura

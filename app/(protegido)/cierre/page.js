@@ -3,34 +3,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
+import { leerDispoIMKK022 } from "../../../lib/dispo";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const TOL = 1.0; // tolerancia de cuadre ($1)
 
-// --- Parseo del reporte FINAT IMKK022 (CSV). Suma GASTO/DISPONIBLE por cuenta. ---
-function parseDispo(texto) {
-  const lineas = texto.split(/\r?\n/);
-  let fecha = null;
-  const mFecha = texto.match(/Fecha Ejec:\s*(\d{2})\/(\d{2})\/(\d{4})/);
-  if (mFecha) fecha = `${mFecha[3]}-${mFecha[2]}-${mFecha[1]}`;
-  const hi = lineas.findIndex((l) => /^Cuenta,/i.test(l));
-  if (hi < 0) return { fecha, cuentas: null, error: "No se encontró el encabezado 'Cuenta,...' — ¿es el reporte IMKK022?" };
-  const agg = new Map();
-  for (let i = hi + 1; i < lineas.length; i++) {
-    const c = lineas[i].split(",");
-    if (c.length < 11) continue;
-    const cta = (c[0] || "").trim();
-    if (!/^\d+$/.test(cta)) continue;
-    const o = agg.get(cta) || { cuenta_finat: cta, presupuesto: 0, gasto: 0, comprometido: 0, precomprometido: 0, disponible: 0 };
-    o.presupuesto += Number(c[6]) || 0;
-    o.gasto += Number(c[7]) || 0;
-    o.comprometido += Number(c[8]) || 0;
-    o.precomprometido += Number(c[9]) || 0;
-    o.disponible += Number(c[10]) || 0;
-    agg.set(cta, o);
-  }
-  return { fecha, cuentas: [...agg.values()], error: null };
-}
+// El reporte FINAT IMKK022 se lee con lib/dispo.js (solo unidad 10102, HGZ 2).
 
 export default function CierrePage() {
   const [subiendo, setSubiendo] = useState(false);
@@ -116,10 +94,11 @@ export default function CierrePage() {
     if (!file) return;
     setMensaje(""); setMovs([]); setAbierto(null); setSubiendo(true);
     try {
-      const texto = await file.text();
-      const { fecha: f, cuentas, error } = parseDispo(texto);
+      // Lector compartido: solo unidad 10102 (HGZ 2) y CSV leído con un lector real (comillas, miles).
+      const { fecha: f, cuentas: ctas, error } = await leerDispoIMKK022(file);
       if (error) { setMensaje(error); setSubiendo(false); return; }
       if (!f) { setMensaje("No pude leer la fecha del reporte (línea 'Fecha Ejec:'). Verifica el archivo."); setSubiendo(false); return; }
+      const cuentas = ctas.map(({ cuenta, ...m }) => ({ cuenta_finat: cuenta, ...m }));
       // 1) Guardar la foto del día (upsert)
       const filas = cuentas.map((c) => ({ fecha: f, ...c }));
       const { error: eUp } = await supabase.from("disponibilidad_diaria").upsert(filas, { onConflict: "fecha,cuenta_finat" });

@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
+import { leerTodo } from "../../../lib/paginar";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const TIPO_LABEL = { envio_pago: "Envío a pago (OOAD)", devolucion: "Devolución a proveedor", envio_servicio: "Envío a servicio" };
@@ -19,10 +20,10 @@ export default function OficiosPage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
+      const { data, error } = await leerTodo((d, h) => supabase
         .from("oficios")
         .select("id, tipo, folio, anio, consecutivo, destinatario, total, factura_ids, motivo, created_at")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }).order("id").range(d, h));
       if (error) setMensaje("No pude cargar los oficios: " + error.message + " (¿ya corriste sigaf_oficios.sql?)");
       setOficios(data || []);
       setCargando(false);

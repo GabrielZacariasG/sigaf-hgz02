@@ -1,9 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
+import { siguienteFolioSerie, FOLIO_PENDIENTE } from "../../../lib/folios";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -108,7 +110,7 @@ export default function ValidacionServicioPage() {
         const { data: jp } = await supabase.from("jefe_proveedor").select("jefe_id").eq("proveedor_id", fac.proveedor_id).limit(1);
         if (jp?.[0]) jefeObj = jefes.find((j) => j.id === jp[0].jefe_id) || null;
       }
-      const folio = val.oficio_folio || `OF-${val.dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+      const folio = val.oficio_folio || "SIN FOLIO";
       if (val.jefe_id) setJefeId(val.jefe_id);
       // Reimprimir el oficio COMPLETO: todas las facturas que comparten ese folio.
       const filas = await facturasDeOficio(val.oficio_folio, [fac]);
@@ -220,12 +222,17 @@ export default function ValidacionServicioPage() {
     }
     setMensaje("");
     if (dictamen === "devolucion") {
-      const folio = `ACU-DEV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-      setOficio({ jefe, dictamen: "devolucion", motivo, filas: seleccionadas, folio, tipoDoc: "devolucion_solicitud" });
+      // El folio consecutivo se pide al guardar (no se gastan números en borradores).
+      setOficio({ jefe, dictamen: "devolucion", motivo, filas: seleccionadas, folio: FOLIO_PENDIENTE, serie: "ACU-DEV", tipoDoc: "devolucion_solicitud" });
       return;
     }
-    const folio = `OF-${dictamen === "cumplimiento" ? "CUM" : "INC"}-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-    setOficio({ jefe, dictamen, motivo, filas: seleccionadas, folio });
+    setOficio({ jefe, dictamen, motivo, filas: seleccionadas, folio: FOLIO_PENDIENTE, serie: dictamen === "cumplimiento" ? "OF-CUM" : "OF-INC" });
+  };
+  // Folio definitivo: se pide a la base de datos y se estampa en la hoja antes de imprimir.
+  const asignarFolio = async () => {
+    const folio = await siguienteFolioSerie(oficio.serie);
+    flushSync(() => setOficio((o) => o && { ...o, folio }));
+    return folio;
   };
 
   const confirmar = async (imprimir = false) => {
@@ -237,29 +244,34 @@ export default function ValidacionServicioPage() {
       // --- Solicitud de DEVOLUCIÓN al proveedor: se guarda en validaciones_servicio
       // (que el jefe SÍ puede escribir); el trigger marca dev_solicitada en la factura. ---
       if (oficio.tipoDoc === "devolucion_solicitud") {
-        const rows = ids0.map((id) => ({ factura_id: id, jefe_id: jefeId, dictamen: "devolucion", motivo: oficio.motivo || null, oficio_folio: oficio.folio }));
+        const folio = await asignarFolio();
+        const rows = ids0.map((id) => ({ factura_id: id, jefe_id: jefeId, dictamen: "devolucion", motivo: oficio.motivo || null, oficio_folio: folio }));
         const { error: eDev } = await supabase.from("validaciones_servicio").upsert(rows, { onConflict: "factura_id" });
         if (eDev) throw new Error(eDev.message);
         setFacturas((prev) => prev.filter((f) => !ids0.includes(f.id)));
         if (imprimir) window.print();
         setSel({}); setOficio(null); setMotivo(""); setAvisoNoConfirmado(false);
-        setMensaje(`Solicitud de devolución registrada · ${ids0.length} factura(s) regresada(s) a Presupuesto.`);
+        setMensaje(`Solicitud de devolución ${folio} registrada · ${ids0.length} factura(s) regresada(s) a Presupuesto.`);
         setGuardando(false); return;
       }
-      const rows = oficio.filas.map((f) => ({ factura_id: f.id, jefe_id: jefeId, dictamen: oficio.dictamen, motivo: oficio.motivo || null, oficio_folio: oficio.folio }));
+      const folio = await asignarFolio();
+      const rows = oficio.filas.map((f) => ({ factura_id: f.id, jefe_id: jefeId, dictamen: oficio.dictamen, motivo: oficio.motivo || null, oficio_folio: folio }));
       const { error: e1 } = await supabase.from("validaciones_servicio").upsert(rows, { onConflict: "factura_id" });
       if (e1) throw new Error(e1.message);
       // cumplimiento => avanza firmas a autorizada_servicio
       const nuevoFirmas = oficio.dictamen === "cumplimiento" ? "autorizada_servicio" : "pendiente";
       const ids = oficio.filas.map((f) => f.id);
+      const fallas = [];
       for (let i = 0; i < ids.length; i += 25) {
         const lote = ids.slice(i, i + 25);
-        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: nuevoFirmas }).eq("id", id)));
+        const res = await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: nuevoFirmas }).eq("id", id)));
+        res.forEach((r, k) => { if (r.error) fallas.push(`${oficio.filas.find((f) => f.id === lote[k])?.folio_proveedor || lote[k]}: ${r.error.message}`); });
       }
       setFacturas((prev) => prev.filter((f) => !ids.includes(f.id)));
       if (imprimir) window.print();
       setSel({}); setOficio(null); setMotivo(""); setAvisoNoConfirmado(false);
-      setMensaje(`Oficio ${oficio.folio} registrado · ${ids.length} factura(s) ${oficio.dictamen === "cumplimiento" ? "validadas (cumplimiento)" : "marcadas por incumplimiento"}.`);
+      setMensaje(`Oficio ${folio} registrado · ${ids.length} factura(s) ${oficio.dictamen === "cumplimiento" ? "validadas (cumplimiento)" : "marcadas por incumplimiento"}.`
+        + (fallas.length ? ` ⚠️ No se pudo actualizar el estatus de ${fallas.length}: ${fallas.join(" · ")}` : ""));
     } catch (e) { setMensaje("No se pudo guardar: " + e.message); }
     setGuardando(false);
   };

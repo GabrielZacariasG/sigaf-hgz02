@@ -9,7 +9,21 @@ import {
   FLUJO_GENERAL, LABEL_GENERAL,
   FLUJO_FIRMAS, LABEL_FIRMAS,
   FLUJO_PEDIDO, LABEL_PEDIDO,
+  puedeEnviarOoad, generaPedidoRecepcion,
 } from "../../../lib/estatus";
+import { leerTodo } from "../../../lib/paginar";
+
+// Estatus generales desde los que una factura puede salir a pago con oficio EP.
+const ORIGEN_OOAD = ["capturada", "en_revision", "enviada_ooad"];
+// ¿Puede ir en un oficio de envío a pago? (mismas reglas que el candado de la BD)
+function motivoNoOoad(f) {
+  if (!ORIGEN_OOAD.includes(f.estatus_general)) return `ya está en "${LABEL_GENERAL[f.estatus_general] || f.estatus_general}"`;
+  const pr = generaPedidoRecepcion(f.capNom, f.partidas?.cuenta_finat || f.partidas?.cuenta_prei);
+  if (!puedeEnviarOoad(f.estatus_firmas, pr ? f.estatus_pedido_recepcion : "generado", f.capNom)) {
+    return pr && f.estatus_pedido_recepcion !== "generado" ? "le faltan firmas o el pedido-recepción" : "le faltan firmas";
+  }
+  return null;
+}
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const moneyK = (n) => { const v = Number(n) || 0; return v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(0)}k` : money(v); };
@@ -137,22 +151,18 @@ export default function FacturasListaPage() {
   useEffect(() => {
     let activo = true;
     async function cargar() {
-      let todas = [], desde = 0, rAlertas, rHist;
-      for (;;) {
-        const [rFac, a, h] = await Promise.all([
-          supabase.from("facturas").select(
-            "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
-          ).eq("anulada", false).range(desde, desde + 999),
-          desde === 0 ? supabase.from("alertas_config").select("circuito, estatus, dias_umbral") : Promise.resolve({ data: rAlertas }),
-          desde === 0 ? supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha") : Promise.resolve({ data: rHist }),
-        ]);
-        if (!activo) return;
-        if (rFac.error) { setMensaje("No se pudieron cargar las facturas: " + rFac.error.message); setCargando(false); return; }
-        if (desde === 0) { rAlertas = a.data; rHist = h.data; }
-        todas = todas.concat(rFac.data || []);
-        if (!rFac.data || rFac.data.length < 1000) break;
-        desde += 1000;
-      }
+      // Todo por páginas: Supabase corta en 1,000 filas y el historial (3 ejes) ya pasa de eso.
+      const [rFac, a, h] = await Promise.all([
+        leerTodo((d, hst) => supabase.from("facturas").select(
+          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
+        ).eq("anulada", false).order("id").range(d, hst)),
+        leerTodo((d, hst) => supabase.from("alertas_config").select("circuito, estatus, dias_umbral").range(d, hst)),
+        leerTodo((d, hst) => supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha").order("id").range(d, hst)),
+      ]);
+      if (!activo) return;
+      if (rFac.error) { setMensaje("No se pudieron cargar las facturas: " + rFac.error.message); setCargando(false); return; }
+      if (h.error) setMensaje("Aviso: no se pudo leer todo el historial de estatus (" + h.error.message + "); los días en cada etapa pueden salir incompletos.");
+      const todas = rFac.data, rAlertas = a.data, rHist = h.data;
       const alertasMap = {};
       (rAlertas || []).forEach((a) => (alertasMap[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
       const histPorFactura = {};
@@ -384,7 +394,18 @@ export default function FacturasListaPage() {
     throw new Error("No se pudo asignar un folio único (demasiados intentos simultáneos).");
   };
   const enviarOOAD = async (lista) => {
-    const items = lista && lista.length ? lista : seleccionadas;
+    // (el botón pasa el evento del clic: solo se toma `lista` si de verdad es un arreglo)
+    const todas = Array.isArray(lista) && lista.length ? lista : seleccionadas;
+    if (!todas.length) return;
+    // Candado: solo facturas con firmas completas (y P&R cuando aplica) y que aún no estén en OOAD.
+    const fuera = todas.map((f) => ({ f, m: motivoNoOoad(f) })).filter((x) => x.m);
+    const items = todas.filter((f) => !motivoNoOoad(f));
+    if (fuera.length) {
+      const txt = fuera.slice(0, 8).map((x) => `${x.f.folio_proveedor || x.f.folio_ingreso} (${x.m})`).join(" · ") + (fuera.length > 8 ? ` y ${fuera.length - 8} más` : "");
+      setMensaje(items.length
+        ? `⚠️ ${fuera.length} factura(s) NO se incluyen en el oficio de pago: ${txt}.`
+        : `⛔ Ninguna de las facturas seleccionadas puede ir a pago: ${txt}.`);
+    }
     if (!items.length) return;
     const anio = new Date().getFullYear();
     const consec = await proximoConsec("envio_pago", anio);
@@ -458,32 +479,51 @@ export default function FacturasListaPage() {
         ? { estatus_general: "en_tramite_ooad" }
         : { estatus_general: "devuelta_proveedor", fecha_devolucion: new Date().toISOString() };
       const foliosFinales = {}; // índice de doc -> folio definitivo
+      const allIds = new Set();  // facturas que SÍ cambiaron de estatus
+      const fallas = [];         // facturas que la base de datos rechazó (candado) o no pudo actualizar
       for (let di = 0; di < oficio.docs.length; di++) {
         const d = oficio.docs[di];
-        const totalDoc = d.filas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
         const dest = oficio.tipo === "pago" ? "Mtra. Farlyn Isabel Hernández Arias (Depto. Presupuesto, Contabilidad y Erogaciones)" : d.prov;
-        // Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
-        const { folio } = await insertarOficioUnico({ tipo: d.tipoDb, anio: d.anio, destinatario: dest, total: totalDoc, factura_ids: d.filas.map((f) => f.id), motivo: d.motivo || null });
-        foliosFinales[di] = folio;
-        const ids = d.filas.map((f) => f.id);
         const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null, dev_solicitada: false } : patchBase;
-        for (let i = 0; i < ids.length; i += 25) {
-          const lote = ids.slice(i, i + 25);
-          await Promise.all(lote.map((id) => supabase.from("facturas").update(patch).eq("id", id)));
+        // 1) Primero se cambia el estatus de cada factura y se revisa el resultado: el candado de la BD
+        //    puede rechazar alguna. El oficio solo lleva las que sí cambiaron.
+        const okFilas = [];
+        for (let i = 0; i < d.filas.length; i += 25) {
+          const lote = d.filas.slice(i, i + 25);
+          const res = await Promise.all(lote.map((f) => supabase.from("facturas").update(patch).eq("id", f.id).select("id")));
+          res.forEach((r, k) => {
+            const f = lote[k];
+            if (r.error || !r.data?.length) fallas.push(`${f.folio_proveedor || f.folio_ingreso}: ${r.error ? r.error.message : "sin permiso para modificarla"}`);
+            else okFilas.push(f);
+          });
+        }
+        if (!okFilas.length) continue;
+        // 2) Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
+        try {
+          const totalDoc = okFilas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+          const { folio } = await insertarOficioUnico({ tipo: d.tipoDb, anio: d.anio, destinatario: dest, total: totalDoc, factura_ids: okFilas.map((f) => f.id), motivo: d.motivo || null });
+          foliosFinales[di] = { folio, filas: okFilas };
+          okFilas.forEach((f) => allIds.add(f.id));
+        } catch (e) {
+          // 3) Sin oficio no puede quedar el estatus cambiado: se regresa cada factura a como estaba.
+          await Promise.all(okFilas.map((f) => supabase.from("facturas").update({ estatus_general: f.estatus_general }).eq("id", f.id)));
+          throw new Error(`no se registró el oficio (${e.message}); las facturas se dejaron como estaban`);
         }
       }
-      const allIds = new Set(oficio.docs.flatMap((d) => d.filas.map((f) => f.id)));
+      if (!allIds.size) throw new Error("ninguna factura cambió de estatus. " + fallas.join(" · "));
       setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
       if (imprimir) {
-        // Estampar el folio DEFINITIVO en la hoja antes de imprimir.
-        flushSync(() => setOficio((o) => o && ({ ...o, docs: o.docs.map((d, i) => ({ ...d, folio: foliosFinales[i] || d.folio })) })));
+        // Estampar el folio DEFINITIVO en la hoja antes de imprimir; solo oficios registrados y con sus facturas reales.
+        flushSync(() => setOficio((o) => o && ({ ...o, docs: o.docs.map((d, i) => (foliosFinales[i] ? { ...d, folio: foliosFinales[i].folio, filas: foliosFinales[i].filas } : null)).filter(Boolean) })));
         window.print();
       }
       const d = deepOrigenId;
       setSel({}); setOficio(null); setAvisoNoConfirmado(false);
-      setMensaje(oficio.tipo === "pago"
-        ? `✅ ${allIds.size} factura(s) cambiaron de estatus · ahora en "${LABEL_GENERAL.en_tramite_ooad}" (enviadas a OOAD para pago).`
-        : `✅ ${allIds.size} factura(s) devueltas al proveedor para corrección.`);
+      // Con rechazos el aviso empieza con ⚠️ para que NO se oculte solo a los 5 segundos.
+      setMensaje((fallas.length ? "⚠️ " : "✅ ") + (oficio.tipo === "pago"
+        ? `${allIds.size} factura(s) cambiaron de estatus · ahora en "${LABEL_GENERAL.en_tramite_ooad}" (enviadas a OOAD para pago).`
+        : `${allIds.size} factura(s) devueltas al proveedor para corrección.`)
+        + (fallas.length ? ` No se incluyeron ${fallas.length}: ${fallas.join(" · ")}` : ""));
       if (d) router.push(`/facturas/${d}`);
     } catch (e) { setMensaje("No se pudo aplicar: " + e.message); }
     setEnviando(false);

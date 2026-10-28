@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
 import { supabase } from "../../../../lib/supabaseClient";
+import { leerDispoIMKK022, UI_HGZ2 } from "../../../../lib/dispo";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const PERIODO = "2026";
@@ -23,31 +23,11 @@ export default function CargarDispoPage() {
     if (!file) return;
     setNombreArch(file.name);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-      // localizar la fila de encabezado (contiene "Cuenta")
-      let hdr = -1;
-      for (let r = 0; r < Math.min(grid.length, 30); r++) {
-        if ((grid[r] || []).some((c) => String(c).trim().toLowerCase() === "cuenta")) { hdr = r; break; }
-      }
-      if (hdr < 0) { setError("No encontré la fila de encabezado con 'Cuenta'. ¿Es el reporte de disponibilidad?"); return; }
-
-      const num = (v) => { const n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? 0 : n; };
-      const agg = {};
-      for (let r = hdr + 1; r < grid.length; r++) {
-        const row = grid[r] || [];
-        const cta = String(row[0] ?? "").trim();
-        if (!/^\d{6,}$/.test(cta)) continue; // solo cuentas contables válidas
-        const a = (agg[cta] ||= { cuenta: cta, presupuesto: 0, gasto: 0, comprometido: 0, precomprometido: 0, disponible: 0 });
-        a.presupuesto += num(row[6]); a.gasto += num(row[7]); a.comprometido += num(row[8]);
-        a.precomprometido += num(row[9]); a.disponible += num(row[10]);
-      }
-      const arr = Object.values(agg).sort((x, y) => y.presupuesto - x.presupuesto);
-      if (!arr.length) { setError("No se encontraron filas de cuentas en el archivo."); return; }
-      setFilas(arr);
+      // Lector compartido: solo unidad 10102 (HGZ 2); el reporte completo trae todas las unidades.
+      const { cuentas, filasOtras, error: eL } = await leerDispoIMKK022(file);
+      if (eL) { setError(eL); return; }
+      if (filasOtras) setOk(`Se tomaron solo los renglones de la unidad ${UI_HGZ2} (HGZ 2); se ignoraron ${filasOtras.toLocaleString("es-MX")} de otras unidades.`);
+      setFilas(cuentas.sort((x, y) => y.presupuesto - x.presupuesto));
     } catch (err) {
       setError("No se pudo leer el archivo: " + err.message);
     }

@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { supabase } from "../../../../lib/supabaseClient";
+import { siguienteFolioSerie, FOLIO_PENDIENTE } from "../../../../lib/folios";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -73,8 +75,8 @@ export default function AdminValidacionCE() {
   const generar = () => {
     if (!seleccionadas.length) { setMensaje("Selecciona al menos una factura."); return; }
     setMensaje("");
-    const folio = `EF-CE-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-    setOficio({ filas: seleccionadas, folio });
+    // El folio consecutivo se pide al guardar (no se gastan números en borradores).
+    setOficio({ filas: seleccionadas, folio: FOLIO_PENDIENTE });
   };
 
   async function confirmar(imprimir = false) {
@@ -82,14 +84,16 @@ export default function AdminValidacionCE() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sesión no válida.");
-      const rows = oficio.filas.map((f) => ({ factura_id: f.id, jefe_id: null, dictamen: "cumplimiento", motivo: null, oficio_folio: oficio.folio }));
+      const folio = await siguienteFolioSerie("EF-CE");
+      flushSync(() => setOficio((o) => o && { ...o, folio }));
+      const rows = oficio.filas.map((f) => ({ factura_id: f.id, jefe_id: null, dictamen: "cumplimiento", motivo: null, oficio_folio: folio }));
       const { error } = await supabase.from("validaciones_servicio").upsert(rows, { onConflict: "factura_id" });
       if (error) throw new Error(error.message);
       const ids = oficio.filas.map((f) => f.id);
       setFacturas((prev) => prev.filter((f) => !ids.includes(f.id)));
       if (imprimir) window.print();
       setSel({}); setOficio(null); setAviso(false);
-      setMensaje(`✅ Oficio ${oficio.folio} · ${ids.length} factura(s) validadas y enviadas a Finanzas.`);
+      setMensaje(`✅ Oficio ${folio} · ${ids.length} factura(s) validadas y enviadas a Finanzas.`);
     } catch (e) { setMensaje("No se pudo: " + e.message); }
     setGuardando(false);
   }
