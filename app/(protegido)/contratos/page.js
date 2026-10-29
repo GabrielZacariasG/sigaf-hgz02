@@ -11,7 +11,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
-import { calcularContrato, sumar, ANIO } from "../../../lib/contratos";
+import { calcularContrato, calcularDictamen, sumar, ANIO } from "../../../lib/contratos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -48,7 +48,14 @@ export default function ContratosPage() {
       const rM = await leerTodo((d, h) => supabase.from("dispo_mensual").select("cuenta_finat, presupuesto").eq("fecha", fechaDispo).order("cuenta_finat").range(d, h));
       for (const r of rM.data || []) presupuesto[r.cuenta_finat] = (presupuesto[r.cuenta_finat] || 0) + (Number(r.presupuesto) || 0);
     }
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo });
+    // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
+    const [rDi, rDs] = await Promise.all([
+      supabase.from("dictamenes").select("numero, origen, corte"),
+      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
+    ]);
+    const dictamenes = {}; for (const d of rDi.error ? [] : rDi.data || []) dictamenes[d.numero] = d;
+    const saldosDic = {}; for (const s of rDs.error ? [] : rDs.data || []) (saldosDic[s.dictamen] ||= []).push(s);
+    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic });
   };
   useEffect(() => { cargar(); }, []);
 
@@ -64,7 +71,12 @@ export default function ContratosPage() {
     const lista = datos.contratos
       .filter((c) => !esGenerico(c))
       .filter((c) => capitulo === "*" || c.partidas?.capitulos?.nombre === capitulo)
-      .map((c) => ({ c, x: calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [] }), facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] }))
+      .map((c) => {
+        const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [] });
+        const dic = calcularDictamen(c, datos.saldosDic[c.dictamen_numero] || [], fPor[c.id] || [], x, datos.dictamenes[c.dictamen_numero]);
+        if (dic) x.avisos = [...x.avisos, ...dic.avisos];
+        return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
+      })
       .filter(({ c, x }) => con2025 || (c.vigencia_fin || "9999") >= `${ANIO}-01-01` || x.pasivo > 0)
       .filter(({ c }) => !q || [c.numero_interno, c.numero_alterno, c.concepto, c.dictamen_numero, c.proveedores?.razon_social].join(" ").toLowerCase().includes(q));
     const g = {};
@@ -87,12 +99,13 @@ export default function ContratosPage() {
 
   // ---------- Exportar como la cédula ----------
   const exportar = () => {
-    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL"];
+    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL", "Dictamen: asignado HGZ 2", "Dictamen: pagado FINAT", "Dictamen: disponible HGZ 2", "Pendiente de pago SIGAF", "Faltante dictamen", "Corte FINAT"];
     const aoa = [[`CONTROL DE CONTRATOS · ${capitulo === "*" ? "Todos" : capitulo} · SIGAF ${new Date().toLocaleDateString("es-MX")}`], []];
     for (const b of bloques) {
       aoa.push([`${b.cuenta} · ${b.nombre}`]); aoa.push(enc);
-      for (const { c, x } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
-        x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo]);
+      for (const { c, x, dic } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
+        x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo,
+        ...(dic ? [dic.asignado, dic.pagado, dic.disponible, dic.pendiente, Math.max(0, dic.faltante), fechaTxt(dic.corte)] : [])]);
       for (const r of b.reservas) aoa.push([r.concepto, r.estatus, "", "", "", b.cuenta, r.estatus.toUpperCase(), "", "", "", r.importe]);
       const t = sumar(b.filas.map((f) => f.x)); const res = b.reservas.reduce((s, r) => s + (Number(r.importe) || 0), 0); const pre = datos.presupuesto[b.cuenta] || 0;
       aoa.push(["", "", "", "", "", "", "", "", "TOTAL", t.maxC, t.maxU + res, t.amp, t.enlace + res, t.pagos, t.facturado, t.devengo, t.facDev, t.saldo, t.avance, t.proyeccion, t.sobrante, t.pasivo]);
@@ -113,12 +126,12 @@ export default function ContratosPage() {
   const thFija = (i) => ({ ...th, left: IZQ[i], zIndex: 3, minWidth: ANCHO[i], maxWidth: ANCHO[i] });
   const colorAvance = (a) => (a >= 1 ? "#dc2626" : a >= 0.8 ? "#d97706" : "var(--verde)");
   const Semaforo = ({ x }) => x.avisos.length ? <span title={x.avisos.map((a) => a.t).join(" · ")} style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, marginRight: 6, background: x.avisos.some((a) => a.nivel === "rojo") ? "#dc2626" : "#d97706" }} /> : null;
-  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total"];
+  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total", "Disponible dictamen HGZ 2", "¿Alcanza el dictamen?"];
 
   if (msg && !datos) return <p style={{ color: "var(--rojo)" }}>{msg}</p>;
   if (!datos) return <p>Cargando contratos…</p>;
 
-  const filaContrato = ({ c, x, facturas, ampliaciones }) => {
+  const filaContrato = ({ c, x, dic, facturas, ampliaciones }) => {
     const k = c.id; const sel = abierto === k; const bg = sel ? "#fff7d6" : null;
     return (
       <Fragment key={k}>
@@ -140,6 +153,10 @@ export default function ContratosPage() {
           <td style={tdN}>{x.pasivo ? money(x.pasivo) : ""}</td>
           {x.mensual.slice(1).map((v, i) => <td key={i} style={tdN}>{v + x.devengoMes[i + 1] ? money0(v + x.devengoMes[i + 1]) : ""}</td>)}
           <td style={{ ...tdN, fontWeight: 700 }}>{money(x.mensual.reduce((s, v) => s + v, 0) + x.devengo)}</td>
+          <td style={tdN} title={dic ? `Dictamen ${dic.numero} · FINAT al ${fechaTxt(dic.corte)}` : "Sin saldo de dictamen cargado"}>{dic ? money(dic.disponible) : ""}</td>
+          <td style={{ ...td, fontWeight: 600, color: !dic ? undefined : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)" }}>
+            {!dic ? "" : dic.faltante > 0.5 ? `No · faltan ${money(dic.faltante)}` : "Sí"}
+          </td>
         </tr>
         {sel && (
           <tr><td colSpan={ENC.length} style={{ padding: "10px 14px", background: "#f7f8f7", borderBottom: "2px solid var(--verde)" }}>
@@ -149,6 +166,19 @@ export default function ContratosPage() {
                 {x.avisos.map((a, i) => <span key={i} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 99, background: a.nivel === "rojo" ? "#fee2e2" : "#fef3c7", color: a.nivel === "rojo" ? "#b91c1c" : "#92400e" }}>{a.t}</span>)}
                 <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Tope de ampliación ({c.tope_ampliacion_pct ?? 20}%): {money(x.tope)}</span>
               </div>
+              {dic && (
+                <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
+                  <div style={{ marginBottom: 4 }}><strong>Dictamen {dic.numero}</strong>{dic.origen ? ` (${dic.origen})` : ""} · FINAT IMKK036 al {fechaTxt(dic.corte)}</div>
+                  <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                    <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
+                    <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
+                    <span>Disponible HGZ 2: <strong>{money(dic.disponible)}</strong></span>
+                    <span>Pendiente de pago en SIGAF{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong></span>
+                    <span style={{ color: dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
+                  </div>
+                  {dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
+                </div>
+              )}
               {ampliaciones.length > 0 && <div style={{ fontSize: 12, marginBottom: 6 }}><strong>Ampliaciones / reducciones:</strong> {ampliaciones.map((a) => `${money(a.importe)}${a.fecha ? " el " + fechaTxt(a.fecha) : ""}${a.convenio ? " (" + a.convenio + ")" : ""}`).join(" · ")}</div>}
               <div style={{ maxHeight: 260, overflow: "auto" }}>
                 <table style={{ borderCollapse: "collapse" }}>
@@ -214,7 +244,7 @@ export default function ContratosPage() {
                       <td style={tdN}>{money(t.maxC)}</td><td style={tdN}>{money(t.maxU + res)}</td><td style={tdN}>{money(t.amp)}</td><td style={tdN}>{money(t.enlace + res)}</td><td style={tdN}>{money(t.pagos)}</td><td style={tdN}>{money(t.facturado)}</td>
                       <td style={tdN}>{money(t.devengo)}</td><td style={tdN}>{money(t.facDev)}</td><td style={tdN}>{money(t.saldo)}</td><td style={{ ...tdN, color: colorAvance(t.avance) }}>{pctTxt(t.avance)}</td>
                       <td style={tdN}>{money(t.proyeccion)}</td><td style={{ ...tdN, color: t.sobrante < -0.5 ? "var(--rojo)" : undefined }}>{money(t.sobrante)}</td><td style={tdN}>{money(t.pasivo)}</td>
-                      {t.mensual.slice(1).map((v, i) => <td key={i} style={tdN}>{money0(v + t.devengoMes[i + 1])}</td>)}<td style={tdN}>{money(t.mensual.reduce((s, v) => s + v, 0) + t.devengo)}</td></tr>
+                      {t.mensual.slice(1).map((v, i) => <td key={i} style={tdN}>{money0(v + t.devengoMes[i + 1])}</td>)}<td style={tdN}>{money(t.mensual.reduce((s, v) => s + v, 0) + t.devengo)}</td><td colSpan={2} style={td} /></tr>
                     <tr style={{ fontWeight: 600 }}><td style={{ ...td, ...fija(0) }} /><td style={{ ...td, ...fija(1) }}>PRESUPUESTO</td><td colSpan={7} style={td} /><td style={tdN}>{money(pre)}</td><td colSpan={2} style={td} />
                       <td style={{ ...td, fontSize: 11 }}>Pte pago</td><td style={tdN}>{money(t.facturado - t.pagos)}</td><td colSpan={ENC.length - 14} style={td} /></tr>
                     <tr style={{ fontWeight: 600 }}><td style={{ ...td, ...fija(0) }} /><td style={{ ...td, ...fija(1) }}>DIFERENCIA</td><td colSpan={7} style={td} /><td style={{ ...tdN, color: dif < -0.5 ? "var(--rojo)" : undefined }}>{money(dif)}</td><td colSpan={2} style={td} />
