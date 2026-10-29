@@ -70,3 +70,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **032** N_AP_IMSS_4007 (pagos 02/01–29/10, 1,286 comprobantes UI 010102): fecha REAL de pago + pedido-recepción. Corrida 29/10: 1,045 facturas actualizadas.
 - **033** revisión pedido vs sistema (solo lectura): 3 diferencias Biodist.
 - **034** esas 3 corregidas (tecleo). Corrida 29/10: 3 filas. Falta: 4006 (fecha real de lo que no es pedido) y 1013 (pedidos sin CR).
+
+- **035** N_AP_IMSS_4002 (12 partes, pagos 02/01–30/10, 8,294 comprobantes UI 010102/019001): fecha REAL de pago para todo lo pagado. Corrida 30/10: 1,656 facturas actualizadas, todas en gasto reflejado.
