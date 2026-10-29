@@ -231,13 +231,14 @@ export default function ContratosPage() {
       {vista === "linea" && (
         <div style={{ overflow: "auto", maxHeight: "calc(100vh - 170px)", border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
           <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: "8px 10px" }}>
-            <strong>Devengo</strong> = servicio que ya se recibió y todavía no se factura. Captúralo en el renglón morado (Enter o clic fuera para guardar).
-            En gris va la sugerencia: el promedio de los meses facturados. Cuando llegue la factura de ese mes, el devengo se descuenta solo.
+            <strong>Devengo</strong> = servicio que ya se recibió y todavía no se factura. Solo se captura en meses que ya pasaron, dentro de la vigencia
+            y que aún no tienen factura (renglón morado; Enter o clic fuera para guardar). En gris va la sugerencia: el promedio de los meses facturados.
+            Cuando llegue la factura de ese mes, el devengo se descuenta solo.
           </p>
           <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
             <thead><tr><th style={thFija(0)}>Contrato</th><th style={thFija(1)}>Renglón</th>{MESES.slice(1).map((m) => <th key={m} style={th}>{m}</th>)}<th style={th}>TOTAL</th></tr></thead>
             <tbody>
-              {bloques.flatMap((b) => b.filas).map(({ c, x }) => {
+              {bloques.flatMap((b) => b.filas).filter(({ x }) => x.vig.n > 0).map(({ c, x }) => {
                 const esc = x.prog["ESC 1"], amp = x.prog.AMP, hayAmp = amp.some((v) => v);
                 const gasto = x.mensual;
                 let acum = 0; const saldo = [0]; for (let m = 1; m <= 12; m++) { acum += esc[m] + amp[m] - gasto[m] - x.devengoMes[m]; saldo.push(acum); }
@@ -255,11 +256,14 @@ export default function ContratosPage() {
                     {filaN("Gasto facturado", gasto)}
                     <tr style={{ background: "#f5f3ff" }}><td style={{ ...td, ...fija(0, "#f5f3ff") }} /><td style={{ ...td, ...fija(1, "#f5f3ff"), color: "#7c3aed", fontWeight: 600 }}>Devengo (captura)</td>
                       {MESES.slice(1).map((_, i) => {
-                        const m = i + 1; const enVig = m >= x.vig.desde && m <= x.vig.hasta; const cap = x.devCapt[m];
+                        // Devengo solo donde tiene sentido: mes ya transcurrido, dentro de la vigencia y SIN factura todavía
+                        // (si ya se había capturado algo, se deja ver para poder corregirlo o borrarlo).
+                        const m = i + 1; const cap = x.devCapt[m];
+                        const editable = (m >= x.vig.desde && m <= x.vig.hasta && m <= x.mesHoy && !gasto[m]) || cap;
                         return (
                           <td key={m} style={{ ...td, padding: 2 }}>
-                            {enVig ? (
-                              <input defaultValue={cap ? cap.toFixed(2) : ""} placeholder={!gasto[m] && m <= x.mesHoy && x.sugerido ? Math.round(x.sugerido).toString() : ""}
+                            {editable ? (
+                              <input type="number" step="0.01" min="0" defaultValue={cap ? cap.toFixed(2) : ""} placeholder={!gasto[m] && x.sugerido ? Math.round(x.sugerido).toString() : ""}
                                 disabled={guardando === `${c.id}|${m}`}
                                 onBlur={(e) => { if (Number(e.target.value || 0) !== Number(cap || 0)) guardarDevengo(c.id, m, e.target.value); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
