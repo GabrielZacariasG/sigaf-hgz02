@@ -19,7 +19,7 @@ Los ~96 scripts sueltos de `database/` quedan como historia; no se vuelven a cor
 | 003 | `003_permisos_rls.sql` | Solo Finanzas emite oficios y carga la dispo; solo admin edita jefes/administradores; validaciones: el jefe/Subdirector o Finanzas | No | 29/10/2026 · Finanzas: Ventanilla 1-3 (auo), Gabriel (jefe_presupuesto), Nayeli Alonso (jefa_finanzas) |
 | 004 | `004_cerrar_huecos_permisos.sql` | Quita la política abierta de `ajustes_devengo` (escritura para cualquiera) y protege `stg_51251013` | No | 29/10/2026 |
 | 005 | `005_exportar_facturas_en_ooad.sql` | Exporta las facturas en OOAD sin CR para cruzarlas con los comprobantes | No (solo lectura) | 29/10/2026 · 238 facturas |
-| 006 | `006_puesta_al_dia_cr_29oct.sql` | Puesta al día aprobada por Gabriel: CR a 187 facturas (120 pagadas con fecha, 67 en trámite), firmas y P&R. Solo toca las que siguen en OOAD sin CR | **Sí** (187 facturas) | — |
+| 006 | `006_puesta_al_dia_cr_29oct.sql` | Puesta al día aprobada por Gabriel: CR a 187 facturas (120 pagadas con fecha, 67 en trámite), firmas y P&R. Solo toca las que siguen en OOAD sin CR | **Sí** (187 facturas) | 29/10/2026 · 187 de 187 (120 pagadas, 67 en trámite) |
 
 ## Lo que mostró el inventario (000) y no estaba en el repo
 - Tablas que existen en Supabase sin su CREATE en el repo: `contra_recibos`, `entregas`, `factura_paradas`, `jefaturas`, `oficios_devolucion`, `oficio_devolucion_facturas`, `ooad_cortes`, `ooad_corte_filas`, `pedidos_recepcion`, `stg_51251013` (usan la función `es_usuario_activo()`).
