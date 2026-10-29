@@ -55,7 +55,17 @@ export default function ContratosPage() {
     ]);
     const dictamenes = {}; for (const d of rDi.error ? [] : rDi.data || []) dictamenes[d.numero] = d;
     const saldosDic = {}; for (const s of rDs.error ? [] : rDs.data || []) (saldosDic[s.dictamen] ||= []).push(s);
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic });
+    // Estado presupuestal de los CR de facturas sin pagar (N_AP 1043 guardado en comprobantes_ooad): V validado · E error · N sin validar
+    const crs = [...new Set((rF.data || []).filter((f) => f.estatus_general !== "gasto_reflejado" && f.cr_contrarecibo).map((f) => f.cr_contrarecibo))];
+    const lineas = {};
+    for (let i = 0; i < crs.length; i += 150) {
+      const { data, error } = await supabase.from("comprobantes_ooad").select("cbte, estado_ppto, estado_entrada").in("cbte", crs.slice(i, i + 150));
+      if (error) break;
+      for (const r of data || []) if (r.estado_entrada !== "X") (lineas[r.cbte] ||= []).push((r.estado_ppto || "N").toUpperCase());
+    }
+    const ppto = {}; // E si alguna línea cayó en error · V si todas están validadas · N lo demás
+    for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
+    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto });
   };
   useEffect(() => { cargar(); }, []);
 
@@ -73,7 +83,7 @@ export default function ContratosPage() {
       .filter((c) => capitulo === "*" || c.partidas?.capitulos?.nombre === capitulo)
       .map((c) => {
         const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [] });
-        const dic = calcularDictamen(c, datos.saldosDic[c.dictamen_numero] || [], fPor[c.id] || [], x, datos.dictamenes[c.dictamen_numero]);
+        const dic = calcularDictamen(c, datos.saldosDic[c.dictamen_numero] || [], fPor[c.id] || [], x, datos.dictamenes[c.dictamen_numero], datos.ppto);
         if (dic) x.avisos = [...x.avisos, ...dic.avisos];
         return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
       })
@@ -176,6 +186,10 @@ export default function ContratosPage() {
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
                     <span style={{ color: dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
+                  {(dic.validadas.length > 0 || dic.enError.length > 0) && <div style={{ marginTop: 4 }}>
+                    {dic.validadas.length > 0 && <span style={{ color: "var(--verde)", marginRight: 14 }}>Ya validadas en FINAT (pasaron): {dic.validadas.length} · {money(dic.impValidadas)}</span>}
+                    {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}
+                  </div>}
                   {dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
                 </div>
               )}
