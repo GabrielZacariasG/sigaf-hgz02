@@ -177,8 +177,13 @@ export default function CedulaPage() {
       <td style={{ ...tdN, color: cxp < -0.5 ? "var(--rojo)" : undefined }} title={tip}>{vacio ? "" : cxp.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
     </>);
   };
+  // Cuenta, cuenta anterior y nombre se quedan fijos a la izquierda; los encabezados, fijos arriba.
+  const ANCHOS = [78, 78, 250], IZQ = [0, 78, 156];
+  const fija = (i, bg) => ({ position: "sticky", left: IZQ[i], minWidth: ANCHOS[i], maxWidth: ANCHOS[i], zIndex: 1, background: bg || "var(--blanco)", boxShadow: i === 2 ? "2px 0 0 var(--borde)" : undefined });
   const encabezado = (
-    <tr>{["CUENTA CONTABLE (FINAT)", "CUENTA ANTERIOR (PREI)", "NOMBRE", "PRESUPUESTO", "GASTO", "COMPROMETIDO", "PRE-COMPROMETIDO", "DISPONIBLE", "AVANCE GASTO", "PASIVO", "DEVENGADO 2026", "TOTAL GASTO", "AVANCE GASTO DEVENGADO", "CUENTAS POR PAGAR"].map((h) => <th key={h} style={th}>{h}</th>)}</tr>
+    <tr>{["CUENTA CONTABLE (FINAT)", "CUENTA ANTERIOR (PREI)", "NOMBRE", "PRESUPUESTO", "GASTO", "COMPROMETIDO", "PRE-COMPROMETIDO", "DISPONIBLE", "AVANCE GASTO", "PASIVO", "DEVENGADO 2026", "TOTAL GASTO", "AVANCE GASTO DEVENGADO", "CUENTAS POR PAGAR"].map((h, i) => (
+      <th key={h} style={{ ...th, position: "sticky", top: 0, zIndex: i < 3 ? 3 : 2, ...(i < 3 ? { left: IZQ[i], minWidth: ANCHOS[i], maxWidth: ANCHOS[i] } : {}) }}>{h}</th>
+    ))}</tr>
   );
 
   const detalleCuenta = (f) => {
@@ -233,12 +238,12 @@ export default function CedulaPage() {
       {cargando && cortes.length > 0 && <p style={{ fontSize: 13 }}>Cargando…</p>}
 
       {!cargando && fecha && tab === "resumen" && (
-        <div style={{ overflowX: "auto", marginTop: 12, border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <div style={{ overflow: "auto", maxHeight: "calc(100vh - 160px)", marginTop: 12, border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%" }}>
             <tbody>
               {(() => {
                 const filas = []; let grupoAct = null; let acumGrupo = [];
-                const cerrarGrupo = () => { if (grupoAct && acumGrupo.length) filas.push(<tr key={"g-" + grupoAct} style={{ ...totalRow, background: "#b7e1cd" }}><td style={td} /><td style={{ ...td, fontWeight: 800 }} colSpan={2}>{grupoAct}</td>{celdas(suma(acumGrupo))}</tr>); acumGrupo = []; };
+                const cerrarGrupo = () => { if (grupoAct && acumGrupo.length) filas.push(<tr key={"g-" + grupoAct} style={{ ...totalRow, background: "#b7e1cd" }}><td style={{ ...td, ...fija(0, "#b7e1cd") }} /><td style={{ ...td, ...fija(1, "#b7e1cd"), fontWeight: 800, overflow: "visible" }}>{grupoAct}</td><td style={{ ...td, ...fija(2, "#b7e1cd") }} />{celdas(suma(acumGrupo))}</tr>); acumGrupo = []; };
                 for (const g of estructura) {
                   if (g.grupo !== grupoAct) { cerrarGrupo(); grupoAct = g.grupo; }
                   filas.push(<Fragment key={"h-" + g.bloque}>{encabezado}</Fragment>);
@@ -247,18 +252,18 @@ export default function CedulaPage() {
                     filas.push(
                       <Fragment key={k}>
                         <tr onClick={() => setAbierta(abierta === k ? null : k)} style={{ cursor: "pointer", background: abierta === k ? "#fff7d6" : undefined }} title="Clic para ver sus facturas">
-                          <td style={td}>{f.finat || "—"}</td><td style={td}>{f.prei}</td><td style={{ ...td, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{f.nombre}</td>
+                          <td style={{ ...td, ...fija(0, abierta === k ? "#fff7d6" : null) }}>{f.finat || "—"}</td><td style={{ ...td, ...fija(1, abierta === k ? "#fff7d6" : null) }}>{f.prei}</td><td style={{ ...td, ...fija(2, abierta === k ? "#fff7d6" : null), overflow: "hidden", textOverflow: "ellipsis" }} title={f.nombre}>{f.nombre}</td>
                           {celdas(f)}
                         </tr>
                         {abierta === k && detalleCuenta(f)}
                       </Fragment>);
                   }
-                  filas.push(<tr key={"t-" + g.bloque} style={totalRow}><td style={td} /><td style={td} /><td style={td}>{g.bloque}</td>{celdas(suma(g.filas))}</tr>);
+                  filas.push(<tr key={"t-" + g.bloque} style={totalRow}><td style={{ ...td, ...fija(0, "var(--verde-claro)") }} /><td style={{ ...td, ...fija(1, "var(--verde-claro)") }} /><td style={{ ...td, ...fija(2, "var(--verde-claro)"), whiteSpace: "normal" }}>{g.bloque}</td>{celdas(suma(g.filas))}</tr>);
                   if (g.grupo) acumGrupo.push(...g.filas);
                 }
                 cerrarGrupo();
                 const tg = suma(estructura.flatMap((g) => g.filas));
-                filas.push(<tr key="tg" style={{ ...totalRow, background: "var(--verde)", color: "#fff" }}><td style={td} /><td style={td} /><td style={td}>TOTAL GENERAL</td>{celdas(tg)}</tr>);
+                filas.push(<tr key="tg" style={{ ...totalRow, background: "var(--verde)", color: "#fff" }}><td style={{ ...td, ...fija(0, "var(--verde)") }} /><td style={{ ...td, ...fija(1, "var(--verde)") }} /><td style={{ ...td, ...fija(2, "var(--verde)") }}>TOTAL GENERAL</td>{celdas(tg)}</tr>);
                 filas.push(<tr key="dias"><td colSpan={7} style={{ ...td, textAlign: "right" }}>días del año</td><td style={tdN}>{diaDelAnio}</td><td style={tdN}>{pctTxt(diaDelAnio / 365)}</td><td colSpan={5} style={{ ...td, fontSize: 11, color: "var(--texto-suave)" }}>% de avance real del año al {fechaTxt(fecha)}</td></tr>);
                 return filas;
               })()}

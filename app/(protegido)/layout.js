@@ -149,7 +149,10 @@ export default function ProtegidoLayout({ children }) {
         </div>
       </header>
 
-      <main style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+      {/* Las pantallas tipo cédula (tablas anchas) usan todo el ancho del monitor */}
+      <main style={["/cedula", "/comprobantes", "/contratos"].some((p) => pathname?.startsWith(p))
+        ? { padding: "16px 20px", maxWidth: "none", margin: 0 }
+        : { padding: 24, maxWidth: 1100, margin: "0 auto" }}>
         {children}
       </main>
     </div>
