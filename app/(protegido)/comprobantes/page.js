@@ -59,13 +59,17 @@ export default function ComprobantesPage() {
         leidos.push({ nombre: file.name, tipo, grid });
       }
       // 2) Datos de SIGAF
-      const [rF, rH, rU] = await Promise.all([
+      const [rF, rH, rU, rB] = await Promise.all([
         leerTodo((d, h) => supabase.from("facturas")
           .select("id, folio_ingreso, folio_proveedor, importe_factura, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, numero_pedido, numero_recepcion, fecha_pago, anulada, proveedores ( razon_social ), partidas ( cuenta_finat, cuenta_prei ), capitulos ( nombre )")
           .order("id").range(d, h)),
         leerTodo((d, h) => supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha").order("id").range(d, h)),
         leerTodo((d, h) => supabase.from("alertas_config").select("circuito, estatus, dias_umbral").range(d, h)),
+        supabase.from("cedula_bloques").select("cuenta_finat, modo"),
       ]);
+      // Cuentas que se llevan factura por factura (modo "facturas" de la cédula). Las demás (agua, teléfono,
+      // combustibles, viáticos, nómina…) no se capturan en SIGAF y no deben salir como "faltan".
+      const porFactura = new Set((rB.data || []).filter((x) => x.modo === "facturas").map((x) => x.cuenta_finat));
       if (rF.error) throw rF.error;
       const original = rF.data || [];
       const sim = new Map(original.map((f) => [f.id, { ...f }])); // copia donde se van aplicando los cambios
@@ -82,7 +86,8 @@ export default function ComprobantesPage() {
         const auto = cr.automaticas.map(deCruce), conf = cr.porConfirmar.map(deCruce);
         out.automaticas.push(...auto); out.porConfirmar.push(...conf);
         out.alertas.push(...cr.alertas.map((a) => ({ ...a, fuente: "1043", ref: a.c.cbte })));
-        out.faltan.push(...cr.faltanEnSigaf);
+        out.faltan.push(...cr.faltanEnSigaf.filter((x) => !String(x.c.lineas[0]?.tipo || "").startsWith("JRNL")
+          && (!porFactura.size || x.c.cuentasHGZ2.some((cta) => porFactura.has(cta)))));
         aplicar(auto);
         out.resumen[l.nombre] = `${cr.resumen.comprobantes} comprobantes (${cr.resumen.hgz2} del HGZ 2) · emitidos ${fechaTxt(lec.desde)}–${fechaTxt(lec.hasta)}`;
       }
@@ -318,7 +323,7 @@ export default function ComprobantesPage() {
             )}
             {tab === "faltan" && (
               <div style={{ ...card, overflowX: "auto" }}>
-                <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: "0 0 6px" }}>El sistema ya los tiene y SIGAF no tiene la factura (o el folio está capturado distinto).</p>
+                <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: "0 0 6px" }}>El sistema ya los tiene y SIGAF no tiene la factura (o el folio está capturado distinto). Solo cuentas que se llevan factura por factura en la cédula.</p>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr><th style={th}>Referencia</th><th style={th}>Proveedor</th><th style={th}>Factura(s) / contrato</th><th style={th}>Cuenta</th><th style={th}>Importe HGZ 2</th></tr></thead>
                   <tbody>
