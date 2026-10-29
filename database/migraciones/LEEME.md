@@ -82,3 +82,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 
 - **040/041** faltan en SIGAF (solo lectura): de 24, solo 3 en cuentas que se llevan por factura.
 - **042** alta Lab. Clínico 4278 (CDS-000061) y 4252 (CDS-000062, parte HGZ 2). Corrida 30/10: 2 filas. Medina León 3583 NO entró: SIGAF no tiene su contrato D6M0029 (víveres).
+
+- **043** proveedor Medina León (134089) + contrato D6M0029 (víveres, copia vigencia/admin de D6M0032; montos vacíos) + factura 3583 (AMC-000151, pagada 29/10, CR 00475063). Corrida 30/10: 1 fila.
