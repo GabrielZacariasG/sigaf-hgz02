@@ -17,7 +17,9 @@ Los ~96 scripts sueltos de `database/` quedan como historia; no se vuelven a cor
 | 001 | `001_candado_ooad_en_tramite.sql` | El candado de envío a pago también aplica al oficio EP ("En trámite OOAD"); deja pasar lo que el sistema ya registró con CR. Al final lista las facturas que hoy están en OOAD sin cumplir el candado | No | 29/10/2026 · 183 facturas en OOAD sin firmas/P&R registradas ni CR |
 | 002 | `002_folios_consecutivos.sql` | Contador por serie y año para folios OF-CUM, OF-INC, ACU-DEV y EF-CE (formato `OF-CUM-0001/2026`) | No | 29/10/2026 |
 | 003 | `003_permisos_rls.sql` | Solo Finanzas emite oficios y carga la dispo; solo admin edita jefes/administradores; validaciones: el jefe/Subdirector o Finanzas | No | 29/10/2026 · Finanzas: Ventanilla 1-3 (auo), Gabriel (jefe_presupuesto), Nayeli Alonso (jefa_finanzas) |
-| 004 | `004_cerrar_huecos_permisos.sql` | Quita la política abierta de `ajustes_devengo` (escritura para cualquiera) y protege `stg_51251013` | No | — |
+| 004 | `004_cerrar_huecos_permisos.sql` | Quita la política abierta de `ajustes_devengo` (escritura para cualquiera) y protege `stg_51251013` | No | 29/10/2026 |
+| 005 | `005_exportar_facturas_en_ooad.sql` | Exporta las facturas en OOAD sin CR para cruzarlas con los comprobantes | No (solo lectura) | 29/10/2026 · 238 facturas |
+| 006 | `006_puesta_al_dia_cr_29oct.sql` | Puesta al día aprobada por Gabriel: CR a 187 facturas (120 pagadas con fecha, 67 en trámite), firmas y P&R. Solo toca las que siguen en OOAD sin CR | **Sí** (187 facturas) | — |
 
 ## Lo que mostró el inventario (000) y no estaba en el repo
 - Tablas que existen en Supabase sin su CREATE en el repo: `contra_recibos`, `entregas`, `factura_paradas`, `jefaturas`, `oficios_devolucion`, `oficio_devolucion_facturas`, `ooad_cortes`, `ooad_corte_filas`, `pedidos_recepcion`, `stg_51251013` (usan la función `es_usuario_activo()`).
