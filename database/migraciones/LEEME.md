@@ -37,4 +37,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 | 011b | `011b_diagnostico_ucn.sql` | Diagnóstico: UCN311/313 ya existían como "devuelta_proveedor" | No (solo lectura) | 29/10/2026 |
 | 011c | `011c_ucn_311_313_pagadas.sql` | UCN 311 y 313 de "devuelta" a pagadas (CR 00452689 y 00452692), pasivo 2025; 51331002 = sistema | **Sí** (2 facturas) | 29/10/2026 · 51331002 = 2 facturas $11,715,976.80 (= sistema) |
 | 012 | `012_exportar_devueltas.sql` | Exporta las facturas devueltas (23) para cruzarlas con el sistema | No (solo lectura) | 29/10/2026 |
-| 012b | `012b_devueltas_que_si_se_pagaron.sql` | 4 "devueltas" de la migración que el sistema tiene pagadas (Labopath 1216 y 1249 con importe corregido; ISSEA IS524 y SPHM110) | **Sí** (4 facturas) | — |
+| 012b | `012b_devueltas_que_si_se_pagaron.sql` | 4 "devueltas" de la migración que el sistema tiene pagadas (Labopath 1216 y 1249 con importe corregido; ISSEA IS524 y SPHM110) | **Sí** (4 facturas) | 29/10/2026 · 4 de 4 |
+| 013 | `013_buscar_importe_igual_folio.sql` | Busca facturas con el folio guardado como importe (error de migración) | No (solo lectura) | — |
