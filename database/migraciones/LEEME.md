@@ -64,3 +64,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 
 - **029** CR no numéricos (solo lectura): solo 4, con 'DEV'.
 - **030** Biodist 8258/8607 e ISSEA SP1671/SP1673 → devueltas (no tienen comprobante; ya no suman $33,782 de gasto). Corrida 29/10: 4 filas.
+
+- **031** Fase 2: tablas comprobantes_ooad y cargas_nap (RLS: lee cualquiera con sesión, escribe Finanzas). Pendiente de correr; la pantalla /comprobantes (rama fase2-comprobantes) la necesita.
