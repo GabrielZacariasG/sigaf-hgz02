@@ -21,7 +21,6 @@ const ORD_PED = { pendiente: 0, solicitado_fsi: 1, generado: 2 };
 // Orden de procesamiento = orden de las ranuras
 const SLOTS = [
   { id: "dispo", n: "1", titulo: "Disponibilidad (presupuesto)", hint: "DISPONIBILIDAD … .csv  ·  reporte FINAT (IMKK022)", tipo: "dispo" },
-  { id: "comp_todos", n: "2", titulo: "Comprobantes — todos", hint: "N_AP_IMSS_1043 …  ·  comprobantes por fecha de emisión", tipo: "reporte" },
   { id: "comp_int", n: "3", titulo: "Comprobantes — Integrales", hint: "N_AP_IMSS_1011 …  ·  pendientes de pago (PREI II)", tipo: "reporte" },
   { id: "pagos_gen", n: "4", titulo: "Pagos — general", hint: "pagosun … .xlsx   o   N_AP_IMSS_4002", tipo: "reporte" },
   { id: "pagos_int", n: "5", titulo: "Pagos — Integrales", hint: "N_AP_IMSS_4007 …  ·  pagado + pedido/recepción (PREI II)", tipo: "reporte" },
@@ -289,6 +288,10 @@ export default function ConciliarPage() {
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 800 }}>
         Pon cada reporte en su ranura y dale <strong>Procesar</strong>. SIGAF refresca el presupuesto, rellena comprobantes,
         avanza estatus y marca pagadas — <strong>en el orden correcto</strong>. Lo que no cruce solo, te lo deja para confirmar a mano.
+      </p>
+      <p style={{ fontSize: 13, maxWidth: 800 }}>
+        El reporte de comprobantes <strong>N_AP_IMSS_1043</strong> ahora se carga en{" "}
+        <Link href="/comprobantes" style={{ color: "var(--verde)" }}>Comprobantes</Link> (filtra la unidad HGZ 2, separa facturas y revisa importes).
       </p>
 
       {/* Ranuras */}
