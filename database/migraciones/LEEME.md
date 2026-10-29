@@ -66,3 +66,7 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **030** Biodist 8258/8607 e ISSEA SP1671/SP1673 → devueltas (no tienen comprobante; ya no suman $33,782 de gasto). Corrida 29/10: 4 filas.
 
 - **031** Fase 2: tablas comprobantes_ooad y cargas_nap (RLS: lee cualquiera con sesión, escribe Finanzas). Corrida 29/10 (2 tablas, 0 filas); la pantalla /comprobantes (rama fase2-comprobantes) la necesita.
+
+- **032** N_AP_IMSS_4007 (pagos 02/01–29/10, 1,286 comprobantes UI 010102): fecha REAL de pago + pedido-recepción. Corrida 29/10: 1,045 facturas actualizadas.
+- **033** revisión pedido vs sistema (solo lectura): 3 diferencias Biodist.
+- **034** esas 3 corregidas (tecleo). Corrida 29/10: 3 filas. Falta: 4006 (fecha real de lo que no es pedido) y 1013 (pedidos sin CR).
