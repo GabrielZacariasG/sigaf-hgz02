@@ -13,10 +13,16 @@ Los ~96 scripts sueltos de `database/` quedan como historia; no se vuelven a cor
 
 | # | Archivo | Qué hace | Toca datos | Corrida |
 |---|---|---|---|---|
-| 000 | `000_inventario_esquema.sql` | Lista el esquema real (columnas, llaves, políticas, enums, triggers) para versionarlo | No (solo lectura) | — |
-| 001 | `001_candado_ooad_en_tramite.sql` | El candado de envío a pago también aplica al oficio EP ("En trámite OOAD"); deja pasar lo que el sistema ya registró con CR. Al final lista las facturas que hoy están en OOAD sin cumplir el candado | No | — |
-| 002 | `002_folios_consecutivos.sql` | Contador por serie y año para folios OF-CUM, OF-INC, ACU-DEV y EF-CE (formato `OF-CUM-0001/2026`) | No | — |
-| 003 | `003_permisos_rls.sql` | Solo Finanzas emite oficios y carga la dispo; solo admin edita jefes/administradores; validaciones: el jefe/Subdirector o Finanzas | No | — |
+| 000 | `000_inventario_esquema.sql` | Lista el esquema real (columnas, llaves, políticas, enums, triggers) para versionarlo | No (solo lectura) | 29/10/2026 |
+| 001 | `001_candado_ooad_en_tramite.sql` | El candado de envío a pago también aplica al oficio EP ("En trámite OOAD"); deja pasar lo que el sistema ya registró con CR. Al final lista las facturas que hoy están en OOAD sin cumplir el candado | No | 29/10/2026 · 183 facturas en OOAD sin firmas/P&R registradas ni CR |
+| 002 | `002_folios_consecutivos.sql` | Contador por serie y año para folios OF-CUM, OF-INC, ACU-DEV y EF-CE (formato `OF-CUM-0001/2026`) | No | 29/10/2026 |
+| 003 | `003_permisos_rls.sql` | Solo Finanzas emite oficios y carga la dispo; solo admin edita jefes/administradores; validaciones: el jefe/Subdirector o Finanzas | No | 29/10/2026 · Finanzas: Ventanilla 1-3 (auo), Gabriel (jefe_presupuesto), Nayeli Alonso (jefa_finanzas) |
+| 004 | `004_cerrar_huecos_permisos.sql` | Quita la política abierta de `ajustes_devengo` (escritura para cualquiera) y protege `stg_51251013` | No | — |
+
+## Lo que mostró el inventario (000) y no estaba en el repo
+- Tablas que existen en Supabase sin su CREATE en el repo: `contra_recibos`, `entregas`, `factura_paradas`, `jefaturas`, `oficios_devolucion`, `oficio_devolucion_facturas`, `ooad_cortes`, `ooad_corte_filas`, `pedidos_recepcion`, `stg_51251013` (usan la función `es_usuario_activo()`).
+- `ajustes_devengo` tenía la política `ajustes_devengo_auth` abierta (se corrige en la 004).
+- `facturas.comprobante_ooad` es único; `alertas_config.estatus` es texto y `circuito` es el enum `tipo_circuito`.
 
 ## Orden para la Fase 0
 `000` (guardar resultado) → `001` → `002` → `003` → publicar la versión de la app de la rama `fase0-cimientos`.
