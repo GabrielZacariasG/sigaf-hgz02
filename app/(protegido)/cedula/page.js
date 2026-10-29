@@ -18,9 +18,23 @@ const money2 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currenc
 const pct = (a, b) => (Number(b) ? Number(a) / Number(b) : 0);
 const pctTxt = (x) => `${Math.round(x * 100)}%`;
 const fechaTxt = (f) => (f ? new Date(f + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
-const CAMPOS = ["presupuesto", "gasto", "comprometido", "precomprometido", "disponible", "pasivo", "devengado"];
+const CAMPOS = ["presupuesto", "gasto", "comprometido", "precomprometido", "disponible", "pasivo", "devengado", "cxp"];
+// Criterio de PASIVO / DEVENGADO por cuenta, igual que las fórmulas de la cédula (migración 008):
+//  facturas = facturas registradas en SIGAF + ajustes de devengo · sistema = pasivo 0 y devengado = gasto del sistema · vacio = sin control
+const MODO_TXT = { facturas: "Facturas registradas en SIGAF + ajustes de devengo", sistema: "Como en la cédula: devengado = gasto del sistema (sin control por factura)", vacio: "Sin control de pasivo/devengado (como en la cédula)" };
+function aplicarModo(f, modo) {
+  const m = modo || "facturas";
+  const pasivo = m === "facturas" ? f.pasivo : 0;
+  const devengado = m === "facturas" ? f.devengado : m === "sistema" ? f.gasto : 0;
+  const cxp = m === "vacio" ? 0 : pasivo + devengado - f.gasto;
+  return { ...f, modo: m, pasivo, devengado, cxp };
+}
 const cero = () => Object.fromEntries(CAMPOS.map((c) => [c, 0]));
-const suma = (filas) => { const t = cero(); for (const f of filas) for (const c of CAMPOS) t[c] += Number(f[c]) || 0; return t; };
+const suma = (filas) => {
+  const t = cero(); for (const f of filas) for (const c of CAMPOS) t[c] += Number(f[c]) || 0;
+  const modos = new Set(filas.map((f) => f.modo)); if (modos.size === 1) t.modo = [...modos][0]; // bloque todo "sistema"/"vacio" se ve igual que sus cuentas
+  return t;
+};
 
 function etapaDe(f) {
   if (f.estatus_general === "gasto_reflejado") return "Pagada";
@@ -97,10 +111,10 @@ export default function CedulaPage() {
       const finat = b.cuenta_finat || prei2finat[b.cuenta_prei] || "";
       if (!actual || actual.bloque !== b.bloque) { actual = { bloque: b.bloque, grupo: b.grupo, filas: [] }; out.push(actual); }
       if (finat) vistos.add(finat);
-      actual.filas.push({ finat, prei: b.cuenta_prei, nombre: b.nombre, ...(porCuenta[finat] || { ...cero(), facturas: [] }) });
+      actual.filas.push(aplicarModo({ finat, prei: b.cuenta_prei, nombre: b.nombre, ...(porCuenta[finat] || { ...cero(), facturas: [] }) }, b.modo));
     }
-    const resto = Object.keys(porCuenta).filter((c) => !vistos.has(c) && CAMPOS.some((k) => Math.abs(porCuenta[c][k]) >= 0.5)).sort();
-    if (resto.length) out.push({ bloque: "CUENTAS NO CLASIFICADAS (el sistema las trae y la cédula no las listaba)", grupo: null, filas: resto.map((c) => ({ finat: c, prei: partidaDe[c]?.cuenta_prei || "", nombre: partidaDe[c]?.nombre || "", ...porCuenta[c] })) });
+    const resto = Object.keys(porCuenta).filter((c) => !vistos.has(c) && CAMPOS.some((k) => Math.abs(porCuenta[c][k] || 0) >= 0.5)).sort();
+    if (resto.length) out.push({ bloque: "CUENTAS NO CLASIFICADAS (el sistema las trae y la cédula no las listaba)", grupo: null, filas: resto.map((c) => aplicarModo({ finat: c, prei: partidaDe[c]?.cuenta_prei || "", nombre: partidaDe[c]?.nombre || "", ...porCuenta[c] }, porCuenta[c].facturas.length ? "facturas" : "vacio")) });
     return out;
   }, [bloques, porCuenta, prei2finat, partidaDe]);
 
@@ -112,7 +126,7 @@ export default function CedulaPage() {
     const wb = XLSX.utils.book_new();
     if (tab === "resumen") {
       const enc = ["CUENTA CONTABLE (FINAT)", "CUENTA ANTERIOR (PREI)", "NOMBRE", "PRESUPUESTO", "GASTO", "COMPROMETIDO", "PRE-COMPROMETIDO", "DISPONIBLE", "AVANCE GASTO", "PASIVO", "DEVENGADO 2026", "TOTAL GASTO", "AVANCE GASTO DEVENGADO", "CUENTAS POR PAGAR"];
-      const fila = (a, b, c, t) => [a, b, c, t.presupuesto, t.gasto, t.comprometido, t.precomprometido, t.disponible, pct(t.gasto, t.presupuesto), t.pasivo, t.devengado, t.pasivo + t.devengado, pct(t.pasivo + t.devengado, t.presupuesto), t.pasivo + t.devengado - t.gasto];
+      const fila = (a, b, c, t) => { const v = t.modo === "vacio"; return [a, b, c, t.presupuesto, t.gasto, t.comprometido, t.precomprometido, t.disponible, pct(t.gasto, t.presupuesto), v ? "" : t.pasivo, v ? "" : t.devengado, v ? "" : t.pasivo + t.devengado, v ? "" : pct(t.pasivo + t.devengado, t.presupuesto), v ? "" : t.cxp]; };
       const aoa = [["", "AVANCE PRESUPUESTAL HGZ 2 (SIGAF)"], ["", `Disponibilidad al ${fechaTxt(fecha)}`], []];
       for (const g of estructura) { aoa.push(enc); for (const f of g.filas) aoa.push(fila(f.finat, f.prei, f.nombre, f)); aoa.push(fila("", "", g.bloque, suma(g.filas))); aoa.push([]); }
       aoa.push(fila("", "", "TOTAL GENERAL", suma(estructura.flatMap((g) => g.filas))));
@@ -149,14 +163,18 @@ export default function CedulaPage() {
     </div>
   );
   const celdas = (t) => {
-    const total = t.pasivo + t.devengado; const cxp = total - t.gasto;
+    const total = t.pasivo + t.devengado; const cxp = t.cxp;
+    const vacio = t.modo === "vacio"; const tip = t.modo ? MODO_TXT[t.modo] : undefined;
+    const sist = t.modo === "sistema" ? { color: "var(--texto-suave)", fontStyle: "italic" } : {};
     return (<>
       <td style={tdN}>{money(t.presupuesto)}</td><td style={tdN}>{money(t.gasto)}</td><td style={tdN}>{money(t.comprometido)}</td>
       <td style={tdN}>{money(t.precomprometido)}</td><td style={tdN}>{money(t.disponible)}</td>
       <td style={{ ...td, minWidth: 70 }}>{barra(pct(t.gasto, t.presupuesto))}</td>
-      <td style={tdN}>{money2(t.pasivo)}</td><td style={tdN}>{money2(t.devengado)}</td><td style={{ ...tdN, background: "#e0f2fe" }}>{money2(total)}</td>
-      <td style={{ ...td, minWidth: 70 }}>{barra(pct(total, t.presupuesto))}</td>
-      <td style={{ ...tdN, color: cxp < -0.5 ? "var(--rojo)" : undefined }}>{cxp.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td style={{ ...tdN, ...sist }} title={tip}>{vacio ? "" : money2(t.pasivo)}</td>
+      <td style={{ ...tdN, ...sist }} title={tip}>{vacio ? "" : money2(t.devengado)}</td>
+      <td style={{ ...tdN, background: "#e0f2fe", ...sist }} title={tip}>{vacio ? "" : money2(total)}</td>
+      <td style={{ ...td, minWidth: 70 }}>{vacio ? "" : barra(pct(total, t.presupuesto))}</td>
+      <td style={{ ...tdN, color: cxp < -0.5 ? "var(--rojo)" : undefined }} title={tip}>{vacio ? "" : cxp.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
     </>);
   };
   const encabezado = (
