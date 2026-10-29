@@ -35,4 +35,4 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 | 010 | `010_alta_igsa_fvr00923.sql` | Alta de IGSA FVR-00923 (julio, $2,207,720.93, CR 00471175 pagado) que faltaba; 51331013 queda igual al sistema | **Sí** (1 factura nueva) | 29/10/2026 · 51331013 = 13 facturas $24,773,494.50 (= sistema) |
 | 011 | `011_alta_ucn_311_313.sql` | Alta de UCN 311 y 313 (Unidad de Cuidados Nefrológicos, pasivo 2025, $11,715,976.80, CR 00452689 y 00452692 pagados); 51331002 queda igual al sistema | (no aplicó nada: ya existían) | 29/10/2026 · 0 filas; ver 011b y 011c |
 | 011b | `011b_diagnostico_ucn.sql` | Diagnóstico: UCN311/313 ya existían como "devuelta_proveedor" | No (solo lectura) | 29/10/2026 |
-| 011c | `011c_ucn_311_313_pagadas.sql` | UCN 311 y 313 de "devuelta" a pagadas (CR 00452689 y 00452692), pasivo 2025; 51331002 = sistema | **Sí** (2 facturas) | — |
+| 011c | `011c_ucn_311_313_pagadas.sql` | UCN 311 y 313 de "devuelta" a pagadas (CR 00452689 y 00452692), pasivo 2025; 51331002 = sistema | **Sí** (2 facturas) | 29/10/2026 · 51331002 = 2 facturas $11,715,976.80 (= sistema) |
