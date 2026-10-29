@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
-// Fase 3 (30/10/2026) Â· Contratos: reemplaza las hojas "Ã¡rea mÃ©dica", "subrogados", "linea am" y "lin sub" de la cÃ©dula.
-// Una sola pantalla con filtro por capÃ­tulo y dos vistas:
-//   Â· Control: mismas columnas de la cÃ©dula (mÃ¡ximos, ampliaciÃ³n, enlace, pagos, facturado, devengo, saldo, avance,
-//     proyecciÃ³n, sobrante/faltante, pasivo y meses) agrupado por partida con TOTAL / PRESUPUESTO / DIFERENCIA.
-//   Â· LÃ­nea mensual: programado (ESC 1 / AMP) contra gasto y devengo, saldo acumulado; aquÃ­ se captura el devengo.
+// Fase 3 (30/10/2026) · Contratos: reemplaza las hojas "área médica", "subrogados", "linea am" y "lin sub" de la cédula.
+// Una sola pantalla con filtro por capítulo y dos vistas:
+//   · Control: mismas columnas de la cédula (máximos, ampliación, enlace, pagos, facturado, devengo, saldo, avance,
+//     proyección, sobrante/faltante, pasivo y meses) agrupado por partida con TOTAL / PRESUPUESTO / DIFERENCIA.
+//   · Línea mensual: programado (ESC 1 / AMP) contra gasto y devengo, saldo acumulado; aquí se captura el devengo.
 // Gasto, pagos y pasivo salen de las facturas de SIGAF; nada se teclea.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -16,7 +16,7 @@ import { calcularContrato, sumar, ANIO } from "../../../lib/contratos";
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 const pctTxt = (x) => `${Math.round((Number(x) || 0) * 100)}%`;
-const fechaTxt = (f) => (f ? new Date(f + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "â€”");
+const fechaTxt = (f) => (f ? new Date(f + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const MESES = ["", "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 const esGenerico = (c) => /^(CE|CB)-/.test(c.numero_interno || "");
 
@@ -42,7 +42,7 @@ export default function ContratosPage() {
       supabase.from("dispo_cortes").select("fecha").order("fecha", { ascending: false }).limit(1),
     ]);
     const err = [rC, rF, rA, rP, rD, rR].find((r) => r.error);
-    if (err) { setMsg("No se pudo cargar: " + err.error.message + " (Â¿ya se corrieron las migraciones 045 y 046?)"); return; }
+    if (err) { setMsg("No se pudo cargar: " + err.error.message + " (¿ya se corrieron las migraciones 045 y 046?)"); return; }
     let presupuesto = {}; const fechaDispo = rCo.data?.[0]?.fecha || null;
     if (fechaDispo) {
       const rM = await leerTodo((d, h) => supabase.from("dispo_mensual").select("cuenta_finat, presupuesto").eq("fecha", fechaDispo).order("cuenta_finat").range(d, h));
@@ -68,7 +68,7 @@ export default function ContratosPage() {
       .filter(({ c, x }) => con2025 || (c.vigencia_fin || "9999") >= `${ANIO}-01-01` || x.pasivo > 0)
       .filter(({ c }) => !q || [c.numero_interno, c.numero_alterno, c.concepto, c.dictamen_numero, c.proveedores?.razon_social].join(" ").toLowerCase().includes(q));
     const g = {};
-    for (const it of lista) { const k = it.c.partidas?.cuenta_finat || "â€”"; (g[k] ||= { cuenta: k, nombre: it.c.partidas?.nombre || "", filas: [], reservas: [] }).filas.push(it); }
+    for (const it of lista) { const k = it.c.partidas?.cuenta_finat || "—"; (g[k] ||= { cuenta: k, nombre: it.c.partidas?.nombre || "", filas: [], reservas: [] }).filas.push(it); }
     for (const r of datos.reservas) { const k = r.partidas?.cuenta_finat; if (g[k] && !q) g[k].reservas.push(r); }
     return Object.values(g).sort((a, b) => a.cuenta.localeCompare(b.cuenta)).map((b) => ({ ...b, filas: b.filas.sort((p, s) => (p.c.vigencia_inicio || "").localeCompare(s.c.vigencia_inicio || "")) }));
   }, [datos, capitulo, con2025, busca]);
@@ -85,12 +85,12 @@ export default function ContratosPage() {
     await cargar();
   };
 
-  // ---------- Exportar como la cÃ©dula ----------
+  // ---------- Exportar como la cédula ----------
   const exportar = () => {
-    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe mÃ¡ximo contrato", "Importe mÃ¡ximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "ProyecciÃ³n", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL"];
-    const aoa = [[`CONTROL DE CONTRATOS Â· ${capitulo === "*" ? "Todos" : capitulo} Â· SIGAF ${new Date().toLocaleDateString("es-MX")}`], []];
+    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL"];
+    const aoa = [[`CONTROL DE CONTRATOS · ${capitulo === "*" ? "Todos" : capitulo} · SIGAF ${new Date().toLocaleDateString("es-MX")}`], []];
     for (const b of bloques) {
-      aoa.push([`${b.cuenta} Â· ${b.nombre}`]); aoa.push(enc);
+      aoa.push([`${b.cuenta} · ${b.nombre}`]); aoa.push(enc);
       for (const { c, x } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
         x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo]);
       for (const r of b.reservas) aoa.push([r.concepto, r.estatus, "", "", "", b.cuenta, r.estatus.toUpperCase(), "", "", "", r.importe]);
@@ -112,18 +112,18 @@ export default function ContratosPage() {
   const fija = (i, bg) => ({ position: "sticky", left: IZQ[i], minWidth: ANCHO[i], maxWidth: ANCHO[i], zIndex: 1, background: bg || "var(--blanco)", overflow: "hidden", textOverflow: "ellipsis", boxShadow: i === 1 ? "2px 0 0 var(--borde)" : undefined });
   const thFija = (i) => ({ ...th, left: IZQ[i], zIndex: 3, minWidth: ANCHO[i], maxWidth: ANCHO[i] });
   const colorAvance = (a) => (a >= 1 ? "#dc2626" : a >= 0.8 ? "#d97706" : "var(--verde)");
-  const Semaforo = ({ x }) => x.avisos.length ? <span title={x.avisos.map((a) => a.t).join(" Â· ")} style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, marginRight: 6, background: x.avisos.some((a) => a.nivel === "rojo") ? "#dc2626" : "#d97706" }} /> : null;
-  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "MÃ¡x. contrato", "MÃ¡x. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "ProyecciÃ³n", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total"];
+  const Semaforo = ({ x }) => x.avisos.length ? <span title={x.avisos.map((a) => a.t).join(" · ")} style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, marginRight: 6, background: x.avisos.some((a) => a.nivel === "rojo") ? "#dc2626" : "#d97706" }} /> : null;
+  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total"];
 
   if (msg && !datos) return <p style={{ color: "var(--rojo)" }}>{msg}</p>;
-  if (!datos) return <p>Cargando contratosâ€¦</p>;
+  if (!datos) return <p>Cargando contratos…</p>;
 
   const filaContrato = ({ c, x, facturas, ampliaciones }) => {
     const k = c.id; const sel = abierto === k; const bg = sel ? "#fff7d6" : null;
     return (
       <Fragment key={k}>
         <tr onClick={() => setAbierto(sel ? null : k)} style={{ cursor: "pointer", background: bg || undefined }} title="Clic para ver facturas, ampliaciones y avisos">
-          <td style={{ ...td, ...fija(0, bg) }} title={c.concepto}><Semaforo x={x} />{c.concepto || "â€”"}</td>
+          <td style={{ ...td, ...fija(0, bg) }} title={c.concepto}><Semaforo x={x} />{c.concepto || "—"}</td>
           <td style={{ ...td, ...fija(1, bg), fontWeight: 600 }} title={c.numero_interno}>{c.numero_interno}</td>
           <td style={td}>{c.dictamen_numero || ""}</td><td style={td}>{c.dictamen_tipo || ""}</td><td style={td}>{c.numero_alterno || ""}</td>
           <td style={{ ...td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }} title={c.proveedores?.razon_social}>{c.proveedores?.razon_social}</td>
@@ -147,15 +147,15 @@ export default function ContratosPage() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                 <strong>{c.numero_interno}</strong><span>{c.proveedores?.razon_social}</span>
                 {x.avisos.map((a, i) => <span key={i} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 99, background: a.nivel === "rojo" ? "#fee2e2" : "#fef3c7", color: a.nivel === "rojo" ? "#b91c1c" : "#92400e" }}>{a.t}</span>)}
-                <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Tope de ampliaciÃ³n ({c.tope_ampliacion_pct ?? 20}%): {money(x.tope)}</span>
+                <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Tope de ampliación ({c.tope_ampliacion_pct ?? 20}%): {money(x.tope)}</span>
               </div>
-              {ampliaciones.length > 0 && <div style={{ fontSize: 12, marginBottom: 6 }}><strong>Ampliaciones / reducciones:</strong> {ampliaciones.map((a) => `${money(a.importe)}${a.fecha ? " el " + fechaTxt(a.fecha) : ""}${a.convenio ? " (" + a.convenio + ")" : ""}`).join(" Â· ")}</div>}
+              {ampliaciones.length > 0 && <div style={{ fontSize: 12, marginBottom: 6 }}><strong>Ampliaciones / reducciones:</strong> {ampliaciones.map((a) => `${money(a.importe)}${a.fecha ? " el " + fechaTxt(a.fecha) : ""}${a.convenio ? " (" + a.convenio + ")" : ""}`).join(" · ")}</div>}
               <div style={{ maxHeight: 260, overflow: "auto" }}>
                 <table style={{ borderCollapse: "collapse" }}>
                   <thead><tr>{["Folio ingreso", "Factura", "Mes", "Importe", "Pasivo", "Estatus", "CR", "Fecha de pago"].map((h) => <th key={h} style={{ ...th, position: "static", background: "#4b5563" }}>{h}</th>)}</tr></thead>
                   <tbody>{facturas.slice().sort((a, b) => (a.periodo_inicio || "").localeCompare(b.periodo_inicio || "")).map((f) => (
                     <tr key={f.id}><td style={td}><Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)" }}>{f.folio_ingreso}</Link></td><td style={td}>{f.folio_proveedor}</td>
-                      <td style={td}>{f.mes_presupuestal ? `${MESES[f.mes_presupuestal]} ${f.anio_presupuestal}` : ""}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{f.es_pasivo ? "SÃ­" : ""}</td>
+                      <td style={td}>{f.mes_presupuestal ? `${MESES[f.mes_presupuestal]} ${f.anio_presupuestal}` : ""}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{f.es_pasivo ? "Sí" : ""}</td>
                       <td style={td}>{f.estatus_general === "gasto_reflejado" ? "Pagada" : f.estatus_general}</td><td style={td}>{f.cr_contrarecibo || ""}</td><td style={td}>{f.fecha_pago ? fechaTxt(f.fecha_pago) : ""}</td></tr>
                   ))}</tbody>
                 </table>
@@ -170,13 +170,13 @@ export default function ContratosPage() {
   const filtros = (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <select value={capitulo} onChange={(e) => { setCapitulo(e.target.value); setAbierto(null); }} style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 13 }}>
-        {capitulos.map((c) => <option key={c} value={c}>{c}</option>)}<option value="*">Todos los capÃ­tulos</option>
+        {capitulos.map((c) => <option key={c} value={c}>{c}</option>)}<option value="*">Todos los capítulos</option>
       </select>
       <button className={vista === "control" ? "boton" : "boton secundario"} onClick={() => setVista("control")} style={{ fontSize: 13, padding: "6px 14px" }}>Control</button>
-      <button className={vista === "linea" ? "boton" : "boton secundario"} onClick={() => setVista("linea")} style={{ fontSize: 13, padding: "6px 14px" }}>LÃ­nea mensual</button>
+      <button className={vista === "linea" ? "boton" : "boton secundario"} onClick={() => setVista("linea")} style={{ fontSize: 13, padding: "6px 14px" }}>Línea mensual</button>
       <label style={{ fontSize: 13 }}><input type="checkbox" checked={con2025} onChange={(e) => setCon2025(e.target.checked)} /> incluir contratos 2025 ya cerrados</label>
-      <input placeholder="Buscar contrato, proveedor, dictamenâ€¦" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
-      <button className="boton secundario" onClick={exportar} style={{ fontSize: 13 }}>â¬‡ Descargar como cÃ©dula</button>
+      <input placeholder="Buscar contrato, proveedor, dictamen…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
+      <button className="boton secundario" onClick={exportar} style={{ fontSize: 13 }}>⬇ Descargar como cédula</button>
     </div>
   );
 
@@ -185,7 +185,7 @@ export default function ContratosPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
         <div>
           <h1 style={{ fontSize: 22, margin: 0 }}>Contratos {ANIO}</h1>
-          <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Control por contrato como en la cÃ©dula Â· gasto, pagos y pasivo desde las facturas de SIGAF Â· presupuesto de la dispo del {fechaTxt(datos.fechaDispo)}</div>
+          <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>Control por contrato como en la cédula · gasto, pagos y pasivo desde las facturas de SIGAF · presupuesto de la dispo del {fechaTxt(datos.fechaDispo)}</div>
         </div>
         {filtros}
       </div>
@@ -231,11 +231,11 @@ export default function ContratosPage() {
       {vista === "linea" && (
         <div style={{ overflow: "auto", maxHeight: "calc(100vh - 170px)", border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
           <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: "8px 10px" }}>
-            <strong>Devengo</strong> = servicio que ya se recibiÃ³ y todavÃ­a no se factura. CaptÃºralo en el renglÃ³n morado (Enter o clic fuera para guardar).
+            <strong>Devengo</strong> = servicio que ya se recibió y todavía no se factura. Captúralo en el renglón morado (Enter o clic fuera para guardar).
             En gris va la sugerencia: el promedio de los meses facturados. Cuando llegue la factura de ese mes, el devengo se descuenta solo.
           </p>
           <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
-            <thead><tr><th style={thFija(0)}>Contrato</th><th style={thFija(1)}>RenglÃ³n</th>{MESES.slice(1).map((m) => <th key={m} style={th}>{m}</th>)}<th style={th}>TOTAL</th></tr></thead>
+            <thead><tr><th style={thFija(0)}>Contrato</th><th style={thFija(1)}>Renglón</th>{MESES.slice(1).map((m) => <th key={m} style={th}>{m}</th>)}<th style={th}>TOTAL</th></tr></thead>
             <tbody>
               {bloques.flatMap((b) => b.filas).map(({ c, x }) => {
                 const esc = x.prog["ESC 1"], amp = x.prog.AMP, hayAmp = amp.some((v) => v);
@@ -249,9 +249,9 @@ export default function ContratosPage() {
                 return (
                   <Fragment key={c.id}>
                     <tr><td style={{ ...td, ...fija(0, "#e5efe9"), fontWeight: 800 }} title={c.concepto}>{c.numero_interno}</td><td style={{ ...td, ...fija(1, "#e5efe9"), fontWeight: 700 }} title={c.proveedores?.razon_social}>{c.proveedores?.razon_social}</td>
-                      <td colSpan={13} style={{ ...td, background: "#e5efe9", fontSize: 12 }}>MÃ¡x. unidad {money(x.maxU)}{x.amp ? ` + amp ${money(x.amp)}` : ""} = enlace {money(x.enlace)} Â· tope ampliaciÃ³n {money(x.tope)} Â· vigencia {fechaTxt(c.vigencia_inicio)} al {fechaTxt(c.vigencia_fin)}</td></tr>
+                      <td colSpan={13} style={{ ...td, background: "#e5efe9", fontSize: 12 }}>Máx. unidad {money(x.maxU)}{x.amp ? ` + amp ${money(x.amp)}` : ""} = enlace {money(x.enlace)} · tope ampliación {money(x.tope)} · vigencia {fechaTxt(c.vigencia_inicio)} al {fechaTxt(c.vigencia_fin)}</td></tr>
                     {filaN("Programado (ESC 1)", esc)}
-                    {hayAmp && filaN("AmpliaciÃ³n (AMP)", amp)}
+                    {hayAmp && filaN("Ampliación (AMP)", amp)}
                     {filaN("Gasto facturado", gasto)}
                     <tr style={{ background: "#f5f3ff" }}><td style={{ ...td, ...fija(0, "#f5f3ff") }} /><td style={{ ...td, ...fija(1, "#f5f3ff"), color: "#7c3aed", fontWeight: 600 }}>Devengo (captura)</td>
                       {MESES.slice(1).map((_, i) => {
@@ -279,8 +279,8 @@ export default function ContratosPage() {
         </div>
       )}
       <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
-        Enlace = mÃ¡ximo de la unidad + ampliaciones. Saldo = enlace âˆ’ (facturado + devengo). ProyecciÃ³n = promedio mensual de los meses transcurridos Ã— meses de vigencia en {ANIO} (+ pasivo).
-        SemÃ¡foro: amarillo al 80% del contrato o a 30 dÃ­as de vencer; rojo si se rebasa o si la proyecciÃ³n no alcanza.
+        Enlace = máximo de la unidad + ampliaciones. Saldo = enlace − (facturado + devengo). Proyección = promedio mensual de los meses transcurridos × meses de vigencia en {ANIO} (+ pasivo).
+        Semáforo: amarillo al 80% del contrato o a 30 días de vencer; rojo si se rebasa o si la proyección no alcanza.
       </p>
     </div>
   );
