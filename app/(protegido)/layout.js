@@ -129,6 +129,7 @@ export default function ProtegidoLayout({ children }) {
               <Link href="/facturas" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Facturas</Link>
               <Link href="/cedula" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Cédula</Link>
               <Link href="/contratos" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Contratos</Link>
+              <Link href="/dictamenes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Dictámenes</Link>
               <Link href="/comprobantes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Comprobantes</Link>
             </>
           )}
@@ -151,7 +152,7 @@ export default function ProtegidoLayout({ children }) {
       </header>
 
       {/* Las pantallas tipo cédula (tablas anchas) usan todo el ancho del monitor */}
-      <main style={["/cedula", "/comprobantes", "/contratos"].some((p) => pathname?.startsWith(p))
+      <main style={["/cedula", "/comprobantes", "/contratos", "/dictamenes"].some((p) => pathname?.startsWith(p))
         ? { padding: "16px 20px", maxWidth: "none", margin: 0 }
         : { padding: 24, maxWidth: 1100, margin: "0 auto" }}>
         {children}
