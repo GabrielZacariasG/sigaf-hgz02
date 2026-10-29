@@ -84,3 +84,8 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **042** alta Lab. Clínico 4278 (CDS-000061) y 4252 (CDS-000062, parte HGZ 2). Corrida 30/10: 2 filas. Medina León 3583 NO entró: SIGAF no tiene su contrato D6M0029 (víveres).
 
 - **043** proveedor Medina León (134089) + contrato D6M0029 (víveres, copia vigencia/admin de D6M0032; montos vacíos) + factura 3583 (AMC-000151, pagada 29/10, CR 00475063). Corrida 30/10: 1 fila.
+
+- **044** export contratos (solo lectura).
+- **045** Fase 3: campos de contrato (concepto, dictamen, alterno, máximo del contrato, tope ampliación), tablas contrato_ampliaciones / contrato_programado / contrato_reservas, devengo con origen. Corrida 30/10.
+- **046** carga desde la cédula: 39 contratos con datos, 5 ampliaciones ($5,113,561.09), 17 reservas sin contrato ($1,381,187), 99 meses programados. Corrida 30/10. Sin contrato en SIGAF: Derma 050GYR032N13724-428-00 (2025), D5M0024 (2025, 0) y S6M0012 (Promotora 51331005 ene–feb 2026, máx 123,340.83).
+- **047** permiso de escritura de ajustes_devengo para Finanzas. Pendiente de correr.
