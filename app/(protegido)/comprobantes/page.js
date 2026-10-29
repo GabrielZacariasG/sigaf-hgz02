@@ -190,13 +190,13 @@ export default function ComprobantesPage() {
       <td style={td}>{x.proveedor}<div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{x.texto}</div></td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(x.importe)}{x.impHGZ2 > 0 && Math.abs(x.impHGZ2 - x.importe) > 1 && <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>HGZ 2: {money(x.impHGZ2)}</div>}</td>
       <td style={td}>
-        {x.facturas.map((f) => (
+        {x.facturas.map((fs) => { const f = res.original.get(fs.id) || fs; return (
           <div key={f.id} style={{ marginBottom: 3 }}>
             <LinkF f={f} /> · {f.folio_proveedor} · {money(f.importe_factura)}
-            <span style={{ color: "var(--texto-suave)" }}> · {GEN(f.estatus_general)}{f.cr_contrarecibo ? ` · CR ${f.cr_contrarecibo}` : ""}</span>
+            <span style={{ color: "var(--texto-suave)" }}> · hoy: {GEN(f.estatus_general)}{f.cr_contrarecibo ? ` · CR ${f.cr_contrarecibo}` : " · sin CR"}</span>
             {describir(x.cambiosPorFactura[f.id] || {}) && <div style={{ fontSize: 12 }}>→ {describir(x.cambiosPorFactura[f.id])}</div>}
           </div>
-        ))}
+        ); })}
         {x.motivos && <div style={{ fontSize: 12, color: "var(--rojo)" }}>{x.motivos.join(" · ")}</div>}
       </td>
     </tr>
