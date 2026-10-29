@@ -29,4 +29,4 @@ Los ~96 scripts sueltos de `database/` quedan como historia; no se vuelven a cor
 ## Orden para la Fase 0
 `000` (guardar resultado) → `001` → `002` → `003` → publicar la versión de la app de la rama `fase0-cimientos`.
 La app nueva necesita la `002` para los folios de validación; si se publica antes, el botón de guardar oficio de validación avisará que falta la migración.
-| 007 | `007_cedula_dispo_resumen.sql` | Fase 1: tablas de dispo completa (cortes, historia por cuenta y mes, detalle vigente), bloques de la hoja resumen (158) y presupuesto inicial 2026 (105, de la hoja pto) | No (crea tablas y catálogos nuevos) | — |
+| 007 | `007_cedula_dispo_resumen.sql` | Fase 1: tablas de dispo completa (cortes, historia por cuenta y mes, detalle vigente), bloques de la hoja resumen (158) y presupuesto inicial 2026 (105, de la hoja pto) | No (crea tablas y catálogos nuevos) | 29/10/2026 · 158 bloques, 105 cuentas, $392,399,569 |
