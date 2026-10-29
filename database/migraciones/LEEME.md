@@ -92,4 +92,4 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 
 - **048** tope de ampliación 20% (default y los 127 contratos). Corrida 30/10.
 
-- **049** Fase 3b: tablas dictamenes y dictamen_saldos con el DETALLE DE SALDOS del IMKK036 (39 dictámenes, 980 renglones, todas las unidades; cada uno cuadra al centavo con su TOTALES). Corrige el dictamen de S6M0010 (→0000211470-2026), S6M0046 (→0000211466-2026) y D6M0107 (→0000467664-2026 DEF) con el SAI. D5M0024 (0000186562-2025) no existe en FINAT. Pendiente de correr.
+- **049** Fase 3b: tablas dictamenes y dictamen_saldos con el DETALLE DE SALDOS del IMKK036 (39 dictámenes, 980 renglones, todas las unidades; cada uno cuadra al centavo con su TOTALES). Corrige el dictamen de S6M0010 (→0000211470-2026), S6M0046 (→0000211466-2026) y D6M0107 (→0000467664-2026 DEF) con el SAI. Iguala el enlace de los contratos con dictamen 2026 a lo asignado al HGZ 2 en FINAT (renglón "Ajuste para igualar al dictamen FINAT" en Amp o red; el máximo no se toca). D5M0024 (0000186562-2025) no existe en FINAT. Pendiente de correr.

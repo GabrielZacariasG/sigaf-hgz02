@@ -10,6 +10,8 @@
 --       S6M0010  0000094357-2026 → 0000211470-2026
 --       S6M0046  0000094360-2026 → 0000211466-2026
 --       050GYR032N08426-149-00 (D6M0107)  0000322059-2026 → 0000467664-2026 (DEF)
+--   · Iguala el enlace de cada contrato (dictamen 2026) a lo que FINAT asigna al HGZ 2: la diferencia entra en
+--     "Amp o red" como "Ajuste para igualar al dictamen FINAT…" (el máximo del contrato no se toca).
 -- Unidad 010102 = HGZ 2. Las demás unidades se guardan para saber si otra unidad tiene saldo (oficio de apoyo).
 -- Permisos: leer = cualquier usuario con sesión; escribir = personal de Finanzas (fn_es_personal).
 -- Se puede correr dos veces: borra y vuelve a cargar los mismos dictámenes.
@@ -1090,15 +1092,50 @@ update contratos set dictamen_numero = '0000467664-2026', dictamen_tipo = 'DEF'
  where dictamen_numero = '0000322059-2026'
    and (upper(numero_interno) in ('050GYR032N08426-149-00', 'D6M0107') or upper(coalesce(numero_alterno, '')) in ('050GYR032N08426-149-00', 'D6M0107'));
 
--- Verificación: contratos con dictamen y lo que el IMKK036 dice del HGZ 2
-select c.numero_interno, c.dictamen_numero, d.corte,
+-- Igualar SIGAF a FINAT (decisión de Gabriel 29/10: el dictamen de FINAT es el correcto).
+-- Enlace (máximo de la unidad + ampliaciones) = lo que el dictamen asigna al HGZ 2 (UI 010102).
+-- No se toca el máximo del contrato: la diferencia entra como un renglón de "Amp o red" con nota,
+-- para que se vea qué se movió y se pueda quitar. Solo dictámenes 2026 (los de pasivo 2025 no cambian el enlace)
+-- y solo cuando el dictamen pertenece a un único contrato. Si el contrato no tiene máximo, se toma del dictamen.
+delete from contrato_ampliaciones where nota like 'Ajuste para igualar al dictamen FINAT%';
+
+drop table if exists t_igualar;
+create temp table t_igualar as
+select c.id as contrato_id, c.numero_interno, c.dictamen_numero, d.corte,
+       coalesce(c.monto_maximo, 0) as maximo,
+       coalesce((select sum(a.importe) from contrato_ampliaciones a where a.contrato_id = c.id), 0) as amp,
+       (select sum(s.definitivo) from dictamen_saldos s where s.dictamen = c.dictamen_numero and s.ui = '010102') as asignado
+from contratos c
+join dictamenes d on d.numero = c.dictamen_numero
+where c.dictamen_numero like '%-2026'
+  and (select count(*) from contratos c2 where c2.dictamen_numero = c.dictamen_numero) = 1;
+
+update contratos c set monto_maximo = t.asignado - t.amp
+from t_igualar t
+where t.contrato_id = c.id and t.maximo = 0 and t.asignado is not null;
+
+insert into contrato_ampliaciones (contrato_id, fecha, importe, nota)
+select contrato_id, corte, round(asignado - (maximo + amp), 2),
+       'Ajuste para igualar al dictamen FINAT ' || dictamen_numero || ' (IMKK036 al ' || to_char(corte, 'DD/MM/YYYY') || ')'
+from t_igualar
+where maximo <> 0 and asignado is not null and abs(asignado - (maximo + amp)) > 0.5;
+
+-- Verificación: cada contrato con dictamen, su enlace antes y después, y lo que FINAT dice del HGZ 2
+select c.numero_interno as contrato, c.dictamen_numero, d.corte,
+       t.maximo + t.amp as enlace_antes,
+       coalesce(c.monto_maximo, 0) + coalesce((select sum(a.importe) from contrato_ampliaciones a where a.contrato_id = c.id), 0) as enlace_despues,
        sum(s.definitivo) filter (where s.ui = '010102') as asignado_hgz2,
        sum(s.pagos)      filter (where s.ui = '010102') as pagado_hgz2,
        sum(s.disponible) filter (where s.ui = '010102') as disponible_hgz2,
-       sum(s.disponible) filter (where s.ui <> '010102') as disponible_otras_unidades
+       sum(s.disponible) filter (where s.ui <> '010102') as disponible_otras_unidades,
+       case when d.numero is null then 'sin IMKK036'
+            when t.contrato_id is null and c.dictamen_numero like '%-2026' then 'no se igualó (dictamen en varios contratos)'
+            when t.contrato_id is null then 'pasivo 2025: no cambia enlace'
+            else 'igualado' end as nota
 from contratos c
 left join dictamenes d on d.numero = c.dictamen_numero
 left join dictamen_saldos s on s.dictamen = c.dictamen_numero
+left join t_igualar t on t.contrato_id = c.id
 where c.dictamen_numero ~ '^[0-9]{10}-[0-9]{4}$'
-group by c.numero_interno, c.dictamen_numero, d.corte
-order by (d.corte is null) desc, c.numero_interno;
+group by c.id, c.numero_interno, c.dictamen_numero, c.monto_maximo, d.numero, d.corte, t.contrato_id, t.maximo, t.amp
+order by nota, c.numero_interno;
