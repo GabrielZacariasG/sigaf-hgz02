@@ -72,3 +72,6 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **034** esas 3 corregidas (tecleo). Corrida 29/10: 3 filas. Falta: 4006 (fecha real de lo que no es pedido) y 1013 (pedidos sin CR).
 
 - **035** N_AP_IMSS_4002 (12 partes, pagos 02/01–30/10, 8,294 comprobantes UI 010102/019001): fecha REAL de pago para todo lo pagado. Corrida 30/10: 1,656 facturas actualizadas, todas en gasto reflejado.
+
+- **036** gasto reflejado sin pago en el 4002 (solo lectura): 20.
+- **037** 16 con CR eliminado/vacío → CR vigente + fecha real. Corrida 30/10: 16 filas. Pendiente decisión: Ávila Cajero A7294–A7297 (CR 452834 con pago cancelado, $105,844.20).
