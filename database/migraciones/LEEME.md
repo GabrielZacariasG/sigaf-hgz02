@@ -89,3 +89,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **045** Fase 3: campos de contrato (concepto, dictamen, alterno, máximo del contrato, tope ampliación), tablas contrato_ampliaciones / contrato_programado / contrato_reservas, devengo con origen. Corrida 30/10.
 - **046** carga desde la cédula: 39 contratos con datos, 5 ampliaciones ($5,113,561.09), 17 reservas sin contrato ($1,381,187), 99 meses programados. Corrida 30/10. Sin contrato en SIGAF: Derma 050GYR032N13724-428-00 (2025), D5M0024 (2025, 0) y S6M0012 (Promotora 51331005 ene–feb 2026, máx 123,340.83).
 - **047** permiso de escritura de ajustes_devengo para Finanzas. Corrida 30/10 (ad_write para Finanzas; deveng_write de admin sigue).
+
+- **048** tope de ampliación 20% (default y los 127 contratos). Corrida 30/10.
