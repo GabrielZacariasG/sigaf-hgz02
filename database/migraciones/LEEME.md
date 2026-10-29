@@ -77,3 +77,5 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 - **037** 16 con CR eliminado/vacío → CR vigente + fecha real. Corrida 30/10: 16 filas. 
 
 - **038** Ávila Cajero A7294–A7297 (CR 452834, pago cancelado) → en trámite OOAD sin fecha de pago. Corrida 30/10: 4 filas.
+
+- **039** 1013 (recepciones sin CR, 14 del HGZ 2): pedido-recepción a facturas sin CR con mismo proveedor e importe. Corrida 30/10: 2 (Reliable FAC23935 46570/45341, FAC23825 46571/45342). Las otras 12 recepciones no tienen factura en SIGAF.
