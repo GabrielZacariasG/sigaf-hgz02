@@ -78,7 +78,7 @@ export default function DictamenesPage() {
         if (!r.ok) return { ...r, accion: "error" };
         if (mejor[r.dictamen] !== r) return { ...r, accion: "repetido" };
         const actual = datos.dictamenes.find((d) => d.numero === r.dictamen);
-        if (actual?.corte && r.corte < actual.corte) return { ...r, accion: "viejo", actual };
+        if (actual?.corte && r.corte < actual.corte) return { ...r, accion: "viejo", actual, cs: contratosDe(r.dictamen) };
         const hgNuevo = resumenUI(r.filas, UI_HGZ2);
         const hgAntes = actual ? resumenUI(datos.saldos[r.dictamen] || [], UI_HGZ2) : null;
         const cs = contratosDe(r.dictamen);
