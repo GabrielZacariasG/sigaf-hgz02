@@ -39,4 +39,4 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 | 012 | `012_exportar_devueltas.sql` | Exporta las facturas devueltas (23) para cruzarlas con el sistema | No (solo lectura) | 29/10/2026 |
 | 012b | `012b_devueltas_que_si_se_pagaron.sql` | 4 "devueltas" de la migración que el sistema tiene pagadas (Labopath 1216 y 1249 con importe corregido; ISSEA IS524 y SPHM110) | **Sí** (4 facturas) | 29/10/2026 · 4 de 4 |
 | 013 | `013_buscar_importe_igual_folio.sql` | Busca facturas con el folio guardado como importe (error de migración) | No (solo lectura) | 29/10/2026 · solo 1, ya anulada |
-| 014 | `014_intermet_mins9422_y_9306.sql` | Alta de Intermet MINS9422 (julio, $422,759.68, CR 00476345) y CR 00476309 a MINS9306; 51331015 = sistema | **Sí** (1 nueva + 1 actualizada) | — |
+| 014 | `014_intermet_mins9422_y_9306.sql` | Alta de Intermet MINS9422 (julio, $422,759.68, CR 00476345) y CR 00476309 a MINS9306; 51331015 = sistema | **Sí** (1 nueva + 1 actualizada) | 29/10/2026 · 51331015 = 23 facturas $6,880,853.20 (= sistema), 0 sin CR |
