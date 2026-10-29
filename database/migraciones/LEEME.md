@@ -40,3 +40,27 @@ La app nueva necesita la `002` para los folios de validación; si se publica ant
 | 012b | `012b_devueltas_que_si_se_pagaron.sql` | 4 "devueltas" de la migración que el sistema tiene pagadas (Labopath 1216 y 1249 con importe corregido; ISSEA IS524 y SPHM110) | **Sí** (4 facturas) | 29/10/2026 · 4 de 4 |
 | 013 | `013_buscar_importe_igual_folio.sql` | Busca facturas con el folio guardado como importe (error de migración) | No (solo lectura) | 29/10/2026 · solo 1, ya anulada |
 | 014 | `014_intermet_mins9422_y_9306.sql` | Alta de Intermet MINS9422 (julio, $422,759.68, CR 00476345) y CR 00476309 a MINS9306; 51331015 = sistema | **Sí** (1 nueva + 1 actualizada) | 29/10/2026 · 51331015 = 23 facturas $6,880,853.20 (= sistema), 0 sin CR |
+
+- **015** exportar consumo de bienes (solo lectura) · corrida 29/10, CSV pegado.
+- **016** consumo de bienes vs sistema: 8 cambios de cuenta, folios Ibarra A22/B3050, 3 importes, CR, 12 en revisión ya pagadas, 2 duplicadas anuladas, 3 altas (CE-001039 Los Socios S113, 001040 Galomaya 02398, 001041 Repr. B02370). Corrida 29/10: 36 filas, todo como se esperaba.
+
+- **017** exportar traslados (solo lectura) · corrida 29/10.
+- **018** traslados: partida 52411024 + contrato PERNOCTA-REEMB, 13 altas (5 Autobuses, 8 fondo fijo), 40511 duplicada anulada, CR 00475172, Cruz Roja a la parte HGZ 2, centavos. Corrida 29/10: 52411011 = 73 fact. 2,363,189.69 (4 en trámite); 52411024 = 8 fact. 36,492.70. Tal como se esperaba. T JUN 04 (CR 00465766, cuenta 51371004) pendiente de decisión.
+
+- **019** T JUN 04 (CR 00465766) → 51371004 Mensajería (partida + contrato FF-MENSAJERIA). Corrida 29/10: 52411011 = 72 fact. 2,360,139.63 = sistema; 51371004 = 1 fact. 3,050.06.
+
+- **020** exportar Romo Alba (solo lectura).
+- **021** Romo Alba EP-0109: 14 facturas con CR 00475194/00475201/00475204, pagadas 20/10. Corrida 29/10: 14 filas. Nota: CR 00475201 trae 4 centavos menos que SIGAF (75,660.40 vs .44).
+
+- **022** PISA 63874122: sin doble pago (00476524 era falso positivo del cruce por folio parcial). CR 00470455, pagada 07/09. Corrida 29/10: 1 fila.
+
+- **023** revisión candidatos (solo lectura).
+- **024** PISA 640857022→64085702 CR 00471190 pagada 14/09; Prod. Hosp. 4601567994 CR 00475355 (en trámite). Corrida 29/10: 2 filas. Quedan 28 en OOAD sin comprobante al 28/10 (Baxter 4, Reliable 2, ISSEA 3, Biodist, SIE 14, PISA 2, Prod. Hosp. 4601587649, Médica San Juan 3979, Saldívar 366, P&P 8154, Abastecedora AI-104962 con CR eliminado).
+
+- **025** export en trámite con CR (solo lectura): los 56 CR válidos siguen sin pagar al 29/10.
+- **026** Biodist 51251019 CR 'SI' → CR reales pagados (56 en trámite; importes 8579 y 9240 corregidos a 68,672), Derma A1703 → 00473323 pagada, Ana Karen 4398 → 00476312. Corrido 29/10.
+- **027** Biodist 'SI' restantes (solo lectura): 28 en gasto reflejado.
+- **028** esas 28 con su CR real (pagados 27/10). Corrida 29/10: 28 filas.
+
+- **029** CR no numéricos (solo lectura): solo 4, con 'DEV'.
+- **030** Biodist 8258/8607 e ISSEA SP1671/SP1673 → devueltas (no tienen comprobante; ya no suman $33,782 de gasto). Corrida 29/10: 4 filas.
