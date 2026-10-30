@@ -326,7 +326,7 @@ export default function ComprobantesPage() {
           {res.folios && (
             <div style={{ ...card, marginTop: 12, overflowX: "auto", fontSize: 13 }}>
               <strong>Folios de subrogados: {res.folios.items.length} renglones</strong>
-              <span style={{ color: "var(--texto-suave)" }}> · {res.folios.nuevos} nuevos · {res.folios.actualizados} ya estaban (se actualizan) · {res.folios.ligadas} ligados a su factura de SIGAF</span>
+              <span style={{ color: "var(--texto-suave)" }}> · {res.folios.nuevos} nuevos · {res.folios.actualizados} ya estaban (se actualizan) · {res.folios.ligadas} ligados a su factura de SIGAF{res.folios.sinFolioDuplicados ? ` · ${res.folios.sinFolioDuplicados} renglón(es) "sin folio" del Excel ya venían con folio en CD_SMS (no se duplican)` : ""}</span>
               {res.folios.sinContrato.length > 0 && <div style={{ color: "#b7791f", marginTop: 4 }}>Sin contrato en SIGAF (quedan guardados, sin ligar): {res.folios.sinContrato.join(", ")}</div>}
               {Object.keys(res.folios.facturasNoEncontradas).length > 0 && (
                 <details style={{ marginTop: 4 }}>
