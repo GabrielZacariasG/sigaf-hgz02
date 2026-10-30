@@ -13,6 +13,8 @@ import {
 import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe } from "../../../../lib/avisos";
 import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
+import SelectorFolios from "../../../../lib/SelectorFolios";
+import { foliosDelContrato, ligarFolios, desligarFolios, estatusFolio } from "../../../../lib/subrogadosCarga";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -163,6 +165,28 @@ export default function FacturaEstatusPage() {
   const [fFin, setFFin] = useState("");
   const [guardandoFechas, setGuardandoFechas] = useState(false);
   const [semDic, setSemDic] = useState(null); // semáforo de dictamen del contrato (lib/avisos)
+  // Folios de subrogados: los ligados a esta factura + los pendientes (devengo) del contrato
+  const [folios, setFolios] = useState({ lista: [], ligados: new Set() });
+  const [selFol, setSelFol] = useState(new Set());
+  const [guardandoFol, setGuardandoFol] = useState(false);
+  const cargarFolios = async (fac) => {
+    if (!fac?.contrato_id) { setFolios({ lista: [], ligados: new Set() }); return; }
+    const fs = await foliosDelContrato(fac.contrato_id);
+    const lista = fs.filter((f) => f.factura_id === fac.id || estatusFolio(f) === "devengo");
+    const ligados = new Set(lista.filter((f) => f.factura_id === fac.id).map((f) => f.clave));
+    setFolios({ lista, ligados }); setSelFol(new Set(ligados));
+  };
+  const guardarFolios = async () => {
+    setGuardandoFol(true);
+    try {
+      const agregar = [...selFol].filter((k) => !folios.ligados.has(k));
+      const quitar = [...folios.ligados].filter((k) => !selFol.has(k));
+      await ligarFolios(agregar, factura.id); await desligarFolios(quitar);
+      setMensaje(`Folios guardados: ${agregar.length} ligados${quitar.length ? `, ${quitar.length} quitados` : ""}.`);
+      await cargarFolios(factura);
+    } catch (e) { setMensaje(e.message); }
+    setGuardandoFol(false);
+  };
 
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet] = await Promise.all([
@@ -185,6 +209,7 @@ export default function FacturaEstatusPage() {
     if (rFac.data.contrato_id && rFac.data.estatus_general !== "gasto_reflejado" && !rFac.data.anulada)
       cargarContrato(rFac.data.contrato_id).then((d) => setSemDic(semaforoDe(d))).catch(() => setSemDic(null));
     else setSemDic(null);
+    cargarFolios(rFac.data).catch(() => {});
     const m = {};
     (rAlertas.data || []).forEach((a) => (m[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
     setAlertasMap(m);
@@ -473,6 +498,17 @@ export default function FacturaEstatusPage() {
             {claveInfo.centro_costo && <span>Centro de costos <strong>{claveInfo.centro_costo}</strong></span>}
             {claveInfo.precio != null && <span>Precio ref. <strong>{money(claveInfo.precio)}</strong></span>}
           </div>
+        </div>
+      )}
+
+      {/* Folios de subrogados que cobra esta factura */}
+      {folios.lista.length > 0 && !factura.anulada && (
+        <div>
+          <SelectorFolios folios={folios.lista} seleccion={selFol} onCambio={setSelFol} importeFactura={factura.importe_factura}
+            titulo={`Folios de subrogados de esta factura (${folios.ligados.size} ligados)`} />
+          {(selFol.size !== folios.ligados.size || [...selFol].some((k) => !folios.ligados.has(k))) && (
+            <button className="boton" onClick={guardarFolios} disabled={guardandoFol} style={{ marginBottom: 10 }}>{guardandoFol ? "Guardando…" : "Guardar folios"}</button>
+          )}
         </div>
       )}
 

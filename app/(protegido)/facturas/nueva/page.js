@@ -6,6 +6,8 @@ import { supabase } from "../../../../lib/supabaseClient";
 import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe, ID_NUEVA } from "../../../../lib/avisos";
 import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
+import SelectorFolios from "../../../../lib/SelectorFolios";
+import { foliosDelContrato, ligarFolios, estatusFolio } from "../../../../lib/subrogadosCarga";
 
 const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
@@ -181,6 +183,16 @@ export default function NuevaFacturaPage() {
     cargarContrato(contratoId).then((d) => { if (vivo) setDatosCto(d); }).catch(() => {}).finally(() => { if (vivo) setCargandoCto(false); });
     return () => { vivo = false; };
   }, [contratoId]);
+  // Folios de subrogados pendientes (devengo) del contrato: se palomean los que cobra esta factura
+  const [foliosPend, setFoliosPend] = useState([]);
+  const [selFolios, setSelFolios] = useState(new Set());
+  useEffect(() => {
+    let vivo = true; setFoliosPend([]); setSelFolios(new Set());
+    if (!contratoId) return;
+    foliosDelContrato(contratoId).then((fs) => { if (vivo) setFoliosPend(fs.filter((f) => estatusFolio(f) === "devengo")); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [contratoId]);
+
   const semNueva = useMemo(() => (datosCto && importeNum > 0 ? semaforoDe(datosCto, { importe: importeNum, fecha: fechaFactura }) : null), [datosCto, importeNum, fechaFactura]);
   const cajaSemaforo = semNueva
     ? <SemaforoDictamen titulo="¿Hay dinero en el dictamen para esta factura?" s={semNueva.sem.get(ID_NUEVA)} disponible={semNueva.disponibleDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} resumen={semNueva.resumenDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} />
@@ -428,6 +440,12 @@ export default function NuevaFacturaPage() {
             subtotal_calculado: sub, iva_calculado: ivaAmt, total_calculado: total, tasa_iva: tasa, validacion_ok: ok,
           }).eq("id", nueva.id);
         }
+      }
+
+      // Ligar los folios de subrogados palomeados a la factura nueva
+      if (selFolios.size) {
+        try { await ligarFolios([...selFolios], nueva.id); }
+        catch (eF) { avisoDetalle += ` (los folios no se pudieron ligar: ${eF.message}; lígalos desde el detalle)`; }
       }
 
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
@@ -686,6 +704,7 @@ export default function NuevaFacturaPage() {
             </div>
           </div>
           {cajaSemaforo}
+          {foliosPend.length > 0 && <SelectorFolios folios={foliosPend} seleccion={selFolios} onCambio={setSelFolios} importeFactura={importeNum} />}
 
           {/* Captura de subtotal + IVA + validación */}
           <div style={card}>

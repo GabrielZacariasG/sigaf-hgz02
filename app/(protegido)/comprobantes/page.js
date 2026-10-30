@@ -19,11 +19,13 @@ import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO } from "../../../lib/estatus"
 import { leerDispoIMKK022, guardarLoteDispo, totalesDispo } from "../../../lib/dispo";
 import { cargarDatosDictamenes, revisarDictamenes, guardarDictamenes, aGuardar } from "../../../lib/dictamenesCarga";
 import RevisionDictamenes from "../../../lib/RevisionDictamenes";
+import { esCDSMS, leerCDSMS, esAvanceSMS, leerAvanceSMS } from "../../../lib/subrogados";
+import { cargarDatosFolios, prepararFolios, guardarFolios } from "../../../lib/subrogadosCarga";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const GEN = (s) => LABEL_GENERAL?.[s] || s;
-const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)", dispo: "Disponibilidad (IMKK022)", imkk036: "Dictamen (IMKK036)" };
+const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)", dispo: "Disponibilidad (IMKK022)", imkk036: "Dictamen (IMKK036)", cdsms: "Folios de subrogados (CD_SMS)", avance_sms: "Avance SMS (historial de folios)" };
 const estadoC = (c) => (c.eliminado ? "Eliminado" : c.pagado ? `Pagado (${fechaTxt(c.fecha_prog_pago)})` : c.estado_pago === "X" ? "Pago cancelado" : "Sin pagar");
 
 // 1043 → forma común de los renglones
@@ -54,10 +56,25 @@ export default function ComprobantesPage() {
     try {
       // 1) Leer y reconocer cada archivo
       // PDF → dictamen IMKK036 · Excel → N_AP (1043/4002/4007/1013) o disponibilidad IMKK022
-      const leidos = [], pdfs = [], dispo = [];
+      const leidos = [], pdfs = [], dispo = [], folFilas = [];
       for (const file of archivos) {
         if (/\.pdf$/i.test(file.name)) { pdfs.push(file); leidos.push({ nombre: file.name, tipo: "imkk036" }); continue; }
-        const wb = XLSX.read(await file.arrayBuffer(), { type: "array", raw: true });
+        // Folios de subrogados: CD_SMS (CSV dentro de la página del sistema)
+        if (/\.(csv|html?|txt)$/i.test(file.name)) {
+          const texto = await file.text();
+          if (esCDSMS(texto)) {
+            const l = leerCDSMS(texto);
+            if (l.error) leidos.push({ nombre: file.name, error: l.error });
+            else { folFilas.push(...l.filas); leidos.push({ nombre: file.name, tipo: "cdsms", n: l.filas.length }); }
+            continue;
+          }
+        }
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array", raw: true, cellDates: false });
+        // Folios de subrogados: Excel del Avance SMS (historial con número de factura)
+        if (esAvanceSMS(wb)) {
+          const l = leerAvanceSMS(wb);
+          folFilas.unshift(...l.filas); leidos.push({ nombre: file.name, tipo: "avance_sms", n: l.filas.length }); continue;
+        }
         const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
         const tipo = tipoReporte(grid);
         if (tipo) { leidos.push({ nombre: file.name, tipo, grid }); continue; }
@@ -70,6 +87,13 @@ export default function ComprobantesPage() {
       const dispoCortes = [...porFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
       // Dictámenes
       const dict = pdfs.length ? await revisarDictamenes(pdfs, await cargarDatosDictamenes()) : [];
+      // Folios: si el mismo folio+estudio viene en el Excel y en CD_SMS, se juntan (el Excel aporta la factura)
+      let folios = null;
+      if (folFilas.length) {
+        const porClave = new Map();
+        for (const f of folFilas) porClave.set(f.clave, { ...(porClave.get(f.clave) || {}), ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== null && v !== "")) });
+        folios = prepararFolios([...porClave.values()], await cargarDatosFolios());
+      }
       // 2) Datos de SIGAF
       const [rF, rH, rU, rB] = await Promise.all([
         leerTodo((d, h) => supabase.from("facturas")
@@ -88,7 +112,8 @@ export default function ComprobantesPage() {
       const aplicar = (items) => { for (const it of items) for (const f of it.facturas) Object.assign(sim.get(f.id) || {}, it.cambiosPorFactura[f.id] || {}); };
       const simLista = () => [...sim.values()];
 
-      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {}, dispo: dispoCortes, dict };
+      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {}, dispo: dispoCortes, dict, folios };
+      for (const l of leidos.filter((x) => x.tipo === "cdsms" || x.tipo === "avance_sms")) out.resumen[l.nombre] = `${l.n} renglones de folios de subrogados`;
       for (const d of dispoCortes) out.resumen[d.archivo] = `corte del ${fechaTxt(d.fecha)} · ${d.cuentas.length} cuentas del HGZ 2`;
       for (const r of dict) out.resumen[r.archivo] = r.ok ? `dictamen ${r.dictamen} · corte ${fechaTxt(r.corte)}` : r.problema;
 
@@ -146,6 +171,10 @@ export default function ComprobantesPage() {
       if (res.dispo?.length) {
         const r = await guardarLoteDispo(supabase, res.dispo, (t) => setOk(t));
         partes.push(`${r.hechos} corte(s) de disponibilidad${r.ultimo ? ` (vigente: ${fechaTxt(r.ultimo.fecha)})` : ""}`);
+      }
+      if (res.folios?.items.length) {
+        const n = await guardarFolios(res.folios.items, (t) => setOk(t));
+        partes.push(`${n} folios de subrogados`);
       }
       if (aGuardar(res.dict).length) {
         const r = await guardarDictamenes(res.dict);
@@ -294,6 +323,21 @@ export default function ComprobantesPage() {
             </div>
           )}
 
+          {res.folios && (
+            <div style={{ ...card, marginTop: 12, overflowX: "auto", fontSize: 13 }}>
+              <strong>Folios de subrogados: {res.folios.items.length} renglones</strong>
+              <span style={{ color: "var(--texto-suave)" }}> · {res.folios.nuevos} nuevos · {res.folios.actualizados} ya estaban (se actualizan) · {res.folios.ligadas} ligados a su factura de SIGAF</span>
+              {res.folios.sinContrato.length > 0 && <div style={{ color: "#b7791f", marginTop: 4 }}>Sin contrato en SIGAF (quedan guardados, sin ligar): {res.folios.sinContrato.join(", ")}</div>}
+              {Object.keys(res.folios.facturasNoEncontradas).length > 0 && (
+                <details style={{ marginTop: 4 }}>
+                  <summary style={{ cursor: "pointer", color: "#b7791f" }}>{Object.keys(res.folios.facturasNoEncontradas).length} números de factura del Excel que no encontré en SIGAF (cuentan como facturados, sin ligar)</summary>
+                  <div style={{ columns: 2, marginTop: 4 }}>{Object.entries(res.folios.facturasNoEncontradas).map(([k, v]) => <div key={k}>{k}: {money(v)}</div>)}</div>
+                </details>
+              )}
+              <div style={{ marginTop: 6 }}><strong>Devengo por contrato</strong> (folios sin factura): {Object.entries(res.folios.devengo).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "ninguno"}</div>
+            </div>
+          )}
+
           {res.dict?.length > 0 && (
             <div style={{ ...card, marginTop: 12, overflowX: "auto" }}>
               <strong>Dictámenes (IMKK036): {aGuardar(res.dict).length} de {res.dict.length} PDF se guardarán</strong>
@@ -310,7 +354,7 @@ export default function ComprobantesPage() {
             <Tab id="faltan" t="Faltan en SIGAF" n={res.faltan.length + res.sinFactura1013.length} />
             <Tab id="estancadas" t="Estancadas" n={b?.estancadas.length || 0} />
             <input placeholder="Buscar proveedor, folio, CR…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
-            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar todo (${[res.dispo?.length ? `${res.dispo.length} dispo` : "", aGuardar(res.dict).length ? `${aGuardar(res.dict).length} dictamen(es)` : "", `${nMarc} palomeadas`].filter(Boolean).join(" · ")})`}</button>
+            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar todo (${[res.folios?.items.length ? `${res.folios.items.length} folios` : "", res.dispo?.length ? `${res.dispo.length} dispo` : "", aGuardar(res.dict).length ? `${aGuardar(res.dict).length} dictamen(es)` : "", `${nMarc} palomeadas`].filter(Boolean).join(" · ")})`}</button>
           </div>
 
           <div style={{ marginTop: 10 }}>

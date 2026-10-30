@@ -50,12 +50,19 @@ export default function ContratosPage() {
       for (const r of rM.data || []) presupuesto[r.cuenta_finat] = (presupuesto[r.cuenta_finat] || 0) + (Number(r.presupuesto) || 0);
     }
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
-    const [rDi, rDs, rLi, rCm] = await Promise.all([
+    const [rDi, rDs, rLi, rCm, rFo] = await Promise.all([
       supabase.from("dictamenes").select("numero, origen, corte"),
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
+      leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
     ]);
+    // Devengo de folios de subrogados (migración 053): folios sin factura y no cancelados, por contrato y mes
+    const devFolios = {};
+    for (const f of rFo.error ? [] : rFo.data || []) {
+      const dv = (devFolios[f.contrato_id] ||= Array(13).fill(0));
+      if (!f.factura_id && !f.factura_txt && !f.cancelado && Number(f.anio) === ANIO && f.mes >= 1 && f.mes <= 12) dv[f.mes] += Number(f.importe) || 0;
+    }
     // Comentarios por contrato (migración 052), el más reciente primero
     const comentarios = {}; for (const k of rCm.error ? [] : rCm.data || []) (comentarios[k.contrato_id] ||= []).push(k);
     const links = {}; for (const l of rLi.error ? [] : rLi.data || []) (links[l.contrato_id] ||= []).push(l);
@@ -71,7 +78,7 @@ export default function ContratosPage() {
     }
     const ppto = {}; // E si alguna línea cayó en error · V si todas están validadas · N lo demás
     for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios });
+    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios });
   };
 
   // ---------- Comentarios por contrato ----------
@@ -99,7 +106,7 @@ export default function ContratosPage() {
       .filter((c) => !esGenerico(c))
       .filter((c) => capitulo === "*" || c.partidas?.capitulos?.nombre === capitulo)
       .map((c) => {
-        const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [] });
+        const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [], devengoFolios: datos.devFolios[c.id] || null });
         // Dictamen vigente: el de pasivo 2026 si el contrato es de un año anterior y lo tiene ligado; si no, el principal
         const dv = dictamenDe(c, { estatus_general: "pendiente" }, datos.links);
         const fDic = (fPor[c.id] || []).filter((f) => dictamenDe(c, f, datos.links) === dv);
@@ -345,11 +352,13 @@ export default function ContratosPage() {
                     {filaN("Programado (ESC 1)", esc)}
                     {hayAmp && filaN("Ampliación (AMP)", amp)}
                     {filaN("Gasto facturado", gasto)}
-                    <tr style={{ background: "#f5f3ff" }}><td style={{ ...td, ...fija(0, "#f5f3ff") }} /><td style={{ ...td, ...fija(1, "#f5f3ff"), color: "#7c3aed", fontWeight: 600 }}>Devengo (captura)</td>
+                    <tr style={{ background: "#f5f3ff" }}><td style={{ ...td, ...fija(0, "#f5f3ff") }} /><td style={{ ...td, ...fija(1, "#f5f3ff"), color: "#7c3aed", fontWeight: 600 }}>{x.conFolios ? "Devengo (folios)" : "Devengo (captura)"}</td>
                       {MESES.slice(1).map((_, i) => {
                         // Devengo solo donde tiene sentido: mes ya transcurrido, dentro de la vigencia y SIN factura todavía
                         // (si ya se había capturado algo, se deja ver para poder corregirlo o borrarlo).
                         const m = i + 1; const cap = x.devCapt[m];
+                        // Con folios de subrogados el devengo ya no se captura: sale de los folios sin factura
+                        if (x.conFolios) return <td key={m} style={{ ...tdN, color: "#7c3aed" }} title="Folios de subrogados sin factura (sale solo de la carga de CD_SMS)">{x.devengoMes[m] ? money0(x.devengoMes[m]) : ""}</td>;
                         const editable = (m >= x.vig.desde && m <= x.vig.hasta && m <= x.mesHoy && !gasto[m]) || cap;
                         return (
                           <td key={m} style={{ ...td, padding: 2 }}>
