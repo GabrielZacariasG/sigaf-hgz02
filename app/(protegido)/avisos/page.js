@@ -51,9 +51,9 @@ export default function AvisosPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Contrato", "Dictamen", "Disponible HGZ 2", "Faltan", "Qué hacer", "Facturas afectadas"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{a.resumen.map((r) => (
-              <tr key={r.contrato.id}>
+              <tr key={r.contrato.id + "|" + r.dictamen}>
                 <td style={td}><strong>{r.contrato.numero_interno}</strong><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{r.contrato.proveedores?.razon_social}</div></td>
-                <td style={td}>{r.dictamen}</td>
+                <td style={td}>{r.dictamen}{r.esPasivo && <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>dictamen de pasivo</div>}</td>
                 <td style={tdN}>{money(r.disponible)}</td>
                 <td style={{ ...tdN, color: "var(--rojo)", fontWeight: 700 }}>{r.faltante ? money(r.faltante) : ""}</td>
                 <td style={{ ...td, fontWeight: 600, color: r.accion === "oficio" ? "#92400e" : "var(--rojo)" }}>

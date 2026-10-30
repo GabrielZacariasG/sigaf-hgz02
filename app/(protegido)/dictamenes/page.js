@@ -30,20 +30,23 @@ export default function DictamenesPage() {
   const [abierto, setAbierto] = useState(null);
 
   const cargar = async () => {
-    const [rD, rS, rC, rA] = await Promise.all([
+    const [rD, rS, rC, rA, rL] = await Promise.all([
       supabase.from("dictamenes").select("*").order("numero"),
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contratos").select("id, numero_interno, numero_alterno, concepto, dictamen_numero, monto_maximo, proveedores ( razon_social )").order("numero_interno").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_ampliaciones").select("id, contrato_id, importe, nota").order("id").range(d, h)),
+      leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
     ]);
     const err = [rD, rS, rC, rA].find((r) => r.error);
     if (err) { setError("No se pudo cargar: " + err.error.message + " (¿ya se corrió la migración 049?)"); return; }
     const saldos = {}; for (const s of rS.data || []) (saldos[s.dictamen] ||= []).push(s);
-    setDatos({ dictamenes: rD.data || [], saldos, contratos: rC.data || [], amp: rA.data || [] });
+    setDatos({ dictamenes: rD.data || [], saldos, contratos: rC.data || [], amp: rA.data || [], ligas: rL.error ? [] : rL.data || [] });
   };
   useEffect(() => { cargar(); }, []);
 
-  const contratosDe = (num) => (datos?.contratos || []).filter((c) => c.dictamen_numero === num);
+  // Contratos del dictamen: el principal (contratos.dictamen_numero) y los ligados en contrato_dictamenes (p. ej. pasivo)
+  const contratosDe = (num) => (datos?.contratos || []).filter((c) => c.dictamen_numero === num || datos.ligas.some((l) => l.contrato_id === c.id && l.dictamen === num))
+    .map((c) => (c.dictamen_numero === num ? c : { ...c, ligaPasivo: true }));
   const enlaceDe = (c) => (Number(c.monto_maximo) || 0) + datos.amp.filter((a) => a.contrato_id === c.id).reduce((s, a) => s + (Number(a.importe) || 0), 0);
 
   // Lista de dictámenes cargados + los que tienen contrato pero aún no tienen IMKK036
@@ -55,7 +58,7 @@ export default function DictamenesPage() {
       const hg = resumenUI(sal, UI_HGZ2);
       const otras = {}; for (const s of sal) if (s.ui !== UI_HGZ2) otras[s.ui] = (otras[s.ui] || 0) + (Number(s.disponible) || 0);
       const cs = contratosDe(d.numero);
-      return { d, hg, otras: Object.entries(otras).filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]), otrasDisp: Object.values(otras).filter((v) => v > 0.5).reduce((s, v) => s + v, 0), cs, enlace: cs.length === 1 ? enlaceDe(cs[0]) : null };
+      return { d, hg, otras: Object.entries(otras).filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]), otrasDisp: Object.values(otras).filter((v) => v > 0.5).reduce((s, v) => s + v, 0), cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
     });
     const sinCarga = [...new Set(datos.contratos.map((c) => c.dictamen_numero).filter((n) => /^\d{10}-\d{4}$/.test(n || "") && !datos.dictamenes.some((d) => d.numero === n)))]
       .map((n) => ({ sinCarga: true, d: { numero: n }, cs: contratosDe(n) }));
@@ -83,7 +86,8 @@ export default function DictamenesPage() {
         const hgAntes = actual ? resumenUI(datos.saldos[r.dictamen] || [], UI_HGZ2) : null;
         const cs = contratosDe(r.dictamen);
         let igualar = null;
-        if (cs.length === 1 && Number(r.dictamen.slice(-4)) === ANIO) {
+        // Solo se iguala el enlace con el dictamen PRINCIPAL del contrato (el de pasivo no cambia el enlace)
+        if (cs.length === 1 && !cs[0].ligaPasivo && Number(r.dictamen.slice(-4)) === ANIO) {
           const c = cs[0];
           const ampSin = datos.amp.filter((a) => a.contrato_id === c.id && !String(a.nota || "").startsWith(NOTA_AJUSTE)).reduce((s, a) => s + (Number(a.importe) || 0), 0);
           const maximo = Number(c.monto_maximo) || 0;
@@ -183,7 +187,7 @@ export default function DictamenesPage() {
                 <td style={{ ...td, fontSize: 12 }}>
                   {r.igualar ? (r.igualar.nuevoMaximo != null ? `Sin máximo: se toma ${money(r.igualar.nuevoMaximo)} del dictamen`
                     : Math.abs(r.igualar.enlaceAntes - r.igualar.enlaceNuevo) > 0.5 ? `${money(r.igualar.enlaceAntes)} → ${money(r.igualar.enlaceNuevo)} (ajuste ${money(r.igualar.ajuste)})` : "Ya es igual a FINAT")
-                    : r.hgNuevo ? <span style={{ color: "var(--texto-suave)" }}>{(r.cs || []).length > 1 ? "Dictamen en varios contratos: no se iguala" : Number(String(r.dictamen).slice(-4)) !== ANIO ? "Dictamen de otro año: no cambia el enlace" : "—"}</span> : ""}
+                    : r.hgNuevo ? <span style={{ color: "var(--texto-suave)" }}>{(r.cs || []).some((c) => c.ligaPasivo) ? "Dictamen de pasivo: no cambia el enlace" : (r.cs || []).length > 1 ? "Dictamen en varios contratos: no se iguala" : Number(String(r.dictamen).slice(-4)) !== ANIO ? "Dictamen de otro año: no cambia el enlace" : "—"}</span> : ""}
                 </td>
               </tr>
             ))}</tbody>
@@ -208,7 +212,7 @@ export default function DictamenesPage() {
                   <Fragment key={k}>
                     <tr onClick={() => !x.sinCarga && setAbierto(sel ? null : k)} style={{ cursor: x.sinCarga ? "default" : "pointer", background: sel ? "#fff7d6" : undefined }}>
                       <td style={{ ...td, fontWeight: 600, whiteSpace: "nowrap" }}>{k}{x.d.origen ? <span style={{ fontWeight: 400, color: "var(--texto-suave)" }}> {x.d.origen}</span> : ""}</td>
-                      <td style={td}>{x.cs.map((c) => c.numero_interno).join(", ") || <span style={{ color: "var(--texto-suave)" }}>sin contrato</span>}</td>
+                      <td style={td}>{x.cs.map((c) => c.numero_interno + (c.ligaPasivo ? " (pasivo)" : "")).join(", ") || <span style={{ color: "var(--texto-suave)" }}>sin contrato</span>}</td>
                       <td style={{ ...td, maxWidth: 320 }}>{x.cs[0]?.proveedores?.razon_social || ""}<div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{x.cs[0]?.concepto || ""}</div></td>
                       {x.sinCarga ? <td colSpan={6} style={{ ...td, color: "#b7791f" }}>Sin IMKK036: córrelo en FINAT (control SALDO_DICT) y súbelo aquí</td> : <>
                         <td style={{ ...td, whiteSpace: "nowrap", color: dias > 7 ? "#b7791f" : undefined }} title={dias > 7 ? `Hace ${dias} días: conviene actualizarlo` : ""}>{fechaTxt(x.d.corte)}</td>

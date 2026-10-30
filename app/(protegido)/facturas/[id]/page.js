@@ -408,7 +408,7 @@ export default function FacturaEstatusPage() {
         </div>
       )}
 
-      {semDic && <SemaforoDictamen s={semDic.sem.get(factura.id)} disponible={semDic.conDictamen ? semDic.disponible : null} resumen={semDic.resumen} />}
+      {semDic && (() => { const s = semDic.sem.get(factura.id); return <SemaforoDictamen s={s} disponible={semDic.disponibleDe(s?.dictamen)} resumen={semDic.resumenDe(s?.dictamen)} />; })()}
 
       {/* Resumen */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>

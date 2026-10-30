@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
 import { calcularContrato, calcularDictamen, sumar, ANIO } from "../../../lib/contratos";
+import { dictamenDe } from "../../../lib/avisos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -49,10 +50,12 @@ export default function ContratosPage() {
       for (const r of rM.data || []) presupuesto[r.cuenta_finat] = (presupuesto[r.cuenta_finat] || 0) + (Number(r.presupuesto) || 0);
     }
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
-    const [rDi, rDs] = await Promise.all([
+    const [rDi, rDs, rLi] = await Promise.all([
       supabase.from("dictamenes").select("numero, origen, corte"),
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
+      leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
     ]);
+    const links = {}; for (const l of rLi.error ? [] : rLi.data || []) (links[l.contrato_id] ||= []).push(l);
     const dictamenes = {}; for (const d of rDi.error ? [] : rDi.data || []) dictamenes[d.numero] = d;
     const saldosDic = {}; for (const s of rDs.error ? [] : rDs.data || []) (saldosDic[s.dictamen] ||= []).push(s);
     // Estado presupuestal de los CR de facturas sin pagar (N_AP 1043 guardado en comprobantes_ooad): V validado · E error · N sin validar
@@ -65,7 +68,7 @@ export default function ContratosPage() {
     }
     const ppto = {}; // E si alguna línea cayó en error · V si todas están validadas · N lo demás
     for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto });
+    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links });
   };
   useEffect(() => { cargar(); }, []);
 
@@ -83,7 +86,10 @@ export default function ContratosPage() {
       .filter((c) => capitulo === "*" || c.partidas?.capitulos?.nombre === capitulo)
       .map((c) => {
         const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [] });
-        const dic = calcularDictamen(c, datos.saldosDic[c.dictamen_numero] || [], fPor[c.id] || [], x, datos.dictamenes[c.dictamen_numero], datos.ppto);
+        // Dictamen vigente: el de pasivo 2026 si el contrato es de un año anterior y lo tiene ligado; si no, el principal
+        const dv = dictamenDe(c, { estatus_general: "pendiente" }, datos.links);
+        const fDic = (fPor[c.id] || []).filter((f) => dictamenDe(c, f, datos.links) === dv);
+        const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
         if (dic) x.avisos = [...x.avisos, ...dic.avisos];
         return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
       })
@@ -178,7 +184,7 @@ export default function ContratosPage() {
               </div>
               {dic && (
                 <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
-                  <div style={{ marginBottom: 4 }}><strong>Dictamen {dic.numero}</strong>{dic.origen ? ` (${dic.origen})` : ""} · FINAT IMKK036 al {fechaTxt(dic.corte)}</div>
+                  <div style={{ marginBottom: 4 }}><strong>{dic.esPasivo ? "Dictamen de pasivo" : "Dictamen"} {dic.numero}</strong>{dic.origen ? ` (${dic.origen})` : ""} · FINAT IMKK036 al {fechaTxt(dic.corte)}</div>
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                     <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
                     <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
