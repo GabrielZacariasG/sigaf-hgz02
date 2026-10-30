@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { leerTodo } from '../lib/paginar';
+import { cargarAvisos } from '../lib/avisos';
 
 const diasEntre = (desde) =>
   Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 86400000));
@@ -24,6 +25,7 @@ export default function Portal() {
   const [cargando, setCargando] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [c, setC] = useState({});
+  const [avisos, setAvisos] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -103,6 +105,8 @@ export default function Portal() {
 
       setC({ facturas, contratos, cuentas, activas: seg.activas, estancadas: seg.estancadas });
       setCargando(false);
+      // Bandeja de avisos: se arma después para no detener el panel
+      cargarAvisos().then((a) => setAvisos(a.cuentas)).catch(() => setAvisos(false));
     })();
   }, [router]);
 
@@ -237,6 +241,30 @@ export default function Portal() {
           >
             ＋ Capturar nueva factura
           </Link>
+        )}
+
+        {!esAuo && avisos !== false && (
+          <div style={{ margin: '0 0 22px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+              <h2 style={{ fontSize: 17, margin: 0 }}>Bandeja de avisos</h2>
+              <Link href="/avisos" style={{ fontSize: 13, color: 'var(--verde)' }}>ver todo →</Link>
+            </div>
+            {!avisos ? <p style={{ fontSize: 13, color: 'var(--texto-suave)', margin: 0 }}>Revisando facturas, pedido-recepción y dictámenes…</p> : (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[
+                  { n: avisos.ampliacion + avisos.oficio, t: `contrato(s) donde el dictamen no alcanza${avisos.oficio ? ` · ${avisos.oficio} con oficio de apoyo` : ''}`, color: 'var(--rojo)', ancla: 'dictamen' },
+                  { n: avisos.enError, t: 'CR con error de presupuesto en FINAT', color: 'var(--rojo)', ancla: 'error' },
+                  { n: avisos.conPR, t: `con pedido-recepción listo, sin mandar a OOAD${avisos.prNuevos ? ` · ${avisos.prNuevos} nuevo(s)` : ''}`, color: '#2b6cb0', ancla: 'pr' },
+                  { n: avisos.listasOOAD, t: `lista(s) para mandar a OOAD${avisos.listasSinDinero ? ` · ${avisos.listasSinDinero} sin dinero en dictamen` : ''}`, color: 'var(--verde)', ancla: 'ooad' },
+                ].map((x) => (
+                  <Link key={x.ancla} href={`/avisos#${x.ancla}`} style={{ flex: '1 1 210px', textDecoration: 'none', color: 'inherit', background: 'var(--blanco)', border: '1px solid var(--borde)', borderLeft: `5px solid ${x.color}`, borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: x.n ? x.color : 'var(--texto-suave)' }}>{x.n}</div>
+                    <div style={{ fontSize: 13 }}>{x.t}</div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         <div className="rejilla">
