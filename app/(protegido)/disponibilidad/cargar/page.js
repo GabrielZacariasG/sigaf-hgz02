@@ -3,10 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../../lib/supabaseClient";
-import { leerDispoIMKK022, guardarCorteDispo, totalesDispo, UI_HGZ2 } from "../../../../lib/dispo";
+import { leerDispoIMKK022, guardarLoteDispo, totalesDispo, UI_HGZ2 } from "../../../../lib/dispo";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
-const PERIODO = "2026";
 const fechaTxt = (f) => (f ? new Date(f + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 // Carga del reporte FINAT "Disponibilidad Presupuestal" (IMKK022): uno o varios archivos a la vez.
@@ -44,29 +43,10 @@ export default function CargarDispoPage() {
     if (!session) { setError("Sesión no iniciada."); setGuardando(false); return; }
     let hechos = 0, ultimo = null;
     try {
-      for (const l of validas) { // de la más antigua a la más reciente
-        setAvance(`Guardando ${fechaTxt(l.fecha)} (${hechos + 1} de ${validas.length})…`);
-        const r = await guardarCorteDispo(supabase, l, l.archivo);
-        // Foto diaria por cuenta (la usa el Cierre para comparar día contra día)
-        const { error: eDia } = await supabase.from("disponibilidad_diaria").upsert(
-          l.cuentas.map((c) => ({ fecha: l.fecha, cuenta_finat: c.cuenta, presupuesto: c.presupuesto, gasto: c.gasto, comprometido: c.comprometido, precomprometido: c.precomprometido, disponible: c.disponible })),
-          { onConflict: "fecha,cuenta_finat" });
-        if (eDia) throw new Error(`${l.archivo}: ${eDia.message}`);
-        if (r.esUltimo) ultimo = l;
-        hechos++;
-      }
-      if (ultimo) {
-        const payload = ultimo.cuentas.map((f) => ({
-          cuenta_prei: f.cuenta, periodo: PERIODO,
-          presupuesto: f.presupuesto, gasto: f.gasto, comprometido: f.comprometido,
-          precomprometido: f.precomprometido, disponible: f.disponible, actualizado_at: new Date().toISOString(),
-        }));
-        const { error: e } = await supabase.from("disponibilidad_presupuestal").upsert(payload, { onConflict: "cuenta_prei,periodo" });
-        if (e) throw new Error("Disponibilidad por cuenta: " + e.message);
-      }
+      ({ hechos, ultimo } = await guardarLoteDispo(supabase, validas, setAvance));
       setOk(`✅ ${hechos} corte(s) guardados${ultimo ? ` · el más reciente (${fechaTxt(ultimo.fecha)}) ya es la disponibilidad vigente` : " (eran fechas anteriores: solo se guardó su historia)"}.`);
     } catch (err) {
-      setError(`Se guardaron ${hechos} de ${validas.length} cortes. Error: ${err.message}`);
+      setError(`No se pudieron guardar todos los cortes. Error: ${err.message}`);
     }
     setAvance(""); setGuardando(false);
   };
@@ -86,6 +66,9 @@ export default function CargarDispoPage() {
         Sube el reporte de disponibilidad del día (o <strong>varios a la vez</strong>, por ejemplo los guardados en
         CONTROLES\05. CARGA DISP). Se toma solo la unidad {UI_HGZ2} (HGZ 2) y la fecha de cada archivo.
         Se guarda la historia por cuenta y mes; el más reciente queda como disponibilidad vigente, con su detalle por centro de costo.
+      </p>
+      <p style={{ fontSize: 13, maxWidth: 760, background: "var(--verde-claro)", padding: "8px 12px", borderRadius: 8 }}>
+        Tip: ahora puedes subir la dispo junto con el 1043, 4002, 4007, 1013 y los PDF de dictámenes en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Cargar reportes</Link>.
       </p>
 
       <div style={{ ...card, marginTop: 12 }}>

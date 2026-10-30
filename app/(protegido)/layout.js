@@ -130,7 +130,7 @@ export default function ProtegidoLayout({ children }) {
               <Link href="/cedula" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Cédula</Link>
               <Link href="/contratos" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Contratos</Link>
               <Link href="/dictamenes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Dictámenes</Link>
-              <Link href="/comprobantes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Comprobantes</Link>
+              <Link href="/comprobantes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Cargar reportes</Link>
             </>
           )}
         </div>

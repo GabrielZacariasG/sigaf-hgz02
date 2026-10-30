@@ -9,14 +9,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
-import { leerTodo } from "../../../lib/paginar";
-import { textoPDF, leerIMKK036, resumenUI } from "../../../lib/imkk036";
+import { resumenUI } from "../../../lib/imkk036";
+import { cargarDatosDictamenes, contratosDelDictamen, enlaceDe as enlaceDeContrato, revisarDictamenes, guardarDictamenes, aGuardar } from "../../../lib/dictamenesCarga";
+import RevisionDictamenes from "../../../lib/RevisionDictamenes";
 import { ANIO, UI_HGZ2 } from "../../../lib/contratos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const diasDesde = (f) => (f ? Math.floor((Date.now() - new Date(String(f).slice(0, 10) + "T00:00:00")) / 86400000) : null);
-const NOTA_AJUSTE = "Ajuste para igualar al dictamen FINAT";
 
 export default function DictamenesPage() {
   const [datos, setDatos] = useState(null);
@@ -30,24 +30,12 @@ export default function DictamenesPage() {
   const [abierto, setAbierto] = useState(null);
 
   const cargar = async () => {
-    const [rD, rS, rC, rA, rL] = await Promise.all([
-      supabase.from("dictamenes").select("*").order("numero"),
-      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
-      leerTodo((d, h) => supabase.from("contratos").select("id, numero_interno, numero_alterno, concepto, dictamen_numero, monto_maximo, proveedores ( razon_social )").order("numero_interno").range(d, h)),
-      leerTodo((d, h) => supabase.from("contrato_ampliaciones").select("id, contrato_id, importe, nota").order("id").range(d, h)),
-      leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
-    ]);
-    const err = [rD, rS, rC, rA].find((r) => r.error);
-    if (err) { setError("No se pudo cargar: " + err.error.message + " (¿ya se corrió la migración 049?)"); return; }
-    const saldos = {}; for (const s of rS.data || []) (saldos[s.dictamen] ||= []).push(s);
-    setDatos({ dictamenes: rD.data || [], saldos, contratos: rC.data || [], amp: rA.data || [], ligas: rL.error ? [] : rL.data || [] });
+    try { setDatos(await cargarDatosDictamenes()); } catch (e) { setError("No se pudo cargar: " + e.message); }
   };
   useEffect(() => { cargar(); }, []);
 
-  // Contratos del dictamen: el principal (contratos.dictamen_numero) y los ligados en contrato_dictamenes (p. ej. pasivo)
-  const contratosDe = (num) => (datos?.contratos || []).filter((c) => c.dictamen_numero === num || datos.ligas.some((l) => l.contrato_id === c.id && l.dictamen === num))
-    .map((c) => (c.dictamen_numero === num ? c : { ...c, ligaPasivo: true }));
-  const enlaceDe = (c) => (Number(c.monto_maximo) || 0) + datos.amp.filter((a) => a.contrato_id === c.id).reduce((s, a) => s + (Number(a.importe) || 0), 0);
+  const contratosDe = (num) => contratosDelDictamen(datos, num);
+  const enlaceDe = (c) => enlaceDeContrato(datos, c);
 
   // Lista de dictámenes cargados + los que tienen contrato pero aún no tienen IMKK036
   const filas = useMemo(() => {
@@ -68,35 +56,7 @@ export default function DictamenesPage() {
   // ---------- Revisar PDF ----------
   const revisar = async () => {
     setProcesando(true); setError(""); setOk(""); setRevision(null);
-    try {
-      const leidos = [];
-      for (const f of archivos) {
-        try { leidos.push({ archivo: f.name, ...leerIMKK036(await textoPDF(await f.arrayBuffer())) }); }
-        catch (e) { leidos.push({ archivo: f.name, ok: false, problema: "No se pudo leer el PDF: " + e.message }); }
-      }
-      // Por dictamen, el más reciente
-      const mejor = {};
-      for (const r of leidos.filter((x) => x.ok)) if (!mejor[r.dictamen] || mejor[r.dictamen].ejec < r.ejec) mejor[r.dictamen] = r;
-      const items = leidos.map((r) => {
-        if (!r.ok) return { ...r, accion: "error" };
-        if (mejor[r.dictamen] !== r) return { ...r, accion: "repetido" };
-        const actual = datos.dictamenes.find((d) => d.numero === r.dictamen);
-        if (actual?.corte && r.corte < actual.corte) return { ...r, accion: "viejo", actual, cs: contratosDe(r.dictamen) };
-        const hgNuevo = resumenUI(r.filas, UI_HGZ2);
-        const hgAntes = actual ? resumenUI(datos.saldos[r.dictamen] || [], UI_HGZ2) : null;
-        const cs = contratosDe(r.dictamen);
-        let igualar = null;
-        // Solo se iguala el enlace con el dictamen PRINCIPAL del contrato (el de pasivo no cambia el enlace)
-        if (cs.length === 1 && !cs[0].ligaPasivo && Number(r.dictamen.slice(-4)) === ANIO) {
-          const c = cs[0];
-          const ampSin = datos.amp.filter((a) => a.contrato_id === c.id && !String(a.nota || "").startsWith(NOTA_AJUSTE)).reduce((s, a) => s + (Number(a.importe) || 0), 0);
-          const maximo = Number(c.monto_maximo) || 0;
-          igualar = { contrato: c, maximo, ampSin, enlaceAntes: enlaceDe(c), enlaceNuevo: hgNuevo.asignado, ajuste: maximo ? Math.round((hgNuevo.asignado - maximo - ampSin) * 100) / 100 : 0, nuevoMaximo: maximo ? null : Math.round((hgNuevo.asignado - ampSin) * 100) / 100 };
-        }
-        return { ...r, accion: actual ? "actualiza" : "nuevo", actual, hgNuevo, hgAntes, cs, igualar };
-      });
-      setRevision(items);
-    } catch (e) { setError("No se pudo revisar: " + e.message); }
+    try { setRevision(await revisarDictamenes(archivos, datos)); } catch (e) { setError("No se pudo revisar: " + e.message); }
     setProcesando(false);
   };
 
@@ -106,39 +66,8 @@ export default function DictamenesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sesión no iniciada.");
-      const aGuardar = revision.filter((r) => r.accion === "nuevo" || r.accion === "actualiza");
-      let renglones = 0, igualados = 0;
-      for (const r of aGuardar) {
-        const { error: e1 } = await supabase.from("dictamenes").upsert({
-          numero: r.dictamen, origen: r.origen, fecha_dictamen: r.fecha_dictamen, corte: r.corte, archivo: r.archivo,
-          total_definitivo: r.totales.definitivo, total_pagos: r.totales.pagos, total_disponible: r.totales.disponible, actualizado_at: new Date().toISOString(),
-        });
-        if (e1) throw new Error(`${r.dictamen}: ${e1.message}`);
-        const { error: e2 } = await supabase.from("dictamen_saldos").delete().eq("dictamen", r.dictamen);
-        if (e2) throw new Error(`${r.dictamen}: ${e2.message}`);
-        const { error: e3 } = await supabase.from("dictamen_saldos").insert(r.filas.map((f) => ({ dictamen: r.dictamen, ...f })));
-        if (e3) throw new Error(`${r.dictamen}: ${e3.message}`);
-        renglones += r.filas.length;
-        // Igualar el enlace del contrato a FINAT
-        const g = r.igualar;
-        if (g) {
-          const { error: e4 } = await supabase.from("contrato_ampliaciones").delete().eq("contrato_id", g.contrato.id).like("nota", `${NOTA_AJUSTE}%`);
-          if (e4) throw new Error(`${g.contrato.numero_interno}: ${e4.message}`);
-          if (g.nuevoMaximo != null) {
-            const { error: e5 } = await supabase.from("contratos").update({ monto_maximo: g.nuevoMaximo }).eq("id", g.contrato.id);
-            if (e5) throw new Error(`${g.contrato.numero_interno}: ${e5.message}`);
-          } else if (Math.abs(g.ajuste) > 0.5) {
-            const { error: e6 } = await supabase.from("contrato_ampliaciones").insert({ contrato_id: g.contrato.id, fecha: r.corte, importe: g.ajuste, nota: `${NOTA_AJUSTE} ${r.dictamen} (IMKK036 al ${fechaTxt(r.corte)})` });
-            if (e6) throw new Error(`${g.contrato.numero_interno}: ${e6.message}`);
-          }
-          igualados++;
-        }
-      }
-      await supabase.from("cargas_nap").insert({
-        archivo: revision.map((r) => r.archivo).join(" | "), renglones, comprobantes: aGuardar.length, aplicadas: igualados, confirmadas: 0,
-        detalle: { reporte: "IMKK036", dictamenes: aGuardar.map((r) => ({ dictamen: r.dictamen, corte: r.corte, archivo: r.archivo, disponible_hgz2: r.hgNuevo.disponible, ajuste_enlace: r.igualar?.ajuste ?? null })) },
-      });
-      setOk(`Listo: ${aGuardar.length} dictámenes actualizados (${renglones} renglones) · ${igualados} contratos con el enlace igual a FINAT.`);
+      const r = await guardarDictamenes(revision);
+      setOk(`Listo: ${r.n} dictámenes actualizados (${r.renglones} renglones) · ${r.igualados} contratos con el enlace igual a FINAT.`);
       setRevision(null); setArchivos([]); await cargar();
     } catch (e) { setError("No se pudo guardar: " + e.message); }
     setGuardando(false);
@@ -148,8 +77,7 @@ export default function DictamenesPage() {
   const th = { textAlign: "left", fontSize: 12, padding: "6px 8px", borderBottom: "1px solid var(--borde)", color: "var(--texto-suave)", whiteSpace: "nowrap", position: "sticky", top: 0, background: "var(--blanco)" };
   const td = { fontSize: 13, padding: "6px 8px", borderBottom: "1px solid var(--borde)", verticalAlign: "top" };
   const tdN = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
-  const ACCION = { nuevo: ["Nuevo", "var(--verde)"], actualiza: ["Se actualiza", "var(--verde)"], viejo: ["Más viejo que el cargado: se ignora", "#d69e2e"], repetido: ["Repetido: se usa el más reciente", "var(--texto-suave)"], error: ["No se puede cargar", "var(--rojo)"] };
-  const nGuardar = revision ? revision.filter((r) => r.accion === "nuevo" || r.accion === "actualiza").length : 0;
+  const nGuardar = aGuardar(revision).length;
 
   return (
     <div>
@@ -158,7 +86,8 @@ export default function DictamenesPage() {
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950 }}>
         Lo que FINAT asigna al HGZ 2 en cada dictamen, lo pagado y lo disponible, y lo que tienen otras unidades del mismo dictamen (para oficio de apoyo).
         Para actualizar, sube los PDF del <strong>IMKK036 "Rep. Disponibilidad Dictamen"</strong> (varios a la vez). SIGAF los lee, revisa que cada uno cuadre con su renglón TOTALES
-        y, al guardar, deja el enlace del contrato igual a lo que asigna FINAT. <strong>No guarda nada hasta que revises.</strong>
+        y, al guardar, deja el enlace del contrato igual a lo que asigna FINAT. <strong>No guarda nada hasta que revises.</strong>{" "}
+        También puedes subirlos junto con los demás reportes en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Cargar reportes</Link>.
       </p>
 
       <div style={{ ...card, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
@@ -174,24 +103,7 @@ export default function DictamenesPage() {
             <strong>Revisión de {revision.length} PDF</strong>
             <button className="boton" onClick={guardar} disabled={!nGuardar || guardando}>{guardando ? "Guardando…" : `Guardar ${nGuardar} dictamen(es)`}</button>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Archivo", "Dictamen", "Contrato", "Qué pasa", "Corte", "Disponible HGZ 2", "Enlace del contrato"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{revision.map((r, i) => (
-              <tr key={i}>
-                <td style={{ ...td, fontSize: 12 }}>{r.archivo}</td>
-                <td style={td}>{r.dictamen || "—"}{r.origen ? ` (${r.origen})` : ""}</td>
-                <td style={td}>{(r.cs || []).map((c) => c.numero_interno).join(", ") || (r.ok ? <span style={{ color: "var(--texto-suave)" }}>sin contrato en SIGAF</span> : "")}</td>
-                <td style={{ ...td, color: ACCION[r.accion][1], fontWeight: 600 }}>{ACCION[r.accion][0]}{r.problema ? <div style={{ fontWeight: 400, fontSize: 12 }}>{r.problema}</div> : null}</td>
-                <td style={td}>{r.actual?.corte && r.accion !== "nuevo" ? `${fechaTxt(r.actual.corte)} → ` : ""}{fechaTxt(r.corte)}</td>
-                <td style={tdN}>{r.hgNuevo ? <>{r.hgAntes ? `${money(r.hgAntes.disponible)} → ` : ""}<strong>{money(r.hgNuevo.disponible)}</strong></> : ""}</td>
-                <td style={{ ...td, fontSize: 12 }}>
-                  {r.igualar ? (r.igualar.nuevoMaximo != null ? `Sin máximo: se toma ${money(r.igualar.nuevoMaximo)} del dictamen`
-                    : Math.abs(r.igualar.enlaceAntes - r.igualar.enlaceNuevo) > 0.5 ? `${money(r.igualar.enlaceAntes)} → ${money(r.igualar.enlaceNuevo)} (ajuste ${money(r.igualar.ajuste)})` : "Ya es igual a FINAT")
-                    : r.hgNuevo ? <span style={{ color: "var(--texto-suave)" }}>{(r.cs || []).some((c) => c.ligaPasivo) ? "Dictamen de pasivo: no cambia el enlace" : (r.cs || []).length > 1 ? "Dictamen en varios contratos: no se iguala" : Number(String(r.dictamen).slice(-4)) !== ANIO ? "Dictamen de otro año: no cambia el enlace" : "—"}</span> : ""}
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
+          <RevisionDictamenes items={revision} />
         </div>
       )}
 

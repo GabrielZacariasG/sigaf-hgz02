@@ -16,11 +16,14 @@ import { leerTodo } from "../../../lib/paginar";
 import { leerNAP1043, agruparComprobantes, cruzar } from "../../../lib/nap";
 import { tipoReporte, leerPagos, cruzarPagos, leer1013, cruzar1013, avisosDe } from "../../../lib/reportes";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO } from "../../../lib/estatus";
+import { leerDispoIMKK022, guardarLoteDispo, totalesDispo } from "../../../lib/dispo";
+import { cargarDatosDictamenes, revisarDictamenes, guardarDictamenes, aGuardar } from "../../../lib/dictamenesCarga";
+import RevisionDictamenes from "../../../lib/RevisionDictamenes";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const GEN = (s) => LABEL_GENERAL?.[s] || s;
-const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)" };
+const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)", dispo: "Disponibilidad (IMKK022)", imkk036: "Dictamen (IMKK036)" };
 const estadoC = (c) => (c.eliminado ? "Eliminado" : c.pagado ? `Pagado (${fechaTxt(c.fecha_prog_pago)})` : c.estado_pago === "X" ? "Pago cancelado" : "Sin pagar");
 
 // 1043 → forma común de los renglones
@@ -50,14 +53,23 @@ export default function ComprobantesPage() {
     setProcesando(true); setError(""); setOk(""); setRes(null); setMarcadas({});
     try {
       // 1) Leer y reconocer cada archivo
-      const leidos = [];
+      // PDF → dictamen IMKK036 · Excel → N_AP (1043/4002/4007/1013) o disponibilidad IMKK022
+      const leidos = [], pdfs = [], dispo = [];
       for (const file of archivos) {
+        if (/\.pdf$/i.test(file.name)) { pdfs.push(file); leidos.push({ nombre: file.name, tipo: "imkk036" }); continue; }
         const wb = XLSX.read(await file.arrayBuffer(), { type: "array", raw: true });
         const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
         const tipo = tipoReporte(grid);
-        if (!tipo) { leidos.push({ nombre: file.name, error: "No lo reconocí (¿es 1043, 4002, 4007 o 1013?)." }); continue; }
-        leidos.push({ nombre: file.name, tipo, grid });
+        if (tipo) { leidos.push({ nombre: file.name, tipo, grid }); continue; }
+        const d = await leerDispoIMKK022(file).catch((e) => ({ error: e.message }));
+        if (!d.error && d.fecha && d.cuentas?.length) { dispo.push({ archivo: file.name, ...d }); leidos.push({ nombre: file.name, tipo: "dispo" }); continue; }
+        leidos.push({ nombre: file.name, error: "No lo reconocí (¿es 1043, 4002, 4007, 1013, disponibilidad IMKK022 o PDF IMKK036?)." });
       }
+      // Disponibilidad: un corte por fecha (si hay dos del mismo día, el último elegido)
+      const porFecha = new Map(); for (const d of dispo) porFecha.set(d.fecha, d);
+      const dispoCortes = [...porFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+      // Dictámenes
+      const dict = pdfs.length ? await revisarDictamenes(pdfs, await cargarDatosDictamenes()) : [];
       // 2) Datos de SIGAF
       const [rF, rH, rU, rB] = await Promise.all([
         leerTodo((d, h) => supabase.from("facturas")
@@ -76,7 +88,9 @@ export default function ComprobantesPage() {
       const aplicar = (items) => { for (const it of items) for (const f of it.facturas) Object.assign(sim.get(f.id) || {}, it.cambiosPorFactura[f.id] || {}); };
       const simLista = () => [...sim.values()];
 
-      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {} };
+      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {}, dispo: dispoCortes, dict };
+      for (const d of dispoCortes) out.resumen[d.archivo] = `corte del ${fechaTxt(d.fecha)} · ${d.cuentas.length} cuentas del HGZ 2`;
+      for (const r of dict) out.resumen[r.archivo] = r.ok ? `dictamen ${r.dictamen} · corte ${fechaTxt(r.corte)}` : r.problema;
 
       // 3) 1043 primero (pone los CR)
       for (const l of leidos.filter((x) => x.tipo === "1043")) {
@@ -127,6 +141,16 @@ export default function ComprobantesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sesión no iniciada.");
+      const partes = [];
+      // 0) Disponibilidad IMKK022 y dictámenes IMKK036
+      if (res.dispo?.length) {
+        const r = await guardarLoteDispo(supabase, res.dispo, (t) => setOk(t));
+        partes.push(`${r.hechos} corte(s) de disponibilidad${r.ultimo ? ` (vigente: ${fechaTxt(r.ultimo.fecha)})` : ""}`);
+      }
+      if (aGuardar(res.dict).length) {
+        const r = await guardarDictamenes(res.dict);
+        partes.push(`${r.n} dictamen(es) · ${r.igualados} enlace(s) igualados a FINAT`);
+      }
       // 1) Comprobantes del 1043 (se reemplazan completos)
       let nFilas = 0;
       for (const l of res.lec1043) {
@@ -160,15 +184,15 @@ export default function ComprobantesPage() {
         if (e) throw new Error(`${o.folio_ingreso}: ${e.message}`);
         if (data?.length) hechas++; else saltadas++;
       }
-      // 4) Bitácora
-      await supabase.from("cargas_nap").insert({
+      // 4) Bitácora (solo si hubo reportes N_AP)
+      if (res.lec1043.length || detalle.length) await supabase.from("cargas_nap").insert({
         archivo: res.archivos.map((a) => a.nombre).join(" | "),
         desde: res.lec1043[0]?.desde || null, hasta: res.lec1043[0]?.hasta || null,
         renglones: nFilas, comprobantes: res.lec1043.reduce((s, l) => s + new Set(l.filas.map((f) => f.cbte)).size, 0),
         aplicadas: detalle.filter((d) => d.tipo === "auto").length, confirmadas: detalle.filter((d) => d.tipo === "confirmada").length,
         detalle: { reportes: res.archivos, cambios: detalle, alertas: res.alertas.map((a) => ({ tipo: a.tipo, ref: a.ref, factura: a.f?.folio_ingreso })), faltan: res.faltan.map((x) => x.c.cbte) },
       });
-      setOk(`Listo: ${hechas} facturas actualizadas${nFilas ? ` · ${nFilas} renglones de comprobantes guardados` : ""}${saltadas ? ` · ${saltadas} no se tocaron porque alguien las cambió mientras tanto` : ""}.`);
+      setOk(`Listo: ${[...partes, `${hechas} facturas actualizadas`].join(" · ")}${nFilas ? ` · ${nFilas} renglones de comprobantes guardados` : ""}${saltadas ? ` · ${saltadas} no se tocaron porque alguien las cambió mientras tanto` : ""}.`);
       setRes(null); setArchivos([]);
     } catch (e) { setError("No se pudo guardar: " + e.message); }
     setGuardando(false);
@@ -226,15 +250,16 @@ export default function ComprobantesPage() {
   return (
     <div>
       <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/" style={{ color: "var(--verde)" }}>← Panel</Link></div>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Reportes del sistema → SIGAF al día</h1>
-      <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 900 }}>
-        Sube juntos los reportes que hayas bajado: <strong>1043</strong> (comprobantes), <strong>4002</strong> y <strong>4007</strong> (pagos)
-        y <strong>1013</strong> (recepciones sin comprobante); puedes subir varias partes del mismo. SIGAF los reconoce solo, pone CR,
-        fechas reales de pago y pedido-recepción, y te arma la bandeja de avisos. Solo cuenta lo del HGZ 2. <strong>No guarda nada hasta que revises.</strong>
+      <h1 style={{ fontSize: 22, margin: 0 }}>Cargar reportes del sistema → SIGAF al día</h1>
+      <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950 }}>
+        Aquí se sube <strong>todo</strong>, junto y de una vez: <strong>1043</strong> (comprobantes), <strong>4002</strong> y <strong>4007</strong> (pagos),
+        <strong> 1013</strong> (recepciones sin comprobante), la <strong>disponibilidad IMKK022</strong> (xlsx) y los <strong>PDF del IMKK036</strong> (dictámenes).
+        SIGAF reconoce cada archivo solo, pone CR, fechas reales de pago y pedido-recepción, actualiza la dispo y los saldos de dictamen,
+        y te arma la bandeja de avisos. Solo cuenta lo del HGZ 2. <strong>No guarda nada hasta que revises.</strong>
       </p>
 
       <div style={{ ...card, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
-        <input type="file" accept=".xls,.xlsx" multiple onChange={(e) => { setArchivos([...(e.target.files || [])]); setRes(null); setOk(""); setError(""); }} />
+        <input type="file" accept=".xls,.xlsx,.csv,.pdf" multiple onChange={(e) => { setArchivos([...(e.target.files || [])]); setRes(null); setOk(""); setError(""); }} />
         <button className="boton" onClick={procesar} disabled={!archivos.length || procesando || guardando}>{procesando ? "Leyendo y cruzando…" : `Revisar ${archivos.length || ""} reporte(s)`}</button>
       </div>
 
@@ -252,6 +277,31 @@ export default function ComprobantesPage() {
             <div style={{ color: "var(--texto-suave)", marginTop: 4 }}>{res.nFacturas} facturas en SIGAF.</div>
           </div>
 
+          {res.dispo?.length > 0 && (
+            <div style={{ ...card, marginTop: 12, overflowX: "auto" }}>
+              <strong>Disponibilidad (IMKK022): {res.dispo.length} corte(s)</strong>
+              <span style={{ fontSize: 12.5, color: "var(--texto-suave)" }}> · se guarda la historia; el más reciente queda como dispo vigente</span>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+                <thead><tr>{["Fecha", "Archivo", "Cuentas", "Presupuesto", "Gasto", "Comprometido", "Precomprom.", "Disponible"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <tbody>{res.dispo.map((l) => { const t = totalesDispo(l.cuentas); return (
+                  <tr key={l.fecha}>
+                    <td style={td}>{fechaTxt(l.fecha)}</td><td style={{ ...td, fontSize: 12, color: "var(--texto-suave)" }}>{l.archivo}</td>
+                    <td style={{ ...td, textAlign: "right" }}>{l.cuentas.length}</td>
+                    {[t.presupuesto, t.gasto, t.comprometido, t.precomprometido].map((v, i) => <td key={i} style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(v)}</td>)}
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", fontWeight: 700 }}>{money(t.disponible)}</td>
+                  </tr>); })}</tbody>
+              </table>
+            </div>
+          )}
+
+          {res.dict?.length > 0 && (
+            <div style={{ ...card, marginTop: 12, overflowX: "auto" }}>
+              <strong>Dictámenes (IMKK036): {aGuardar(res.dict).length} de {res.dict.length} PDF se guardarán</strong>
+              <span style={{ fontSize: 12.5, color: "var(--texto-suave)" }}> · el enlace del contrato queda igual a lo que asigna FINAT</span>
+              <div style={{ marginTop: 6 }}><RevisionDictamenes items={res.dict} /></div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
             <Tab id="bandeja" t="Bandeja" n={(b?.listasOOAD.length || 0) + res.alertas.length} />
             <Tab id="auto" t="Cambios automáticos" n={res.automaticas.length} />
@@ -260,7 +310,7 @@ export default function ComprobantesPage() {
             <Tab id="faltan" t="Faltan en SIGAF" n={res.faltan.length + res.sinFactura1013.length} />
             <Tab id="estancadas" t="Estancadas" n={b?.estancadas.length || 0} />
             <input placeholder="Buscar proveedor, folio, CR…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
-            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar (${nMarc} palomeadas)`}</button>
+            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar todo (${[res.dispo?.length ? `${res.dispo.length} dispo` : "", aGuardar(res.dict).length ? `${aGuardar(res.dict).length} dictamen(es)` : "", `${nMarc} palomeadas`].filter(Boolean).join(" · ")})`}</button>
           </div>
 
           <div style={{ marginTop: 10 }}>
