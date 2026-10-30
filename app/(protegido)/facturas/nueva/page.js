@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 import { insertarFacturaConFolio } from "../../../../lib/folios";
+import { cargarContrato, semaforoDe, ID_NUEVA } from "../../../../lib/avisos";
+import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
 
 const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
@@ -167,6 +169,22 @@ export default function NuevaFacturaPage() {
   const capituloSel = contratoSel?.partidas?.capitulos || null;
   const cuentaSel = contratoSel?.partidas?.cuenta_finat || contratoSel?.partidas?.cuenta_prei || "";
   const importeNum = parseFloat(importe) || 0;
+
+  // Semáforo de dictamen: ¿hay dinero para esta factura? (se lee una vez por contrato y se recalcula con el importe)
+  const [datosCto, setDatosCto] = useState(null);
+  const [cargandoCto, setCargandoCto] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    setDatosCto(null);
+    if (!contratoId) return;
+    setCargandoCto(true);
+    cargarContrato(contratoId).then((d) => { if (vivo) setDatosCto(d); }).catch(() => {}).finally(() => { if (vivo) setCargandoCto(false); });
+    return () => { vivo = false; };
+  }, [contratoId]);
+  const semNueva = useMemo(() => (datosCto && importeNum > 0 ? semaforoDe(datosCto, { importe: importeNum, fecha: fechaFactura }) : null), [datosCto, importeNum, fechaFactura]);
+  const cajaSemaforo = semNueva
+    ? <SemaforoDictamen titulo="¿Hay dinero en el dictamen para esta factura?" s={semNueva.sem.get(ID_NUEVA)} disponible={semNueva.conDictamen ? semNueva.disponible : null} resumen={semNueva.resumen} />
+    : contratoId && importeNum > 0 && cargandoCto ? <SemaforoDictamen cargando /> : null;
 
   // Validación principal: SUBTOTAL + IVA debe = TOTAL capturado (importe).
   const calc = useMemo(() => {
@@ -641,6 +659,7 @@ export default function NuevaFacturaPage() {
           {/* Importe */}
           <label style={etiqueta}>Importe de la factura (total con IVA)</label>
           <input type="number" step="0.01" min="0" value={importe} onChange={(e) => setImporte(e.target.value)} />
+          {cajaSemaforo}
 
           <div style={{ height: 22 }} />
           <button type="button" onClick={continuar} disabled={cargandoServ} className="boton" style={{ width: "100%" }}>
@@ -666,6 +685,7 @@ export default function NuevaFacturaPage() {
               <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>(con IVA)</span>
             </div>
           </div>
+          {cajaSemaforo}
 
           {/* Captura de subtotal + IVA + validación */}
           <div style={card}>

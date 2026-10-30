@@ -11,6 +11,8 @@ import {
   puedeEnviarOoad, flujoFirmasDe, generaPedidoRecepcion,
 } from "../../../../lib/estatus";
 import { insertarFacturaConFolio } from "../../../../lib/folios";
+import { cargarContrato, semaforoDe } from "../../../../lib/avisos";
+import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -160,6 +162,7 @@ export default function FacturaEstatusPage() {
   const [fIni, setFIni] = useState("");
   const [fFin, setFFin] = useState("");
   const [guardandoFechas, setGuardandoFechas] = useState(false);
+  const [semDic, setSemDic] = useState(null); // semáforo de dictamen del contrato (lib/avisos)
 
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet] = await Promise.all([
@@ -178,6 +181,10 @@ export default function FacturaEstatusPage() {
     }
     setFactura(rFac.data);
     setHistorial(rHist.data || []);
+    // Semáforo de dictamen (solo facturas sin pagar con contrato); no detiene la pantalla
+    if (rFac.data.contrato_id && rFac.data.estatus_general !== "gasto_reflejado" && !rFac.data.anulada)
+      cargarContrato(rFac.data.contrato_id).then((d) => setSemDic(semaforoDe(d))).catch(() => setSemDic(null));
+    else setSemDic(null);
     const m = {};
     (rAlertas.data || []).forEach((a) => (m[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
     setAlertasMap(m);
@@ -400,6 +407,8 @@ export default function FacturaEstatusPage() {
           <strong style={{ fontFamily: "monospace", fontSize: 15 }}>{factura.orden_compra}</strong>
         </div>
       )}
+
+      {semDic && <SemaforoDictamen s={semDic.sem.get(factura.id)} disponible={semDic.conDictamen ? semDic.disponible : null} resumen={semDic.resumen} />}
 
       {/* Resumen */}
       <div style={{ background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px", margin: "12px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
