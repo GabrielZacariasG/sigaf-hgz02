@@ -31,7 +31,7 @@ function pendienteDe(f) {
   const firmasOk = puedeEnviarOoad(f.estatus_firmas, "generado", cap);
   const prOk = !llevaPR || f.estatus_pedido_recepcion === "generado";
   if (firmasOk && prOk) return "Firmas y pedido-recepción completos";
-  return [!firmasOk && `Firmas: ${LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}`, !prOk && "Falta pedido-recepción"].filter(Boolean).join(" · ");
+  return [!firmasOk && `Firmas: ${LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}`, !prOk && (f.estatus_pedido_recepcion === "solicitado_fsi" ? "En espera de pedido-recepción" : "Falta solicitar pedido-recepción")].filter(Boolean).join(" · ");
 }
 
 export default function AvisosPage() {
