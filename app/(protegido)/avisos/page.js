@@ -121,7 +121,7 @@ export default function AvisosPage() {
         {agrupar(P.presupuesto, (x) => x.s.contrato?.numero_interno).sort(([, a], [, b]) => b.some((x) => x.f.es_pasivo) - a.some((x) => x.f.es_pasivo)).map(([k, items]) => {
           const pas = items.filter((x) => x.f.es_pasivo).length, enOoad = items.filter((x) => ["en_tramite_ooad", "enviada_ooad"].includes(x.f.estatus_general)).length;
           return (
-            <Grupo key={k} titulo={`${k} · ${items[0].f.proveedores?.razon_social || ""}`} sub={`${items.length} factura(s) · ${money(suma(items))}${enOoad ? ` · ${enOoad} en OOAD` : ""}${items.length > enOoad ? ` · ${items.length - enOoad} por firmas o pedido-recepción` : ""}${pas ? ` · ${pas} de pasivo` : ""}`}>
+            <Grupo key={k} titulo={`${k} · ${new Set(items.map((x) => x.f.proveedores?.razon_social)).size > 1 ? "varios proveedores" : items[0].f.proveedores?.razon_social || ""}`} sub={`${items.length} factura(s) · ${money(suma(items))}${enOoad ? ` · ${enOoad} en OOAD` : ""}${items.length > enOoad ? ` · ${items.length - enOoad} por firmas o pedido-recepción` : ""}${pas ? ` · ${pas} de pasivo` : ""}`}>
               <TablaFacturas items={items.slice().sort((x, y) => Number(y.f.importe_factura) - Number(x.f.importe_factura))} tituloExtra="Con qué" extra={({ s }) => s.t} />
             </Grupo>
           );
