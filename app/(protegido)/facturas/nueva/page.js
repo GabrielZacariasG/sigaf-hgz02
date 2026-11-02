@@ -195,7 +195,7 @@ export default function NuevaFacturaPage() {
 
   const semNueva = useMemo(() => (datosCto && importeNum > 0 ? semaforoDe(datosCto, { importe: importeNum, fecha: fechaFactura }) : null), [datosCto, importeNum, fechaFactura]);
   const cajaSemaforo = semNueva
-    ? <SemaforoDictamen titulo="¿Hay dinero en el dictamen para esta factura?" s={semNueva.sem.get(ID_NUEVA)} disponible={semNueva.disponibleDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} resumen={semNueva.resumenDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} />
+    ? <SemaforoDictamen titulo="¿Hay dinero este mes en el dictamen para esta factura?" s={semNueva.sem.get(ID_NUEVA)} disponible={semNueva.disponibleDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} resumen={semNueva.resumenDe(semNueva.sem.get(ID_NUEVA)?.dictamen)} />
     : contratoId && importeNum > 0 && cargandoCto ? <SemaforoDictamen cargando /> : null;
 
   // Validación principal: SUBTOTAL + IVA debe = TOTAL capturado (importe).

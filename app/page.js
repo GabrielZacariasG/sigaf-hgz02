@@ -252,7 +252,7 @@ export default function Portal() {
             {!avisos ? <p style={{ fontSize: 13, color: 'var(--texto-suave)', margin: 0 }}>Revisando facturas, pedido-recepción y dictámenes…</p> : (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {[
-                  { n: avisos.ampliacion + avisos.oficio, t: `contrato(s) donde el dictamen no alcanza${avisos.oficio ? ` · ${avisos.oficio} con oficio de apoyo` : ''}`, color: 'var(--rojo)', ancla: 'dictamen' },
+                  { n: avisos.ampliacion + avisos.oficio, t: `contrato(s) sin dinero este mes${avisos.oficio ? ` · ${avisos.oficio} con oficio de apoyo` : ''}${avisos.porActualizar ? ` · ${avisos.porActualizar} dictamen(es) sin IMKK036 del mes` : ''}`, color: 'var(--rojo)', ancla: 'dictamen' },
                   { n: avisos.enError, t: 'CR con error de presupuesto en FINAT', color: 'var(--rojo)', ancla: 'error' },
                   { n: avisos.conPR, t: `con pedido-recepción listo, sin mandar a OOAD${avisos.prNuevos ? ` · ${avisos.prNuevos} nuevo(s)` : ''}`, color: '#2b6cb0', ancla: 'pr' },
                   { n: avisos.listasOOAD, t: `lista(s) para mandar a OOAD${avisos.listasSinDinero ? ` · ${avisos.listasSinDinero} sin dinero en dictamen` : ''}`, color: 'var(--verde)', ancla: 'ooad' },

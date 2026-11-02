@@ -52,7 +52,7 @@ export default function ContratosPage() {
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
     const [rDi, rDs, rLi, rCm, rFo] = await Promise.all([
       supabase.from("dictamenes").select("numero, origen, corte"),
-      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
+      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, anio, mes, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
       leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
@@ -136,13 +136,13 @@ export default function ContratosPage() {
 
   // ---------- Exportar como la cédula ----------
   const exportar = () => {
-    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL", "Dictamen: asignado HGZ 2", "Dictamen: pagado FINAT", "Dictamen: disponible HGZ 2", "Pendiente de pago SIGAF", "Faltante dictamen", "Corte FINAT", "Cobertura (meses)", "Meses que faltan", "Amp. disponible (20%)", "Comentario"];
+    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL", "Dictamen: asignado HGZ 2", "Dictamen: pagado FINAT", "Dictamen: saldo del mes HGZ 2", "Pendiente de pago SIGAF", "Faltante dictamen", "Corte FINAT", "Cobertura (meses)", "Meses que faltan", "Amp. disponible (20%)", "Comentario"];
     const aoa = [[`CONTROL DE CONTRATOS · ${capitulo === "*" ? "Todos" : capitulo} · SIGAF ${new Date().toLocaleDateString("es-MX")}`], []];
     for (const b of bloques) {
       aoa.push([`${b.cuenta} · ${b.nombre}`]); aoa.push(enc);
       for (const { c, x, dic } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
         x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo,
-        ...(dic ? [dic.asignado, dic.pagado, dic.disponible, dic.pendiente, Math.max(0, dic.faltante), fechaTxt(dic.corte)] : ["", "", "", "", "", ""]),
+        ...(dic ? [dic.asignado, dic.pagado, dic.viejo ? "Falta IMKK036 del mes" : dic.disponible, dic.pendiente, Math.max(0, dic.faltante), fechaTxt(dic.corte)] : ["", "", "", "", "", ""]),
         x.cobertura == null ? "" : Math.round(x.cobertura * 10) / 10, x.mesesRestantes, x.maxU ? x.ampDisponible : "", (datos.comentarios[c.id] || [])[0]?.texto || ""]);
       for (const r of b.reservas) aoa.push([r.concepto, r.estatus, "", "", "", b.cuenta, r.estatus.toUpperCase(), "", "", "", r.importe]);
       const t = sumar(b.filas.map((f) => f.x)); const res = b.reservas.reduce((s, r) => s + (Number(r.importe) || 0), 0); const pre = datos.presupuesto[b.cuenta] || 0;
@@ -164,7 +164,7 @@ export default function ContratosPage() {
   const thFija = (i) => ({ ...th, left: IZQ[i], zIndex: 3, minWidth: ANCHO[i], maxWidth: ANCHO[i] });
   const colorAvance = (a) => (a >= 1 ? "#dc2626" : a >= 0.8 ? "#d97706" : "var(--verde)");
   const Semaforo = ({ x }) => x.avisos.length ? <span title={x.avisos.map((a) => a.t).join(" · ")} style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, marginRight: 6, background: x.avisos.some((a) => a.nivel === "rojo") ? "#dc2626" : "#d97706" }} /> : null;
-  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total", "Disponible dictamen HGZ 2", "¿Alcanza el dictamen?", "Cobertura (meses que alcanza de los que faltan)", "Amp. disponible (hasta 20%)", "Comentario"];
+  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total", "Saldo del mes dictamen HGZ 2", "¿Hay dinero este mes?", "Cobertura (meses que alcanza de los que faltan)", "Amp. disponible (hasta 20%)", "Comentario"];
 
   if (msg && !datos) return <p style={{ color: "var(--rojo)" }}>{msg}</p>;
   if (!datos) return <p>Cargando contratos…</p>;
@@ -191,9 +191,9 @@ export default function ContratosPage() {
           <td style={tdN}>{x.pasivo ? money(x.pasivo) : ""}</td>
           {x.mensual.slice(1).map((v, i) => <td key={i} style={tdN}>{v + x.devengoMes[i + 1] ? money0(v + x.devengoMes[i + 1]) : ""}</td>)}
           <td style={{ ...tdN, fontWeight: 700 }}>{money(x.mensual.reduce((s, v) => s + v, 0) + x.devengo)}</td>
-          <td style={tdN} title={dic ? `Dictamen ${dic.numero} · FINAT al ${fechaTxt(dic.corte)}` : "Sin saldo de dictamen cargado"}>{dic ? money(dic.disponible) : ""}</td>
-          <td style={{ ...td, fontWeight: 600, color: !dic ? undefined : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)" }}>
-            {!dic ? "" : dic.faltante > 0.5 ? `No · faltan ${money(dic.faltante)}` : "Sí"}
+          <td style={tdN} title={dic ? `Dictamen ${dic.numero} · FINAT al ${fechaTxt(dic.corte)}` : "Sin saldo de dictamen cargado"}>{!dic ? "" : dic.viejo ? "—" : money(dic.disponible)}</td>
+          <td style={{ ...td, fontWeight: 600, color: !dic ? undefined : dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)" }}>
+            {!dic ? "" : dic.viejo ? `Falta IMKK036 de ${dic.mesNombre}` : dic.faltante > 0.5 ? `No · faltan ${money(dic.faltante)}` : "Sí"}
           </td>
           <td style={{ ...tdN, color: x.cobertura != null && x.cobertura < x.mesesRestantes ? "var(--rojo)" : undefined }}
             title={x.cobertura == null ? "Sin gasto mensual para calcular" : `El saldo alcanza ${x.cobertura.toFixed(1)} meses al ritmo de ${money(x.promedio)} al mes; faltan ${x.mesesRestantes} meses de vigencia`}>
@@ -216,15 +216,16 @@ export default function ContratosPage() {
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                     <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
                     <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
-                    <span>Disponible HGZ 2: <strong>{money(dic.disponible)}</strong></span>
+                    <span>Saldo de {dic.mesNombre} HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong></span>
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
-                    <span style={{ color: dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
+                    <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato de este mes" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
                   {(dic.validadas.length > 0 || dic.enError.length > 0) && <div style={{ marginTop: 4 }}>
                     {dic.validadas.length > 0 && <span style={{ color: "var(--verde)", marginRight: 14 }}>Ya validadas en FINAT (pasaron): {dic.validadas.length} · {money(dic.impValidadas)}</span>}
                     {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}
                   </div>}
-                  {dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
+                  <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo por mes del HGZ 2: {Object.entries(dic.porMes).sort(([a], [b]) => a - b).map(([k, v]) => `${MESES[Number(k) % 100].slice(0, 3)} ${money0(v)}`).join(" · ")}</div>
+                  {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo de este mes en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
                 </div>
               )}
               <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>

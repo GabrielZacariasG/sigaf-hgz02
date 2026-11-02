@@ -12,7 +12,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { resumenUI } from "../../../lib/imkk036";
 import { cargarDatosDictamenes, contratosDelDictamen, enlaceDe as enlaceDeContrato, revisarDictamenes, guardarDictamenes, aGuardar } from "../../../lib/dictamenesCarga";
 import RevisionDictamenes from "../../../lib/RevisionDictamenes";
-import { ANIO, UI_HGZ2 } from "../../../lib/contratos";
+import { ANIO, UI_HGZ2, saldoDelMes, corteViejo, MESES_NOMBRE } from "../../../lib/contratos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
@@ -44,9 +44,9 @@ export default function DictamenesPage() {
     const lista = datos.dictamenes.map((d) => {
       const sal = datos.saldos[d.numero] || [];
       const hg = resumenUI(sal, UI_HGZ2);
-      const otras = {}; for (const s of sal) if (s.ui !== UI_HGZ2) otras[s.ui] = (otras[s.ui] || 0) + (Number(s.disponible) || 0);
+      const sm = saldoDelMes(sal); const viejo = corteViejo(d.corte);
       const cs = contratosDe(d.numero);
-      return { d, hg, otras: Object.entries(otras).filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]), otrasDisp: Object.values(otras).filter((v) => v > 0.5).reduce((s, v) => s + v, 0), cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
+      return { d, hg, viejo, saldoMes: sm.disponible, otras: sm.otras.map((o) => [o.ui, o.disponible]), otrasDisp: sm.otrasDisp, cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
     });
     const sinCarga = [...new Set(datos.contratos.map((c) => c.dictamen_numero).filter((n) => /^\d{10}-\d{4}$/.test(n || "") && !datos.dictamenes.some((d) => d.numero === n)))]
       .map((n) => ({ sinCarga: true, d: { numero: n }, cs: contratosDe(n) }));
@@ -84,7 +84,7 @@ export default function DictamenesPage() {
       <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/contratos" style={{ color: "var(--verde)" }}>← Contratos</Link></div>
       <h1 style={{ fontSize: 22, margin: 0 }}>Dictámenes FINAT</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950 }}>
-        Lo que FINAT asigna al HGZ 2 en cada dictamen, lo pagado y lo disponible, y lo que tienen otras unidades del mismo dictamen (para oficio de apoyo).
+        Lo que FINAT asigna al HGZ 2 en cada dictamen, lo pagado y el saldo del mes corriente, y lo que tienen ese mes otras unidades del mismo dictamen (para oficio de apoyo).
         Para actualizar, sube los PDF del <strong>IMKK036 "Rep. Disponibilidad Dictamen"</strong> (varios a la vez). SIGAF los lee, revisa que cada uno cuadre con su renglón TOTALES
         y, al guardar, deja el enlace del contrato igual a lo que asigna FINAT. <strong>No guarda nada hasta que revises.</strong>{" "}
         También puedes subirlos junto con los demás reportes en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Cargar reportes</Link>.
@@ -117,7 +117,7 @@ export default function DictamenesPage() {
           </div>
           <div style={{ overflow: "auto", maxHeight: "calc(100vh - 330px)" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{["Dictamen", "Contrato", "Proveedor / concepto", "Corte FINAT", "Asignado HGZ 2", "Pagado HGZ 2", "Disponible HGZ 2", "Disponible otras unidades", "Enlace SIGAF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Dictamen", "Contrato", "Proveedor / concepto", "Corte FINAT", "Asignado HGZ 2", "Pagado HGZ 2", `Saldo de ${MESES_NOMBRE[new Date().getMonth() + 1]} HGZ 2`, "Saldo del mes otras unidades", "Enlace SIGAF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>{filas.map((x) => {
                 const k = x.d.numero; const sel = abierto === k; const dias = diasDesde(x.d.corte);
                 return (
@@ -129,8 +129,8 @@ export default function DictamenesPage() {
                       {x.sinCarga ? <td colSpan={6} style={{ ...td, color: "#b7791f" }}>Sin IMKK036: córrelo en FINAT (control SALDO_DICT) y súbelo aquí</td> : <>
                         <td style={{ ...td, whiteSpace: "nowrap", color: dias > 7 ? "#b7791f" : undefined }} title={dias > 7 ? `Hace ${dias} días: conviene actualizarlo` : ""}>{fechaTxt(x.d.corte)}</td>
                         <td style={tdN}>{money(x.hg.asignado)}</td><td style={tdN}>{money(x.hg.pagado)}</td>
-                        <td style={{ ...tdN, fontWeight: 700, color: x.hg.disponible < 0.5 ? "var(--rojo)" : "var(--verde)" }}>{money(x.hg.disponible)}</td>
-                        <td style={tdN}>{x.otrasDisp ? money(x.otrasDisp) : ""}</td>
+                        <td style={{ ...tdN, fontWeight: 700, color: x.viejo ? "#b7791f" : x.saldoMes < 0.5 ? "var(--rojo)" : "var(--verde)" }} title={x.viejo ? "El IMKK036 cargado es de un mes anterior" : ""}>{x.viejo ? "Falta IMKK036 del mes" : money(x.saldoMes)}</td>
+                        <td style={tdN}>{!x.viejo && x.otrasDisp ? money(x.otrasDisp) : ""}</td>
                         <td style={{ ...tdN, color: x.enlace != null && Math.abs(x.enlace - x.hg.asignado) > 0.5 && Number(k.slice(-4)) === ANIO ? "#b7791f" : undefined }}
                           title={x.enlace != null && Math.abs(x.enlace - x.hg.asignado) > 0.5 && Number(k.slice(-4)) === ANIO ? "Distinto a lo asignado por FINAT" : ""}>{x.enlace != null ? money(x.enlace) : ""}</td>
                       </>}
@@ -138,7 +138,7 @@ export default function DictamenesPage() {
                     {sel && (
                       <tr><td colSpan={9} style={{ ...td, background: "#f7f8f7" }}>
                         <div style={{ fontSize: 12.5, marginBottom: 4 }}>Fecha del dictamen {fechaTxt(x.d.fecha_dictamen)} · archivo {x.d.archivo} · total del dictamen {money(x.d.total_definitivo)}, pagado {money(x.d.total_pagos)}, disponible {money(x.d.total_disponible)}</div>
-                        {x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Disponible por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
+                        {!x.viejo && x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Saldo de este mes por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
                       </td></tr>
                     )}
                   </Fragment>
