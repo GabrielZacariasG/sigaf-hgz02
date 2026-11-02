@@ -12,7 +12,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { resumenUI } from "../../../lib/imkk036";
 import { cargarDatosDictamenes, contratosDelDictamen, enlaceDe as enlaceDeContrato, revisarDictamenes, guardarDictamenes, aGuardar } from "../../../lib/dictamenesCarga";
 import RevisionDictamenes from "../../../lib/RevisionDictamenes";
-import { ANIO, UI_HGZ2, saldoDelMes, corteViejo, MESES_NOMBRE } from "../../../lib/contratos";
+import { ANIO, UI_HGZ2, saldoDelMes, corteViejo, descuentoApoyos } from "../../../lib/contratos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
@@ -46,7 +46,8 @@ export default function DictamenesPage() {
       const hg = resumenUI(sal, UI_HGZ2);
       const sm = saldoDelMes(sal); const viejo = corteViejo(d.corte);
       const cs = contratosDe(d.numero);
-      return { d, hg, viejo, saldoMes: sm.disponible, otras: sm.otras.map((o) => [o.ui, o.disponible]), otrasDisp: sm.otrasDisp, cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
+      const apoyosDesc = descuentoApoyos(datos.apoyos?.[d.numero], d.corte);
+      return { d, hg, viejo, apoyosDesc, saldoMes: Math.max(0, sm.disponible - apoyosDesc), otras: sm.otras.map((o) => [o.ui, o.disponible]), otrasDisp: sm.otrasDisp, cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
     });
     const sinCarga = [...new Set(datos.contratos.map((c) => c.dictamen_numero).filter((n) => /^\d{10}-\d{4}$/.test(n || "") && !datos.dictamenes.some((d) => d.numero === n)))]
       .map((n) => ({ sinCarga: true, d: { numero: n }, cs: contratosDe(n) }));
@@ -138,6 +139,7 @@ export default function DictamenesPage() {
                     {sel && (
                       <tr><td colSpan={9} style={{ ...td, background: "#f7f8f7" }}>
                         <div style={{ fontSize: 12.5, marginBottom: 4 }}>Fecha del dictamen {fechaTxt(x.d.fecha_dictamen)} · archivo {x.d.archivo} · total del dictamen {money(x.d.total_definitivo)}, pagado {money(x.d.total_pagos)}, disponible {money(x.d.total_disponible)}</div>
+                        {x.apoyosDesc > 0 && <div style={{ fontSize: 12.5 }}>El saldo ya descuenta {money(x.apoyosDesc)} de apoyos que dimos a otras unidades.</div>}
                         {!x.viejo && x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Disponible acumulado por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
                       </td></tr>
                     )}

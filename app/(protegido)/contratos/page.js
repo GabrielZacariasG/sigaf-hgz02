@@ -11,7 +11,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
-import { calcularContrato, calcularDictamen, sumar, ANIO } from "../../../lib/contratos";
+import { calcularContrato, calcularDictamen, sumar, ANIO, apoyosPorDictamen } from "../../../lib/contratos";
 import { dictamenDe } from "../../../lib/avisos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -50,12 +50,13 @@ export default function ContratosPage() {
       for (const r of rM.data || []) presupuesto[r.cuenta_finat] = (presupuesto[r.cuenta_finat] || 0) + (Number(r.presupuesto) || 0);
     }
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
-    const [rDi, rDs, rLi, rCm, rFo] = await Promise.all([
+    const [rDi, rDs, rLi, rCm, rFo, rAp] = await Promise.all([
       supabase.from("dictamenes").select("numero, origen, corte"),
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, centro, cuenta, anio, mes, definitivo, pagos, disponible, disponible_acum").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
       leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
+      leerTodo((d, h) => supabase.from("contrato_apoyos").select("*").order("fecha").order("id").range(d, h)),
     ]);
     // Devengo de folios de subrogados (migración 053): folios sin factura y no cancelados, por contrato y mes
     const devFolios = {};
@@ -78,7 +79,7 @@ export default function ContratosPage() {
     }
     const ppto = {}; // E si alguna línea cayó en error · V si todas están validadas · N lo demás
     for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios });
+    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios, apoyos: rAp.error ? [] : rAp.data || [], hayApoyos: !rAp.error });
   };
 
   // ---------- Comentarios por contrato ----------
@@ -91,6 +92,36 @@ export default function ContratosPage() {
     if (error) { setMsg("No se pudo guardar el comentario: " + error.message + " (¿ya se corrió la migración 052?)"); return; }
     setNuevoCom(""); await cargar();
   };
+  // ---------- Apoyos que damos a otras unidades: primero devengo, después gasto ----------
+  const APOYO_VACIO = { dictamen: "", ui: "", factura: "", importe: "", nota: "" };
+  const [nuevoApoyo, setNuevoApoyo] = useState(APOYO_VACIO);
+  const guardarApoyo = async (contrato, dictamenSug, disponible) => {
+    const dictamen = nuevoApoyo.dictamen || dictamenSug, ui = nuevoApoyo.ui.trim(), importe = Number(String(nuevoApoyo.importe).replace(/[^0-9.]/g, ""));
+    if (!dictamen) { setMsg("Ese contrato no tiene dictamen para descontar el apoyo."); return; }
+    if (!/^\d{6}$/.test(ui) || ui === "010102") { setMsg("Pon la unidad que recibe el apoyo con sus 6 dígitos, p. ej. 010103."); return; }
+    if (!(importe > 0)) { setMsg("Pon el importe del apoyo."); return; }
+    if (disponible != null && importe > disponible + 0.5 && !window.confirm(`El apoyo de ${money(importe)} rebasa el saldo del dictamen (${money(disponible)}). ¿Registrarlo de todos modos?`)) return;
+    setGuardando(`apoyo|${contrato.id}`);
+    const { error } = await supabase.from("contrato_apoyos").insert({ contrato_id: contrato.id, dictamen, ui_destino: ui, factura_txt: nuevoApoyo.factura.trim() || null, importe, nota: nuevoApoyo.nota.trim() || null });
+    setGuardando("");
+    if (error) { setMsg("No se pudo guardar el apoyo: " + error.message + " (¿ya se corrió la migración 054?)"); return; }
+    setNuevoApoyo(APOYO_VACIO); await cargar();
+  };
+  const apoyoAGasto = async (a) => {
+    setGuardando(`apoyo|${a.id}`);
+    const { error } = await supabase.from("contrato_apoyos").update({ estado: "gasto", fecha_gasto: new Date().toLocaleDateString("en-CA") }).eq("id", a.id);
+    setGuardando("");
+    if (error) { setMsg("No se pudo registrar el gasto: " + error.message); return; }
+    await cargar();
+  };
+  const borrarApoyo = async (a) => {
+    if (!window.confirm(`¿Borrar el apoyo de ${money(a.importe)} a la UI ${a.ui_destino}? Regresa al saldo del dictamen.`)) return;
+    setGuardando(`apoyo|${a.id}`);
+    const { error } = await supabase.from("contrato_apoyos").delete().eq("id", a.id);
+    setGuardando("");
+    if (error) { setMsg("No se pudo borrar el apoyo: " + error.message); return; }
+    await cargar();
+  };
   useEffect(() => { cargar(); }, []);
 
   const capitulos = useMemo(() => [...new Set((datos?.contratos || []).filter((c) => !esGenerico(c)).map((c) => c.partidas?.capitulos?.nombre).filter(Boolean))].sort(), [datos]);
@@ -100,17 +131,17 @@ export default function ContratosPage() {
   const bloques = useMemo(() => {
     if (!datos) return [];
     const por = (arr, k) => { const m = {}; for (const x of arr) (m[x[k]] ||= []).push(x); return m; };
-    const fPor = por(datos.facturas, "contrato_id"), aPor = por(datos.amp, "contrato_id"), pPor = por(datos.prog, "contrato_id"), dPor = por(datos.dev, "contrato_id");
+    const fPor = por(datos.facturas, "contrato_id"), aPor = por(datos.amp, "contrato_id"), pPor = por(datos.prog, "contrato_id"), dPor = por(datos.dev, "contrato_id"), apPor = por(datos.apoyos, "contrato_id"), apDic = apoyosPorDictamen(datos.apoyos);
     const q = busca.trim().toLowerCase();
     const lista = datos.contratos
       .filter((c) => !esGenerico(c))
       .filter((c) => capitulo === "*" || c.partidas?.capitulos?.nombre === capitulo)
       .map((c) => {
-        const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [], devengoFolios: datos.devFolios[c.id] || null });
+        const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [], devengoFolios: datos.devFolios[c.id] || null, apoyos: apPor[c.id] || [] });
         // Dictamen vigente: el de pasivo 2026 si el contrato es de un año anterior y lo tiene ligado; si no, el principal
         const dv = dictamenDe(c, { estatus_general: "pendiente" }, datos.links);
         const fDic = (fPor[c.id] || []).filter((f) => dictamenDe(c, f, datos.links) === dv);
-        const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
+        const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero, _apoyos: apDic[dv] || [] }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
         if (dic) x.avisos = [...x.avisos, ...dic.avisos];
         return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
       })
@@ -217,7 +248,7 @@ export default function ContratosPage() {
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                     <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
                     <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
-                    <span>Disponible acumulado HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong></span>
+                    <span>Disponible acumulado HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong>{dic.apoyosDesc > 0 ? ` (ya descuenta ${money(dic.apoyosDesc)} de apoyos dados)` : ""}</span>
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
                     <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato actual" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
@@ -249,6 +280,33 @@ export default function ContratosPage() {
                   </button>
                 </div>
               </div>
+              {datos.hayApoyos && (() => {
+                const propios = datos.apoyos.filter((a) => a.contrato_id === c.id);
+                const dics = [...new Set([dic?.numero, c.dictamen_numero, ...(datos.links[c.id] || []).map((l) => l.dictamen)].filter(Boolean))];
+                const campo = { padding: "5px 8px", border: "1px solid var(--borde)", borderRadius: 6, fontSize: 12.5 };
+                return (
+                  <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
+                    <strong>Apoyos que damos a otras unidades</strong>
+                    <span style={{ color: "var(--texto-suave)" }}> · primero en devengo, después el gasto; se descuentan del saldo del dictamen</span>
+                    {propios.map((a) => (
+                      <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 5 }}>
+                        <span style={{ fontWeight: 700, color: a.estado === "gasto" ? "var(--verde)" : "#7c3aed" }}>{a.estado === "gasto" ? "Gasto" : "Devengo"}</span>
+                        <span>UI {a.ui_destino} · {money(a.importe)}{a.factura_txt ? ` · factura ${a.factura_txt}` : ""} · dictamen {a.dictamen} · {fechaTxt(a.estado === "gasto" ? a.fecha_gasto : a.fecha)}{a.nota ? ` · ${a.nota}` : ""}</span>
+                        {a.estado === "devengo" && <button className="boton secundario" style={{ fontSize: 12, padding: "3px 9px" }} disabled={guardando === `apoyo|${a.id}`} onClick={() => apoyoAGasto(a)}>Registrar gasto</button>}
+                        <button className="boton secundario" style={{ fontSize: 12, padding: "3px 9px" }} disabled={guardando === `apoyo|${a.id}`} onClick={() => borrarApoyo(a)}>Borrar</button>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
+                      {dics.length > 1 && <select aria-label="Dictamen del apoyo" value={nuevoApoyo.dictamen || dics[0]} onChange={(e) => setNuevoApoyo({ ...nuevoApoyo, dictamen: e.target.value })} style={campo}>{dics.map((n) => <option key={n} value={n}>{n}</option>)}</select>}
+                      <input aria-label="Unidad que recibe" value={nuevoApoyo.ui} onChange={(e) => setNuevoApoyo({ ...nuevoApoyo, ui: e.target.value })} placeholder="Unidad (010103)" style={{ ...campo, width: 120 }} />
+                      <input aria-label="Factura" value={nuevoApoyo.factura} onChange={(e) => setNuevoApoyo({ ...nuevoApoyo, factura: e.target.value })} placeholder="Factura" style={{ ...campo, width: 120 }} />
+                      <input aria-label="Importe" type="number" step="0.01" min="0" value={nuevoApoyo.importe} onChange={(e) => setNuevoApoyo({ ...nuevoApoyo, importe: e.target.value })} placeholder="Importe" style={{ ...campo, width: 110 }} />
+                      <input aria-label="Nota" value={nuevoApoyo.nota} onChange={(e) => setNuevoApoyo({ ...nuevoApoyo, nota: e.target.value })} placeholder="Oficio o nota" style={{ ...campo, flex: "1 1 150px" }} />
+                      <button className="boton" style={{ fontSize: 12.5, padding: "5px 12px" }} disabled={guardando === `apoyo|${c.id}`} onClick={() => guardarApoyo(c, dics[0], dic && !dic.viejo ? dic.disponible : null)}>Capturar en devengo</button>
+                    </div>
+                  </div>
+                );
+              })()}
               {ampliaciones.length > 0 && <div style={{ fontSize: 12, marginBottom: 6 }}><strong>Ampliaciones / reducciones:</strong> {ampliaciones.map((a) => `${money(a.importe)}${a.fecha ? " el " + fechaTxt(a.fecha) : ""}${a.convenio ? " (" + a.convenio + ")" : ""}`).join(" · ")}</div>}
               <div style={{ maxHeight: 260, overflow: "auto" }}>
                 <table style={{ borderCollapse: "collapse" }}>
