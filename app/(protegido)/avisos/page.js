@@ -164,11 +164,11 @@ export default function AvisosPage() {
       {/* En OOAD sin pedido-recepción */}
       {a.ooadSinPR.length > 0 && (
         <div style={card}>
-          <Titulo id="sin-pr" color="var(--rojo)" n={a.ooadSinPR.length} t="Marcadas en OOAD sin pedido-recepción ni CR" sub={`${money(a.ooadSinPR.reduce((t, f) => t + (Number(f.importe_factura) || 0), 0))} · SIGAF las marcó en trámite por un oficio anterior al candado; hay que confirmar si de verdad se entregaron`} />
+          <Titulo id="sin-pr" color="var(--rojo)" n={a.ooadSinPR.length} t="Marcadas en OOAD sin cumplir el candado" sub={`${money(a.ooadSinPR.reduce((t, f) => t + (Number(f.importe_factura) || 0), 0))} · sin CR y les faltan firmas o pedido-recepción. Aquí no debe haber ninguna: revísala hoy`} />
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Factura", "Proveedor", "Periodo", "Importe", "Firmas", "Pedido-recepción"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{pasivosPrimero(a.ooadSinPR).map((f) => (
-              <tr key={f.id}><td style={td}><LinkF f={f} /><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td><td style={td}>{f.proveedores?.razon_social}</td><td style={{ ...td, fontSize: 12.5 }}>{periodoTxt(f)}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}</td><td style={{ ...td, color: "var(--rojo)", fontWeight: 600 }}>{LABEL_PEDIDO[f.estatus_pedido_recepcion] || f.estatus_pedido_recepcion}</td></tr>
+              <tr key={f.id}><td style={td}><LinkF f={f} /><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td><td style={td}>{f.proveedores?.razon_social}</td><td style={{ ...td, fontSize: 12.5 }}>{periodoTxt(f)}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}</td><td style={{ ...td, color: generaPedidoRecepcion(f.capitulos?.nombre || "", f.partidas?.cuenta_finat || f.partidas?.cuenta_prei) && f.estatus_pedido_recepcion !== "generado" ? "var(--rojo)" : undefined, fontWeight: 600 }}>{generaPedidoRecepcion(f.capitulos?.nombre || "", f.partidas?.cuenta_finat || f.partidas?.cuenta_prei) ? LABEL_PEDIDO[f.estatus_pedido_recepcion] || f.estatus_pedido_recepcion : "No lleva"}</td></tr>
             ))}</tbody>
           </table>
         </div>
