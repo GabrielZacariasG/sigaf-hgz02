@@ -164,7 +164,7 @@ export default function AvisosPage() {
       {/* En OOAD sin pedido-recepción */}
       {a.ooadSinPR.length > 0 && (
         <div style={card}>
-          <Titulo id="sin-pr" color="var(--rojo)" n={a.ooadSinPR.length} t="Ya están en OOAD sin pedido-recepción" sub={`${money(a.ooadSinPR.reduce((t, f) => t + (Number(f.importe_factura) || 0), 0))} · salieron antes del candado; desde entonces SIGAF no deja hacer oficio de pago sin él`} />
+          <Titulo id="sin-pr" color="var(--rojo)" n={a.ooadSinPR.length} t="Marcadas en OOAD sin pedido-recepción ni CR" sub={`${money(a.ooadSinPR.reduce((t, f) => t + (Number(f.importe_factura) || 0), 0))} · SIGAF las marcó en trámite por un oficio anterior al candado; hay que confirmar si de verdad se entregaron`} />
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Factura", "Proveedor", "Periodo", "Importe", "Firmas", "Pedido-recepción"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{pasivosPrimero(a.ooadSinPR).map((f) => (
