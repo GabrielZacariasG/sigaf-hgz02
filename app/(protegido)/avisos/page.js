@@ -104,9 +104,9 @@ export default function AvisosPage() {
 
       {/* Presupuesto por factura */}
       <div style={card}>
-        <strong style={{ fontSize: 15 }}>¿Qué facturas tienen dinero en {a.mes}?</strong>
+        <strong style={{ fontSize: 15 }}>¿Qué facturas tienen dinero?</strong>
         <p style={{ fontSize: 12.5, color: "var(--texto-suave)", margin: "2px 0 10px" }}>
-          Facturas sin pagar. Con dictamen se mide el saldo de {a.mes} del HGZ 2 y de otras unidades (IMKK036); compra emergente y PREI, la dispo de {a.mes} de su cuenta{a.dispoFecha ? ` (corte ${new Date(a.dispoFecha + "T00:00:00").toLocaleDateString("es-MX")})` : ""}. Se reparte en orden: primero las que ya están en OOAD, y entra solo la factura que cabe completa.
+          Facturas sin pagar. Con dictamen se mide el disponible acumulado del HGZ 2 y de otras unidades (IMKK036); compra emergente y PREI, la dispo de {a.mes} de su cuenta{a.dispoFecha ? ` (corte ${new Date(a.dispoFecha + "T00:00:00").toLocaleDateString("es-MX")})` : ""}. Se reparte en orden: primero las que ya están en OOAD, y entra solo la factura que cabe completa.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {CUADROS.map(([href, color, items, t, sub]) => {
@@ -160,11 +160,11 @@ export default function AvisosPage() {
 
       {/* 1. Dictámenes que no alcanzan */}
       <div style={card}>
-        <Titulo id="dictamen" color="var(--rojo)" n={a.resumen.length} t="Contratos sin dinero en el mes corriente o con CR en error" sub="resuélvelo ANTES de mandar las facturas a OOAD" />
-        {a.cuentas.porActualizar > 0 && <p style={{ fontSize: 13, margin: "0 0 8px", padding: "6px 10px", background: "#fef3c7", borderRadius: 8, color: "#92400e" }}>{a.cuentas.porActualizar} dictamen(es) con facturas pendientes traen un IMKK036 de un mes anterior: súbelos en <Link href="/comprobantes" style={{ fontWeight: 600 }}>Cargar reportes</Link> para saber el saldo de este mes.</p>}
+        <Titulo id="dictamen" color="var(--rojo)" n={a.resumen.length} t="Contratos sin saldo suficiente o con CR en error" sub="resuélvelo ANTES de mandar las facturas a OOAD" />
+        {a.cuentas.porActualizar > 0 && <p style={{ fontSize: 13, margin: "0 0 8px", padding: "6px 10px", background: "#fef3c7", borderRadius: 8, color: "#92400e" }}>{a.cuentas.porActualizar} dictamen(es) con facturas pendientes traen un IMKK036 de un mes anterior: súbelos en <Link href="/comprobantes" style={{ fontWeight: 600 }}>Cargar reportes</Link> para saber el saldo actual.</p>}
         {a.resumen.length ? (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Contrato", "Dictamen", "Saldo del mes HGZ 2", "Faltan", "Qué hacer", "Facturas afectadas"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["Contrato", "Dictamen", "Disponible acumulado HGZ 2", "Faltan", "Qué hacer", "Facturas afectadas"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{a.resumen.map((r) => (
               <tr key={r.contrato.id + "|" + r.dictamen}>
                 <td style={td}><strong>{r.contrato.numero_interno}</strong><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{r.contrato.proveedores?.razon_social}</div></td>
@@ -173,7 +173,7 @@ export default function AvisosPage() {
                 <td style={{ ...tdN, color: "var(--rojo)", fontWeight: 700 }}>{r.faltante ? money(r.faltante) : ""}</td>
                 <td style={{ ...td, fontWeight: 600, color: r.accion === "oficio" ? "#92400e" : "var(--rojo)" }}>
                   {r.accion === "actualizar" ? `Bajar el IMKK036 de ${r.mes} para saber si ya hay dinero`
-                    : r.accion === "oficio" ? `Mandar con oficio de apoyo (en ${r.mes}: ${r.otras.map(([ui, v]) => `UI ${ui} tiene ${money(v)}`).join(", ")})`
+                    : r.accion === "oficio" ? `Mandar con oficio de apoyo (${r.otras.map(([ui, v]) => `UI ${ui} tiene ${money(v)}`).join(", ")})`
                     : r.accion === "ampliacion" ? `Ampliación de dictamen${r.otrasDisp ? ` (otras unidades solo alcanzan para parte: tienen ${money(r.otrasDisp)})` : ""}`
                     : "Pedir revalidación de los CR en error"}
                   {(() => {
@@ -190,7 +190,7 @@ export default function AvisosPage() {
               </tr>
             ))}</tbody>
           </table>
-        ) : <p style={{ fontSize: 13, margin: 0 }}>Ningún contrato con IMKK036 de este mes está sin dinero.</p>}
+        ) : <p style={{ fontSize: 13, margin: 0 }}>Ningún contrato con IMKK036 al día está sin dinero.</p>}
       </div>
 
       {/* 2. Pedido-recepción recibido */}

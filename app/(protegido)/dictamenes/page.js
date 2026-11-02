@@ -84,7 +84,7 @@ export default function DictamenesPage() {
       <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/contratos" style={{ color: "var(--verde)" }}>← Contratos</Link></div>
       <h1 style={{ fontSize: 22, margin: 0 }}>Dictámenes FINAT</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950 }}>
-        Lo que FINAT asigna al HGZ 2 en cada dictamen, lo pagado y el saldo del mes corriente, y lo que tienen ese mes otras unidades del mismo dictamen (para oficio de apoyo).
+        Lo que FINAT asigna al HGZ 2 en cada dictamen, lo pagado y el disponible acumulado, y lo que tienen otras unidades del mismo dictamen (para oficio de apoyo).
         Para actualizar, sube los PDF del <strong>IMKK036 "Rep. Disponibilidad Dictamen"</strong> (varios a la vez). SIGAF los lee, revisa que cada uno cuadre con su renglón TOTALES
         y, al guardar, deja el enlace del contrato igual a lo que asigna FINAT. <strong>No guarda nada hasta que revises.</strong>{" "}
         También puedes subirlos junto con los demás reportes en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Cargar reportes</Link>.
@@ -117,7 +117,7 @@ export default function DictamenesPage() {
           </div>
           <div style={{ overflow: "auto", maxHeight: "calc(100vh - 330px)" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{["Dictamen", "Contrato", "Proveedor / concepto", "Corte FINAT", "Asignado HGZ 2", "Pagado HGZ 2", `Saldo de ${MESES_NOMBRE[new Date().getMonth() + 1]} HGZ 2`, "Saldo del mes otras unidades", "Enlace SIGAF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Dictamen", "Contrato", "Proveedor / concepto", "Corte FINAT", "Asignado HGZ 2", "Pagado HGZ 2", "Disponible acumulado HGZ 2", "Disponible acumulado otras unidades", "Enlace SIGAF"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>{filas.map((x) => {
                 const k = x.d.numero; const sel = abierto === k; const dias = diasDesde(x.d.corte);
                 return (
@@ -138,7 +138,7 @@ export default function DictamenesPage() {
                     {sel && (
                       <tr><td colSpan={9} style={{ ...td, background: "#f7f8f7" }}>
                         <div style={{ fontSize: 12.5, marginBottom: 4 }}>Fecha del dictamen {fechaTxt(x.d.fecha_dictamen)} · archivo {x.d.archivo} · total del dictamen {money(x.d.total_definitivo)}, pagado {money(x.d.total_pagos)}, disponible {money(x.d.total_disponible)}</div>
-                        {!x.viejo && x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Saldo de este mes por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
+                        {!x.viejo && x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Disponible acumulado por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
                       </td></tr>
                     )}
                   </Fragment>

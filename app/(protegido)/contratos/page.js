@@ -52,7 +52,7 @@ export default function ContratosPage() {
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
     const [rDi, rDs, rLi, rCm, rFo] = await Promise.all([
       supabase.from("dictamenes").select("numero, origen, corte"),
-      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, anio, mes, definitivo, pagos, disponible").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
+      leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, centro, cuenta, anio, mes, definitivo, pagos, disponible, disponible_acum").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
       leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
@@ -216,16 +216,16 @@ export default function ContratosPage() {
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                     <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
                     <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
-                    <span>Saldo de {dic.mesNombre} HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong></span>
+                    <span>Disponible acumulado HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong></span>
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
-                    <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato de este mes" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
+                    <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato actual" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
                   {(dic.validadas.length > 0 || dic.enError.length > 0) && <div style={{ marginTop: 4 }}>
                     {dic.validadas.length > 0 && <span style={{ color: "var(--verde)", marginRight: 14 }}>Ya validadas en FINAT (pasaron): {dic.validadas.length} · {money(dic.impValidadas)}</span>}
                     {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}
                   </div>}
-                  <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo por mes del HGZ 2: {Object.entries(dic.porMes).sort(([a], [b]) => a - b).map(([k, v]) => `${MESES[Number(k) % 100].slice(0, 3)} ${money0(v)}`).join(" · ")}</div>
-                  {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo de este mes en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
+                  <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible de cada mes del HGZ 2 (informativo): {Object.entries(dic.porMes).sort(([a], [b]) => a - b).map(([k, v]) => `${MESES[Number(k) % 100].slice(0, 3)} ${money0(v)}`).join(" · ")}</div>
+                  {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible acumulado en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
                 </div>
               )}
               <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
