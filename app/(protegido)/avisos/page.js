@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { cargarAvisos } from "../../../lib/avisos";
-import { descargarOficio } from "../../../lib/oficioApoyo";
+import ArmarOficio from "../../../lib/ArmarOficio";
 import { LABEL_GENERAL, LABEL_FIRMAS, generaPedidoRecepcion, puedeEnviarOoad } from "../../../lib/estatus";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -37,7 +37,6 @@ function pendienteDe(f) {
 export default function AvisosPage() {
   const [a, setA] = useState(null);
   const [error, setError] = useState("");
-  const [errorOficio, setErrorOficio] = useState("");
   useEffect(() => { cargarAvisos().then(setA).catch((e) => setError("No se pudieron cargar los avisos: " + e.message)); }, []);
 
   const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "12px 14px", marginTop: 14 };
@@ -79,10 +78,7 @@ export default function AvisosPage() {
   if (!a) return <p>Armando la bandeja de avisos…</p>;
 
   const P = a.presupuesto;
-  const BotonOficio = ({ items }) => (
-    <button type="button" onClick={(e) => { e.preventDefault(); setErrorOficio(""); descargarOficio(items).catch((err) => setErrorOficio("No se pudo generar el oficio: " + err.message)); }}
-      style={{ background: "var(--verde)", color: "#fff", border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Generar oficio (Word)</button>
-  );
+  const paraOficio = a.resumen.filter((r) => ["oficio", "ampliacion"].includes(r.accion));
   const gestionDic = P.gestion.filter((x) => x.s.dictamen), gestionCta = P.gestion.filter((x) => !x.s.dictamen);
   const totalApoyo = (items) => { const m = {}; for (const { s } of items) for (const [ui, v] of s.apoyo || []) m[ui] = (m[ui] || 0) + v; return Object.entries(m); };
   const CUADROS = [
@@ -106,7 +102,7 @@ export default function AvisosPage() {
       <div style={card}>
         <strong style={{ fontSize: 15 }}>¿Qué facturas tienen dinero?</strong>
         <p style={{ fontSize: 12.5, color: "var(--texto-suave)", margin: "2px 0 10px" }}>
-          Facturas sin pagar. Con dictamen se mide el disponible acumulado del HGZ 2 y de otras unidades (IMKK036); compra emergente y PREI, la dispo de {a.mes} de su cuenta{a.dispoFecha ? ` (corte ${new Date(a.dispoFecha + "T00:00:00").toLocaleDateString("es-MX")})` : ""}. Se reparte en orden: primero las que ya están en OOAD, y entra solo la factura que cabe completa.
+          Facturas sin pagar. Con dictamen se mide el disponible acumulado del HGZ 2 y de otras unidades (IMKK036); compra emergente y PREI, la dispo de {a.mes} de su cuenta{a.dispoFecha ? ` (corte ${new Date(a.dispoFecha + "T00:00:00").toLocaleDateString("es-MX")})` : ""}. En cada dictamen se sugiere la combinación de facturas completas que más aprovecha el dinero; abajo la puedes cambiar.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {CUADROS.map(([href, color, items, t, sub]) => {
@@ -125,12 +121,9 @@ export default function AvisosPage() {
 
       <div style={card}>
         <Titulo id="p-oficio" color="#d69e2e" n={P.oficio.length} t="Proceden con oficio de apoyo" sub={`${money(suma(P.oficio))} · apoyo a pedir: ${totalApoyo(P.oficio).map(([ui, v]) => `UI ${ui} ${money(v)}`).join(", ") || "—"}`} />
-        {errorOficio && <p style={{ color: "var(--rojo)", fontSize: 13, margin: "0 0 6px" }}>{errorOficio}</p>}
-        {P.oficio.length ? agrupar(P.oficio, (x) => `${x.s.contrato?.numero_interno}|${x.s.dictamen}`).map(([k, items]) => (
-          <Grupo key={k} abierto titulo={`${items[0].s.contrato?.numero_interno} · ${items[0].s.contrato?.proveedores?.razon_social || ""}`} sub={`dictamen ${items[0].s.dictamen} · ${items.length} factura(s) · ${money(suma(items))} · apoyo: ${totalApoyo(items).map(([ui, v]) => `UI ${ui} ${money(v)}`).join(", ")}`}>
-            <div style={{ marginBottom: 6 }}><BotonOficio items={items} /></div>
-            <TablaFacturas items={items} tituloExtra="Apoyo" extra={({ s }) => <>{(s.apoyo || []).map(([ui, v]) => `UI ${ui} ${money(v)}`).join(", ")}{s.usaHg > 0 && <div style={{ color: "var(--texto-suave)" }}>y {money(s.usaHg)} del HGZ 2</div>}</>} />
-          </Grupo>
+        <p style={{ fontSize: 12.5, color: "var(--texto-suave)", margin: "0 0 4px" }}>Lista completa de cada contrato donde no alcanza, incluidas las facturas en el servicio o en firmas. Ya vienen marcadas las que más aprovechan el dinero; cambia las casillas si prefieres mandar otras. Nada se guarda: solo cambia el oficio que generas.</p>
+        {paraOficio.length ? paraOficio.map((r) => (
+          <ArmarOficio key={r.contrato.id + "|" + r.dictamen} r={r} ppto={(f) => (f.cr_contrarecibo && a.ppto[f.cr_contrarecibo]) || null} dondeVa={pendienteDe} />
         )) : <p style={{ fontSize: 13, margin: 0 }}>Ninguna factura necesita oficio de apoyo.</p>}
       </div>
 
@@ -181,7 +174,7 @@ export default function AvisosPage() {
                     return conOficio.length > 0 && (
                       <div style={{ fontWeight: 400, color: "var(--texto)", fontSize: 12.5, marginTop: 6 }}>
                         {r.accion === "ampliacion" ? "Para lo que alcanza: " : ""}oficio de apoyo para {conOficio.length} factura(s) por {money(suma(conOficio))} ({totalApoyo(conOficio).map(([ui, v]) => `UI ${ui} ${money(v)}`).join(", ")})
-                        <div style={{ marginTop: 4 }}><BotonOficio items={conOficio} /></div>
+                        <div style={{ marginTop: 4 }}><a href={`#of-${r.contrato.numero_interno}`} style={{ color: "var(--verde)", fontWeight: 600 }}>Ver lista completa y generar oficio</a></div>
                       </div>
                     );
                   })()}
