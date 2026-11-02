@@ -25,7 +25,7 @@ with objetivo (folio_ingreso, folio_proveedor, importe, pedido) as (values
 )
 update facturas f
    set estatus_general = 'en_revision',
-       estatus_pedido_recepcion = o.pedido
+       estatus_pedido_recepcion = o.pedido::estatus_pedido_recepcion
   from objetivo o
  where f.folio_ingreso = o.folio_ingreso
    and f.folio_proveedor = o.folio_proveedor
