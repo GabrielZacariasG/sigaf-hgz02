@@ -254,6 +254,8 @@ export default function Portal() {
                 {[
                   { n: avisos.ampliacion + avisos.oficio, t: `contrato(s) sin dinero${avisos.oficio ? ` · ${avisos.oficio} con oficio de apoyo` : ''}${avisos.porActualizar ? ` · ${avisos.porActualizar} dictamen(es) sin IMKK036 del mes` : ''}`, color: 'var(--rojo)', ancla: 'dictamen' },
                   { n: avisos.enError, t: 'CR con error de presupuesto en FINAT', color: 'var(--rojo)', ancla: 'error' },
+                  { n: avisos.ooadSinPR, t: 'en OOAD sin pedido-recepción', color: 'var(--rojo)', ancla: 'sin-pr' },
+                  { n: avisos.foliosSinFacturar, t: `folio(s) de subrogados sin facturar${avisos.tocaCorteFolios ? ' · ya toca corte' : ''}`, color: '#7c3aed', ancla: 'folios' },
                   { n: avisos.conPR, t: `con pedido-recepción listo, sin mandar a OOAD${avisos.prNuevos ? ` · ${avisos.prNuevos} nuevo(s)` : ''}`, color: '#2b6cb0', ancla: 'pr' },
                   { n: avisos.listasOOAD, t: `lista(s) para mandar a OOAD${avisos.listasSinDinero ? ` · ${avisos.listasSinDinero} sin dinero en dictamen` : ''}`, color: 'var(--verde)', ancla: 'ooad' },
                 ].map((x) => (

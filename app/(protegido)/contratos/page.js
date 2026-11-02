@@ -136,12 +136,12 @@ export default function ContratosPage() {
 
   // ---------- Exportar como la cédula ----------
   const exportar = () => {
-    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL", "Dictamen: asignado HGZ 2", "Dictamen: pagado FINAT", "Dictamen: saldo del mes HGZ 2", "Pendiente de pago SIGAF", "Faltante dictamen", "Corte FINAT", "Cobertura (meses)", "Meses que faltan", "Amp. disponible (20%)", "Comentario"];
+    const enc = ["Concepto", "Dictamen", "Tipo", "Contrato", "Contrato alterno", "Partida", "Proveedor", "Vigencia", "Administrador de contrato", "Importe máximo contrato", "Importe máximo unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Gasto fac + dev", "Saldo devengo", "% Avance", "Gasto promedio mensual", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "TOTAL", "Dictamen: asignado HGZ 2", "Dictamen: pagado FINAT", "Dictamen: saldo del mes HGZ 2", "Pendiente de pago SIGAF", "Faltante dictamen", "Corte FINAT", "Cobertura (meses)", "Meses que faltan", "Amp. disponible (20%)", "Comentario"];
     const aoa = [[`CONTROL DE CONTRATOS · ${capitulo === "*" ? "Todos" : capitulo} · SIGAF ${new Date().toLocaleDateString("es-MX")}`], []];
     for (const b of bloques) {
       aoa.push([`${b.cuenta} · ${b.nombre}`]); aoa.push(enc);
       for (const { c, x, dic } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
-        x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo,
+        x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.promedio, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo,
         ...(dic ? [dic.asignado, dic.pagado, dic.viejo ? "Falta IMKK036 del mes" : dic.disponible, dic.pendiente, Math.max(0, dic.faltante), fechaTxt(dic.corte)] : ["", "", "", "", "", ""]),
         x.cobertura == null ? "" : Math.round(x.cobertura * 10) / 10, x.mesesRestantes, x.maxU ? x.ampDisponible : "", (datos.comentarios[c.id] || [])[0]?.texto || ""]);
       for (const r of b.reservas) aoa.push([r.concepto, r.estatus, "", "", "", b.cuenta, r.estatus.toUpperCase(), "", "", "", r.importe]);
@@ -164,7 +164,7 @@ export default function ContratosPage() {
   const thFija = (i) => ({ ...th, left: IZQ[i], zIndex: 3, minWidth: ANCHO[i], maxWidth: ANCHO[i] });
   const colorAvance = (a) => (a >= 1 ? "#dc2626" : a >= 0.8 ? "#d97706" : "var(--verde)");
   const Semaforo = ({ x }) => x.avisos.length ? <span title={x.avisos.map((a) => a.t).join(" · ")} style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, marginRight: 6, background: x.avisos.some((a) => a.nivel === "rojo") ? "#dc2626" : "#d97706" }} /> : null;
-  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total", "Saldo del mes dictamen HGZ 2", "¿Hay dinero este mes?", "Cobertura (meses que alcanza de los que faltan)", "Amp. disponible (hasta 20%)", "Comentario"];
+  const ENC = ["Concepto", "Contrato", "Dictamen", "Tipo", "Alterno", "Proveedor", "Vigencia", "Administrador", "Máx. contrato", "Máx. unidad", "Amp o red", "Enlace", "Pagos", "Gasto facturado", "Devengo", "Fac + dev", "Saldo", "% Avance", "Gasto promedio mensual", "Proyección", "Sobrante / Faltante", "Pasivo", ...MESES.slice(1), "Total", "Disponible acumulado HGZ 2", "¿Hay dinero?", "Cobertura (meses que alcanza de los que faltan)", "Amp. disponible (hasta 20%)", "Comentario"];
 
   if (msg && !datos) return <p style={{ color: "var(--rojo)" }}>{msg}</p>;
   if (!datos) return <p>Cargando contratos…</p>;
@@ -186,6 +186,7 @@ export default function ContratosPage() {
           <td style={tdN}>{money(x.facDev)}</td>
           <td style={{ ...tdN, color: x.saldo < -0.5 ? "var(--rojo)" : undefined }}>{money(x.saldo)}</td>
           <td style={{ ...tdN, color: colorAvance(x.avance), fontWeight: 700 }}>{x.enlace ? pctTxt(x.avance) : ""}</td>
+          <td style={tdN} title={x.masAlto ? `Promedio entre los meses con gasto. Para lo que falta se estima con el mes más alto: ${money(x.ritmo)}` : "Gasto ÷ solo los meses donde hubo gasto"}>{x.promedio ? money(x.promedio) : ""}</td>
           <td style={tdN}>{money(x.proyeccion)}</td>
           <td style={{ ...tdN, color: x.sobrante < -0.5 ? "var(--rojo)" : undefined, fontWeight: 600 }}>{money(x.sobrante)}</td>
           <td style={tdN}>{x.pasivo ? money(x.pasivo) : ""}</td>
@@ -196,7 +197,7 @@ export default function ContratosPage() {
             {!dic ? "" : dic.viejo ? `Falta IMKK036 de ${dic.mesNombre}` : dic.faltante > 0.5 ? `No · faltan ${money(dic.faltante)}` : "Sí"}
           </td>
           <td style={{ ...tdN, color: x.cobertura != null && x.cobertura < x.mesesRestantes ? "var(--rojo)" : undefined }}
-            title={x.cobertura == null ? "Sin gasto mensual para calcular" : `El saldo alcanza ${x.cobertura.toFixed(1)} meses al ritmo de ${money(x.promedio)} al mes; faltan ${x.mesesRestantes} meses de vigencia`}>
+            title={x.cobertura == null ? "Sin gasto mensual para calcular" : `El saldo alcanza ${x.cobertura.toFixed(1)} meses al ritmo de ${money(x.ritmo)} al mes; faltan ${x.mesesRestantes} meses de vigencia`}>
             {x.cobertura == null ? "" : `${x.cobertura.toFixed(1)} de ${x.mesesRestantes}`}
           </td>
           <td style={tdN} title={`Tope ${c.tope_ampliacion_pct ?? 20}%: ${money(x.tope)} · ampliado por convenio: ${money(x.ampConvenio)}`}>{x.maxU ? money(x.ampDisponible) : ""}</td>
@@ -331,7 +332,7 @@ export default function ContratosPage() {
         <div style={{ overflow: "auto", maxHeight: "calc(100vh - 170px)", border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
           <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: "8px 10px" }}>
             <strong>Devengo</strong> = servicio que ya se recibió y todavía no se factura. Solo se captura en meses que ya pasaron, dentro de la vigencia
-            y que aún no tienen factura (renglón morado; Enter o clic fuera para guardar). En gris va la sugerencia: el promedio de los meses facturados.
+            y que aún no tienen factura (renglón morado; Enter o clic fuera para guardar). En gris va la sugerencia: el promedio de los meses facturados (en S6M0048, el mes más alto).
             Cuando llegue la factura de ese mes, el devengo se descuenta solo.
           </p>
           <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
@@ -384,7 +385,7 @@ export default function ContratosPage() {
         </div>
       )}
       <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
-        Enlace = máximo de la unidad + ampliaciones. Saldo = enlace − (facturado + devengo). Proyección = promedio mensual de los meses transcurridos × meses de vigencia en {ANIO} (+ pasivo).
+        Enlace = máximo de la unidad + ampliaciones. Saldo = enlace − (facturado + devengo). Gasto promedio mensual = gasto ÷ solo los meses donde hubo gasto. Proyección = gasto transcurrido + promedio × meses de vigencia que faltan (+ pasivo).
         Semáforo: amarillo al 80% del contrato o a 30 días de vencer; rojo si se rebasa o si la proyección no alcanza.
       </p>
     </div>

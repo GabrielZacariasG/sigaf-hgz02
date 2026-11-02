@@ -9,7 +9,7 @@ import {
   FLUJO_GENERAL, LABEL_GENERAL,
   FLUJO_FIRMAS, LABEL_FIRMAS,
   FLUJO_PEDIDO, LABEL_PEDIDO,
-  puedeEnviarOoad, generaPedidoRecepcion,
+  puedeEnviarOoad, generaPedidoRecepcion, periodoTxt, pasivosPrimero,
 } from "../../../lib/estatus";
 import { leerTodo } from "../../../lib/paginar";
 
@@ -154,7 +154,7 @@ export default function FacturasListaPage() {
       // Todo por páginas: Supabase corta en 1,000 filas y el historial (3 ejes) ya pasa de eso.
       const [rFac, a, h] = await Promise.all([
         leerTodo((d, hst) => supabase.from("facturas").select(
-          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
+          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
         ).eq("anulada", false).order("id").range(d, hst)),
         leerTodo((d, hst) => supabase.from("alertas_config").select("circuito, estatus, dias_umbral").range(d, hst)),
         leerTodo((d, hst) => supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha").order("id").range(d, hst)),
@@ -458,7 +458,7 @@ export default function FacturasListaPage() {
       if (!o) { setMensaje("No se encontró el oficio a reimprimir."); return; }
       const ids = (o.factura_ids && o.factura_ids.length) ? o.factura_ids : ["00000000-0000-0000-0000-000000000000"];
       const { data: fs } = await supabase.from("facturas")
-        .select("id, folio_proveedor, importe_factura, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), partidas ( cuenta_finat, cuenta_prei )")
+        .select("id, folio_proveedor, importe_factura, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), partidas ( cuenta_finat, cuenta_prei )")
         .in("id", ids);
       const fil = (fs || []).map((f) => ({ ...f, prov: f.proveedores?.razon_social || "—", contrato: f.contratos?.numero_interno || "—", pp: f.partidas?.cuenta_finat || f.partidas?.cuenta_prei || "—" }));
       const fecha = o.created_at ? new Date(o.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) : null;
@@ -618,12 +618,12 @@ export default function FacturasListaPage() {
                       : "Por medio del presente se devuelven a usted las siguientes facturas para su corrección, mismas que a continuación se relacionan:"}
                   </p>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-                    <thead><tr><th style={oTh}>Cuenta (P.P.)</th><th style={oTh}>Contrato</th><th style={oTh}>Fecha Fact.</th><th style={oTh}>Folio</th><th style={{ ...oTh, textAlign: "right" }}>Importe</th><th style={oTh}>Proveedor</th></tr></thead>
+                    <thead><tr><th style={oTh}>Cuenta (P.P.)</th><th style={oTh}>Contrato</th><th style={oTh}>Fecha Fact.</th><th style={oTh}>Periodo</th><th style={oTh}>Folio</th><th style={{ ...oTh, textAlign: "right" }}>Importe</th><th style={oTh}>Proveedor</th></tr></thead>
                     <tbody>
-                      {d.filas.map((f) => (
-                        <tr key={f.id}><td style={oTd}>{f.pp}</td><td style={oTd}>{f.contrato}</td><td style={oTd}>{fFact(f)}</td><td style={oTd}>{f.folio_proveedor}</td><td style={{ ...oTd, textAlign: "right" }}>{money(f.importe_factura)}</td><td style={oTd}>{f.prov}</td></tr>
+                      {pasivosPrimero(d.filas).map((f) => (
+                        <tr key={f.id}><td style={oTd}>{f.pp}</td><td style={oTd}>{f.contrato}</td><td style={oTd}>{fFact(f)}</td><td style={oTd}>{periodoTxt(f)}{f.es_pasivo ? <strong> · PASIVO</strong> : null}</td><td style={oTd}>{f.folio_proveedor}</td><td style={{ ...oTd, textAlign: "right" }}>{money(f.importe_factura)}</td><td style={oTd}>{f.prov}</td></tr>
                       ))}
-                      <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={4}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
+                      <tr><td style={{ ...oTd, fontWeight: 700 }} colSpan={5}>Total ({d.filas.length})</td><td style={{ ...oTd, textAlign: "right", fontWeight: 700 }}>{money(total)}</td><td style={oTd}></td></tr>
                     </tbody>
                   </table>
                   {!esPago && (

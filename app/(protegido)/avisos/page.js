@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { cargarAvisos } from "../../../lib/avisos";
 import ArmarOficio from "../../../lib/ArmarOficio";
-import { LABEL_GENERAL, LABEL_FIRMAS, generaPedidoRecepcion, puedeEnviarOoad } from "../../../lib/estatus";
+import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO, generaPedidoRecepcion, puedeEnviarOoad, periodoTxt, pasivosPrimero } from "../../../lib/estatus";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const COLOR = { verde: ["#e6f4ea", "#1e7a3c"], ambar: ["#fef3c7", "#92400e"], rojo: ["#fee2e2", "#b91c1c"], validada: ["#e0ecff", "#1d4ed8"], gris: ["#f1f1f1", "#555"] };
@@ -25,9 +25,9 @@ function agrupar(items, clave) {
 }
 // Firmas y pedido-recepción que le faltan para poder ir a OOAD
 function pendienteDe(f) {
-  if (["en_tramite_ooad", "enviada_ooad"].includes(f.estatus_general)) return LABEL_GENERAL[f.estatus_general] || f.estatus_general;
   const cap = f.capitulos?.nombre || "";
   const llevaPR = generaPedidoRecepcion(cap, f.partidas?.cuenta_finat || f.partidas?.cuenta_prei);
+  if (["en_tramite_ooad", "enviada_ooad"].includes(f.estatus_general)) return (LABEL_GENERAL[f.estatus_general] || f.estatus_general) + (llevaPR && f.estatus_pedido_recepcion !== "generado" && !f.cr_contrarecibo ? " · sin pedido-recepción" : "");
   const firmasOk = puedeEnviarOoad(f.estatus_firmas, "generado", cap);
   const prOk = !llevaPR || f.estatus_pedido_recepcion === "generado";
   if (firmasOk && prOk) return "Firmas y pedido-recepción completos";
@@ -53,12 +53,13 @@ export default function AvisosPage() {
   // Tabla de facturas de una lista de presupuesto; "extra" es la última columna (lo que falta o el apoyo)
   const TablaFacturas = ({ items, extra, tituloExtra }) => (
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
-      <thead><tr>{["Factura", "Proveedor", "Contrato", "Importe", "Dónde va", "CR", tituloExtra].filter(Boolean).map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-      <tbody>{items.map(({ f, s }) => (
+      <thead><tr>{["Factura", "Proveedor", "Contrato", "Periodo", "Importe", "Dónde va", "CR", tituloExtra].filter(Boolean).map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+      <tbody>{pasivosPrimero(items, (x) => x.f).map(({ f, s }) => (
         <tr key={f.id}>
           <td style={td}><LinkF f={f} /><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td>
           <td style={td}>{f.proveedores?.razon_social}</td>
           <td style={td}>{s.contrato?.numero_interno}</td>
+          <td style={{ ...td, fontSize: 12.5 }}>{periodoTxt(f)}{f.es_pasivo && <div style={{ fontWeight: 700 }}>PASIVO</div>}</td>
           <td style={tdN}>{money(f.importe_factura)}</td>
           <td style={td}>{pendienteDe(f)}</td>
           <td style={td}>{f.cr_contrarecibo || "—"}{s.error && <div style={{ color: "var(--rojo)", fontWeight: 600, fontSize: 12 }}>error de presupuesto</div>}</td>
@@ -150,6 +151,34 @@ export default function AvisosPage() {
           <TablaFacturas items={P.aclarar} />
         </div>
       )}
+
+      {/* En OOAD sin pedido-recepción */}
+      {a.ooadSinPR.length > 0 && (
+        <div style={card}>
+          <Titulo id="sin-pr" color="var(--rojo)" n={a.ooadSinPR.length} t="Ya están en OOAD sin pedido-recepción" sub={`${money(a.ooadSinPR.reduce((t, f) => t + (Number(f.importe_factura) || 0), 0))} · salieron antes del candado; desde entonces SIGAF no deja hacer oficio de pago sin él`} />
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr>{["Factura", "Proveedor", "Periodo", "Importe", "Firmas", "Pedido-recepción"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{pasivosPrimero(a.ooadSinPR).map((f) => (
+              <tr key={f.id}><td style={td}><LinkF f={f} /><div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{f.folio_proveedor}</div></td><td style={td}>{f.proveedores?.razon_social}</td><td style={{ ...td, fontSize: 12.5 }}>{periodoTxt(f)}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}</td><td style={{ ...td, color: "var(--rojo)", fontWeight: 600 }}>{LABEL_PEDIDO[f.estatus_pedido_recepcion] || f.estatus_pedido_recepcion}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Corte de folios de subrogados sin facturar */}
+      <div style={card}>
+        <Titulo id="folios" color="#7c3aed" n={a.folios.n} t="Folios de subrogados sin facturar" sub={`${money(a.folios.importe)} en devengo${a.folios.ultimaCarga ? ` · última carga hace ${a.folios.diasCarga} día(s)` : ""}`} />
+        {a.folios.tocaCorte && <p style={{ fontSize: 13, margin: "0 0 8px", padding: "6px 10px", background: "#fef3c7", borderRadius: 8, color: "#92400e" }}>Ya toca corte: baja el reporte de CD_SMS y súbelo en <Link href="/comprobantes" style={{ fontWeight: 600 }}>Cargar reportes</Link> (cada 1 o 2 semanas).</p>}
+        {a.folios.grupos.map((g) => (
+          <Grupo key={g.contrato} titulo={`${g.contrato} · ${g.folios.length} folio(s) · ${money(g.importe)}`} sub={`el más viejo tiene ${g.masViejo} día(s)${g.mas30 ? ` · ${money(g.mas30)} con más de 30 días` : ""}`}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Folio", "Fecha", "Días", "Estudio", "Importe"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <tbody>{g.folios.map((f) => <tr key={f.clave}><td style={td}>{f.folio}</td><td style={td}>{f.fecha ? new Date(f.fecha + "T00:00:00").toLocaleDateString("es-MX") : "—"}</td><td style={{ ...td, color: f.edad > 30 ? "var(--rojo)" : undefined }}>{f.edad ?? "—"}</td><td style={td}>{f.estudio}</td><td style={tdN}>{money(f.importe)}</td></tr>)}</tbody>
+            </table>
+          </Grupo>
+        ))}
+        {!a.folios.n && <p style={{ fontSize: 13, margin: 0 }}>No hay folios sin facturar.</p>}
+      </div>
 
       {/* 1. Dictámenes que no alcanzan */}
       <div style={card}>
