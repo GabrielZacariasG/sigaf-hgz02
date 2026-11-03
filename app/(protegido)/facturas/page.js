@@ -338,6 +338,31 @@ export default function FacturasListaPage() {
     setEnviando(false);
   };
 
+  // Marca varias facturas como AUTORIZADAS por el Adm. de Contrato (firma ya realizada).
+  const autorizarAdmContrato = async () => {
+    const elegibles = seleccionadas.filter((f) => f.capNom !== "Compra Emergente" && f.estatus_firmas !== "autorizada_admin_contrato");
+    const noAplica = seleccionadas.length - elegibles.length;
+    if (elegibles.length === 0) {
+      setMensaje("Ninguna de las seleccionadas aplica (Compra Emergente no usa esta firma, o ya estaban autorizadas por el Adm. de Contrato).");
+      return;
+    }
+    if (!window.confirm(`¿Marcar ${elegibles.length} factura(s) como AUTORIZADAS por el Administrador de Contrato?`)) return;
+    setEnviando(true); setMensaje("");
+    try {
+      const ids = elegibles.map((f) => f.id);
+      for (let i = 0; i < ids.length; i += 25) {
+        const lote = ids.slice(i, i + 25);
+        await Promise.all(lote.map((id) => supabase.from("facturas").update({ estatus_firmas: "autorizada_admin_contrato" }).eq("id", id)));
+      }
+      setFacturas((prev) => prev.map((f) => (ids.includes(f.id)
+        ? { ...f, estatus_firmas: "autorizada_admin_contrato", etapa: etapaDe({ ...f, estatus_firmas: "autorizada_admin_contrato" }) }
+        : f)));
+      setSel({});
+      setMensaje(`✅ ${ids.length} factura(s) marcadas como autorizadas por el Adm. de Contrato${noAplica > 0 ? ` · ${noAplica} no aplicaba(n)` : ""}.`);
+    } catch (e) { setMensaje("No se pudo autorizar: " + e.message); }
+    setEnviando(false);
+  };
+
   const confirmarEnvio = async (imprimir = false) => {
     setEnviando(true);
     try {
@@ -970,6 +995,7 @@ export default function FacturasListaPage() {
                 <button className="boton secundario" onClick={() => setSel({})}>Quitar</button>
                 <button className="boton secundario" onClick={enviarServicio}>Enviar al servicio →</button>
                 <button className="boton secundario" onClick={enviarAdmContrato} disabled={enviando}>Enviar al Adm. de Contrato →</button>
+                <button className="boton secundario" onClick={autorizarAdmContrato} disabled={enviando}>✔ Autorizar (Adm. de Contrato)</button>
                 <button className="boton secundario" onClick={devolverProveedor}>Devolver al proveedor →</button>
                 <button className="boton" onClick={enviarOOAD}>Enviar a OOAD (pago) →</button>
               </div>
