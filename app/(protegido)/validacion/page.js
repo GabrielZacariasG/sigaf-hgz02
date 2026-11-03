@@ -592,6 +592,21 @@ export default function ValidacionServicioPage() {
         </div>
       )}
 
+      {jefeId && (
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          {[
+            { n: pendientes.length, t: "por validar", c: "#7c3aed" },
+            { n: (validadas || []).filter((v) => { const d = new Date(v._val?.created_at); const h = new Date(); return d.getMonth() === h.getMonth() && d.getFullYear() === h.getFullYear(); }).length, t: "validadas este mes", c: "var(--verde)" },
+            { n: new Set((validadas || []).map((v) => v._val?.oficio_folio).filter(Boolean)).size, t: "oficios generados", c: "#2b6cb0" },
+          ].map((k) => (
+            <div key={k.t} style={{ flex: "1 1 160px", background: "var(--blanco)", border: "1px solid var(--borde)", borderLeft: `5px solid ${k.c}`, borderRadius: 11, padding: "11px 14px" }}>
+              <div style={{ fontSize: 23, fontWeight: 800, color: k.c }}>{k.n}</div>
+              <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>{k.t}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {mensaje && <p style={{ fontSize: 13, color: mensaje.startsWith("Oficio") ? "var(--verde)" : "var(--rojo)", marginTop: 10, fontWeight: 600 }}>{mensaje}</p>}
 
       {!jefeId ? (
