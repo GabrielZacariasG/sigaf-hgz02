@@ -12,6 +12,7 @@ import {
   puedeEnviarOoad, generaPedidoRecepcion, periodoTxt, pasivosPrimero,
 } from "../../../lib/estatus";
 import { leerTodo } from "../../../lib/paginar";
+import ResumenServicios from "./ResumenServicios";
 
 // Estatus generales desde los que una factura puede salir a pago con oficio EP.
 const ORIGEN_OOAD = ["capturada", "en_revision", "enviada_ooad"];
@@ -35,7 +36,7 @@ function ejeInfo(hist, circuito, flujo, valor, alertasMap) {
   const dias = entrada != null ? diasEntre(entrada) : null;
   const lim = alertasMap[`${circuito}:${valor}`];
   const estancada = lim != null && dias != null && dias > lim;
-  return { dias, lim, estancada, idx: flujo.indexOf(valor), total: flujo.length - 1 };
+  return { entrada, dias, lim, estancada, idx: flujo.indexOf(valor), total: flujo.length - 1 };
 }
 
 const ESTATUS_COLOR = {
@@ -86,6 +87,7 @@ export default function FacturasListaPage() {
   const [enviando, setEnviando] = useState(false);
   const [avisoNoConfirmado, setAvisoNoConfirmado] = useState(false); // imprimieron borrador sin confirmar
   const [provJefes, setProvJefes] = useState({}); // proveedor_id -> [{nombre, jefatura}]
+  const [verResumenServ, setVerResumenServ] = useState(false); // resumen de facturas en servicio (reuniones)
   const [deepHecho, setDeepHecho] = useState(false); // enlace ?accion=memo|pago&id= (desde el detalle)
   const [deepOrigenId, setDeepOrigenId] = useState(null); // factura de la que vino el enlace, para "Volver" al detalle
   const router = useRouter();
@@ -154,7 +156,7 @@ export default function FacturasListaPage() {
       // Todo por páginas: Supabase corta en 1,000 filas y el historial (3 ejes) ya pasa de eso.
       const [rFac, a, h] = await Promise.all([
         leerTodo((d, hst) => supabase.from("facturas").select(
-          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
+          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, ce_destino, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
         ).eq("anulada", false).order("id").range(d, hst)),
         leerTodo((d, hst) => supabase.from("alertas_config").select("circuito, estatus, dias_umbral").range(d, hst)),
         leerTodo((d, hst) => supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha").order("id").range(d, hst)),
@@ -678,6 +680,8 @@ export default function FacturasListaPage() {
   }
 
 
+  if (verResumenServ) return <ResumenServicios facturas={facturas} provJefes={provJefes} onCerrar={() => setVerResumenServ(false)} />;
+
   // ---- MEMORÁNDUM(s) de envío al servicio, uno por jefe (hoja carta, limpio) ----
   if (memo) {
     const mH = { textAlign: "left", fontSize: 12, padding: "8px 12px", borderBottom: "2px solid #333", textTransform: "uppercase", letterSpacing: 0.4, color: "#333" };
@@ -843,9 +847,12 @@ export default function FacturasListaPage() {
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ fontSize: 22, margin: 0 }}>Seguimiento de facturas</h1>
-        <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>
-          {facturas.length} facturas · {money(resumen.montoTotal)} · {resumen.conCR} con CR
-          {resumen.estancadas > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>{" · "}{resumen.estancadas} estancada(s)</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, color: "var(--texto-suave)" }}>
+            {facturas.length} facturas · {money(resumen.montoTotal)} · {resumen.conCR} con CR
+            {resumen.estancadas > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>{" · "}{resumen.estancadas} estancada(s)</span>}
+          </div>
+          <button className="boton secundario" onClick={() => setVerResumenServ(true)} disabled={cargando}>Resumen fact. en servicio</button>
         </div>
       </div>
       {mensaje && (
