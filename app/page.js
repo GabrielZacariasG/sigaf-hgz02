@@ -132,10 +132,10 @@ export default function Portal() {
       alerta: true, ruta: '/facturas', listo: true,
     },
     {
-      paso: 'Paso 3', titulo: 'Disponibilidad presupuestal',
-      desc: 'Gasto real vs FINAT por cuenta, con partición pasivo / ejercicio corriente.',
+      paso: 'Paso 3', titulo: 'Cédula de gasto',
+      desc: 'Avance presupuestal por cuenta (presupuesto, gasto, pasivo, disponible) — la cédula que ya usan.',
       cifra: c.cuentas, etiqueta: 'cuenta(s) con datos',
-      ruta: '/disponibilidad', listo: true,
+      ruta: '/cedula', listo: true,
     },
     {
       paso: 'Servicio', titulo: 'Validación del servicio',

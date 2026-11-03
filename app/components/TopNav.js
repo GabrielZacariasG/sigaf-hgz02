@@ -37,18 +37,15 @@ function menuPara(perfil) {
       { label: "Oficios emitidos", href: "/oficios", desc: "Buscar por folio" },
     ] },
     { label: "Presupuesto", icon: "💰", items: [
-      { label: "Disponibilidad", href: "/disponibilidad", desc: "Gasto real vs FINAT por cuenta" },
-      { label: "Cierre del día", href: "/cierre", desc: "Dispo de hoy vs ayer" },
-      { label: "Cédula de gasto", href: "/cedula", desc: "Vista completa por área" },
+      { label: "Cédula de gasto", href: "/cedula", desc: "Avance presupuestal (lo que se usa)" },
+      { label: "Contratos", href: "/contratos", desc: "Cédula de contratos y apoyos" },
+      { label: "Dictámenes", href: "/dictamenes", desc: "Suficiencia FINAT (IMKK036)" },
+      { label: "Cierre del día", href: "/cierre", desc: "Compara dispo y sugiere pagadas" },
     ] },
-    { label: "Catálogos", icon: "📚", items: [
-      { label: "Contratos y precios", href: "/contratos", desc: "Contratos y servicios" },
-      { label: "Catálogos editables", href: "/catalogos", desc: "Proveedores, cuentas, jefaturas" },
-    ] },
+    { label: "Catálogos", href: "/catalogos", icon: "📚" },
     { label: "Reportes", icon: "📈", items: [
-      { label: "Cargar reportes", href: "/comprobantes", desc: "Importar OOAD / FINAT" },
-      { label: "Exportar reportes", href: "/reportes", desc: "Excel o PDF" },
-      { label: "Dictámenes", href: "/dictamenes", desc: "Suficiencia por contrato" },
+      { label: "Cargar reportes", href: "/comprobantes", desc: "OOAD / FINAT + disponibilidad" },
+      { label: "Exportar reportes", href: "/reportes", desc: "Consultas en Excel o PDF" },
     ] },
   ];
 }
