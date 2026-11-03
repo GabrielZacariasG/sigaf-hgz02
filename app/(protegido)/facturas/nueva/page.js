@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "../../../../lib/supabaseClient";
 import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe, ID_NUEVA } from "../../../../lib/avisos";
@@ -499,9 +500,11 @@ export default function NuevaFacturaPage() {
 
   return (
     <div style={{ maxWidth: paso1 ? 520 : 720, margin: "0 auto" }}>
+      <nav style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 8 }}>
+        <Link href="/" style={{ color: "var(--verde)" }}>Inicio</Link> › <Link href="/facturas" style={{ color: "var(--verde)" }}>Facturas</Link> › <span>Capturar</span>
+      </nav>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-        <button type="button" className="boton secundario" onClick={() => router.push("/facturas")} style={{ fontSize: 13 }}>← Regresar</button>
-        <button type="button" onClick={() => router.push("/")} style={{ fontSize: 13, color: "var(--texto-suave)", background: "none", border: "none", cursor: "pointer" }}>Menú</button>
+        <button type="button" className="boton secundario" onClick={() => { if (typeof window !== "undefined" && window.history.length > 1) router.back(); else router.push("/facturas"); }} style={{ fontSize: 13 }}>← Regresar</button>
       </div>
       {/* Encabezado con pasos */}
       <p style={{ fontSize: 12, color: "var(--texto-suave)", margin: 0 }}>Paso {paso} de 2</p>

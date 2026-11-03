@@ -414,9 +414,11 @@ export default function FacturaEstatusPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <nav style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 8 }}>
+        <Link href="/" style={{ color: "var(--verde)" }}>Inicio</Link> › <Link href="/facturas" style={{ color: "var(--verde)" }}>Facturas</Link> › <span>Folio {factura.folio_proveedor}</span>
+      </nav>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
-        <button type="button" className="boton secundario" onClick={() => router.push("/facturas")} style={{ fontSize: 13 }}>← Regresar</button>
-        <Link href="/" style={{ fontSize: 13, color: "var(--texto-suave)" }}>Menú</Link>
+        <button type="button" className="boton secundario" onClick={() => { if (typeof window !== "undefined" && window.history.length > 1) router.back(); else router.push("/facturas"); }} style={{ fontSize: 13 }}>← Regresar</button>
         {puedeEliminar && (
           <button type="button" onClick={eliminarFactura} disabled={eliminando}
             style={{ marginLeft: "auto", fontSize: 13, background: "transparent", color: "var(--rojo)", border: "1px solid var(--rojo)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
