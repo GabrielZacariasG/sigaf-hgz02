@@ -143,12 +143,6 @@ export default function Portal() {
       cifra: c.facturas, etiqueta: 'facturas', ruta: '/validacion', listo: true,
     },
     {
-      paso: 'Cierre', titulo: 'Cierre por disponibilidad',
-      desc: 'Sube la disponibilidad del día; SIGAF compara con el día anterior y te sugiere, por cuenta, qué facturas se pagaron (gasto reflejado) o se revirtieron. Tú capturas el CR y confirmas.',
-      cifra: '💧', etiqueta: 'día vs día anterior',
-      ruta: '/cierre', listo: true,
-    },
-    {
       paso: 'Consulta', titulo: 'Oficios emitidos',
       desc: 'Busca por folio los oficios de envío a pago, devolución y envío a servicio ya generados.',
       cifra: '🔎', etiqueta: 'buscar por folio',
@@ -171,12 +165,6 @@ export default function Portal() {
       desc: 'Estado de la facturación para el Subdirector Administrativo: por etapa y por capítulo (solo consulta).',
       cifra: '📋', etiqueta: 'estado de facturación',
       ruta: '/admin', listo: true,
-    },
-    {
-      paso: 'Automatizar', titulo: 'Conciliar reportes',
-      desc: 'Suspendido temporalmente — el cierre de pago se hace ahora desde "Cierre por disponibilidad".',
-      cifra: '⛔', etiqueta: 'suspendido',
-      ruta: '/conciliar', listo: false, nota: 'Suspendido temporalmente',
     },
   ];
 

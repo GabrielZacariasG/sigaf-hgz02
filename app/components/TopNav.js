@@ -40,7 +40,6 @@ function menuPara(perfil) {
       { label: "Cédula de gasto", href: "/cedula", desc: "Avance presupuestal (lo que se usa)" },
       { label: "Contratos", href: "/contratos", desc: "Cédula de contratos y apoyos" },
       { label: "Dictámenes", href: "/dictamenes", desc: "Suficiencia FINAT (IMKK036)" },
-      { label: "Cierre del día", href: "/cierre", desc: "Compara dispo y sugiere pagadas" },
     ] },
     { label: "Catálogos", href: "/catalogos", icon: "📚" },
     { label: "Reportes", icon: "📈", items: [
