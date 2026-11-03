@@ -119,64 +119,27 @@ export default function Portal() {
   if (cargando) return <p className="cargando">Cargando…</p>;
 
   const tarjetas = [
-    {
-      paso: 'Paso 1', titulo: 'Ingreso de facturas',
-      desc: 'Capturar las facturas recibidas del proveedor.',
-      cifra: c.facturas, etiqueta: 'facturas capturadas',
-      ruta: '/facturas/nueva', listo: true,
-    },
-    {
-      paso: 'Paso 2', titulo: 'Seguimiento de facturas',
-      desc: 'Estatus general + circuitos de firmas y pedido-recepción, con alertas de estancamiento.',
-      cifra: c.estancadas, etiqueta: `estancada(s) · ${c.activas} en seguimiento`,
-      alerta: true, ruta: '/facturas', listo: true,
-    },
-    {
-      paso: 'Paso 3', titulo: 'Cédula de gasto',
-      desc: 'Avance presupuestal por cuenta (presupuesto, gasto, pasivo, disponible) — la cédula que ya usan.',
-      cifra: c.cuentas, etiqueta: 'cuenta(s) con datos',
-      ruta: '/cedula', listo: true,
-    },
-    {
-      paso: 'Servicio', titulo: 'Validación del servicio',
-      desc: 'El jefe de servicio valida las facturas que se le enviaron y genera el oficio de cumplimiento/incumplimiento.',
-      cifra: c.facturas, etiqueta: 'facturas', ruta: '/validacion', listo: true,
-    },
-    {
-      paso: 'Consulta', titulo: 'Oficios emitidos',
-      desc: 'Busca por folio los oficios de envío a pago, devolución y envío a servicio ya generados.',
-      cifra: '🔎', etiqueta: 'buscar por folio',
-      ruta: '/oficios', listo: true,
-    },
-    {
-      paso: 'Consulta', titulo: 'Catálogos',
-      desc: 'Contratos, precios, proveedores, cuentas y jefaturas — editable.',
-      cifra: c.contratos, etiqueta: 'contratos',
-      ruta: '/catalogos', listo: true,
-    },
-    {
-      paso: 'Consulta', titulo: 'Reportes',
-      desc: 'Consultas financieras: facturas, conciliación, vigencias… en Excel o PDF.',
-      cifra: '📊', etiqueta: 'exportables',
-      ruta: '/reportes', listo: true,
-    },
-    {
-      paso: 'Dirección', titulo: 'Panel del Administrador',
-      desc: 'Estado de la facturación para el Subdirector Administrativo: por etapa y por capítulo (solo consulta).',
-      cifra: '📋', etiqueta: 'estado de facturación',
-      ruta: '/admin', listo: true,
-    },
+    // ---- Facturas ----
+    { grupo: 'Facturas', icon: '📋', titulo: 'Seguimiento', desc: 'Estatus general + circuitos de firmas y pedido-recepción, con alertas de estancamiento.', cifra: c.estancadas, etiqueta: `estancada(s) · ${c.activas} en seguimiento`, alerta: true, ruta: '/facturas' },
+    { grupo: 'Facturas', icon: '＋', titulo: 'Capturar factura', desc: 'Ingreso de las facturas recibidas del proveedor.', cifra: c.facturas, etiqueta: 'facturas capturadas', ruta: '/facturas/nueva' },
+    { grupo: 'Facturas', icon: '✔️', titulo: 'Validación del servicio', desc: 'El jefe valida las facturas que se le enviaron y genera el oficio de cumplimiento/incumplimiento.', cifra: '→', etiqueta: 'bandeja de jefes', ruta: '/validacion' },
+    { grupo: 'Facturas', icon: '📨', titulo: 'Oficios emitidos', desc: 'Envío a pago, devolución y validación. Busca por folio.', cifra: '🔎', etiqueta: 'buscar por folio', ruta: '/oficios' },
+    // ---- Presupuesto ----
+    { grupo: 'Presupuesto', icon: '📑', titulo: 'Cédula de gasto', desc: 'Avance presupuestal por cuenta (presupuesto, gasto, pasivo, disponible) — la cédula que ya usan.', cifra: c.cuentas, etiqueta: 'cuenta(s) con datos', ruta: '/cedula' },
+    { grupo: 'Presupuesto', icon: '📁', titulo: 'Contratos', desc: 'Cédula de contratos: gasto, pagos, pasivo y apoyos por contrato.', cifra: c.contratos, etiqueta: 'contratos', ruta: '/contratos' },
+    { grupo: 'Presupuesto', icon: '🧾', titulo: 'Dictámenes', desc: 'Suficiencia FINAT (IMKK036) por contrato y mes.', cifra: '📋', etiqueta: 'suficiencia', ruta: '/dictamenes' },
+    // ---- Catálogos y reportes ----
+    { grupo: 'Catálogos y reportes', icon: '📚', titulo: 'Catálogos', desc: 'Contratos, precios, proveedores, cuentas y jefaturas — editable.', cifra: '✎', etiqueta: 'editar', ruta: '/catalogos' },
+    { grupo: 'Catálogos y reportes', icon: '📥', titulo: 'Cargar reportes', desc: 'Importa OOAD / FINAT (incluida la disponibilidad) para conciliar y reflejar el gasto.', cifra: '↑', etiqueta: 'OOAD · FINAT', ruta: '/comprobantes' },
+    { grupo: 'Catálogos y reportes', icon: '📈', titulo: 'Exportar reportes', desc: 'Consultas financieras: facturas, vigencias… en Excel o PDF.', cifra: '📊', etiqueta: 'exportables', ruta: '/reportes' },
+    { grupo: 'Catálogos y reportes', icon: '🏛', titulo: 'Panel de dirección', desc: 'Estado de la facturación por etapa y capítulo (solo consulta).', cifra: '📋', etiqueta: 'dirección', ruta: '/admin' },
   ];
+  const GRUPOS = ['Facturas', 'Presupuesto', 'Catálogos y reportes'];
 
   // Rol AUO (ventanilla): panel simplificado, enfocado en capturar y dar
-  // seguimiento. Sin conciliación, catálogos ni disponibilidad presupuestal.
+  // seguimiento (el captura ya está en el botón grande de arriba).
   const esAuo = usuario?.rol === 'auo';
-  // El "Ingreso de facturas" ya está cubierto por el botón grande "Capturar
-  // nueva factura", así que solo quedan estas dos tarjetas.
-  const AUO_VISIBLES = new Set([
-    'Seguimiento de facturas',
-    'Oficios emitidos',
-  ]);
+  const AUO_VISIBLES = new Set(['Seguimiento', 'Oficios emitidos']);
   const visibles = esAuo ? tarjetas.filter((t) => AUO_VISIBLES.has(t.titulo)) : tarjetas;
   // Saludo de bienvenida según la hora (sin el nombre de la cuenta).
   const hora = new Date().getHours();
@@ -246,33 +209,27 @@ export default function Portal() {
           </div>
         )}
 
-        <div className="rejilla">
-          {visibles.map(t => {
-            const cuerpo = (
-              <>
-                <div className="paso">{t.paso}</div>
-                <h3>{t.titulo}</h3>
-                <p>{t.desc}</p>
-                <div className={t.alerta && t.cifra > 0 ? 'cifra alerta' : 'cifra'}>{t.cifra}</div>
-                <div className="etiqueta">{t.etiqueta}</div>
-                {!t.listo && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--texto-suave)' }}>
-                    {t.nota || 'En construcción'}
-                  </div>
-                )}
-              </>
-            );
-            return t.listo ? (
-              <Link key={t.titulo} href={t.ruta} className="tarjeta" style={{ textDecoration: 'none', color: 'inherit' }}>
-                {cuerpo}
-              </Link>
-            ) : (
-              <div key={t.titulo} className="tarjeta" style={{ opacity: .75 }}>
-                {cuerpo}
-              </div>
-            );
-          })}
-        </div>
+        {(esAuo
+          ? [['Accesos', visibles]]
+          : GRUPOS.map((g) => [g, visibles.filter((t) => t.grupo === g)]).filter(([, arr]) => arr.length)
+        ).map(([grupo, arr]) => (
+          <section key={grupo} style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'var(--verde)', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>{grupo}</span><span style={{ flex: 1, height: 1, background: 'var(--borde)' }} />
+            </div>
+            <div className="rejilla">
+              {arr.map((t) => (
+                <Link key={t.titulo} href={t.ruta} className="tarjeta" style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 11, background: '#e5f3ea', color: 'var(--verde)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, marginBottom: 10 }}>{t.icon}</div>
+                  <h3>{t.titulo}</h3>
+                  <p>{t.desc}</p>
+                  <div className={t.alerta && t.cifra > 0 ? 'cifra alerta' : 'cifra'}>{t.cifra}</div>
+                  <div className="etiqueta">{t.etiqueta}</div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
       </main>
     </>
   );
