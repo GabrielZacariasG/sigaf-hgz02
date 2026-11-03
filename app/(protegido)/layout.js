@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
+import TopNav from "../components/TopNav";
 
 // Layout protegido: envuelve a todas las páginas del grupo (protegido).
 // Solo renderiza su contenido si hay una sesión activa; si no, manda al
@@ -104,52 +105,7 @@ export default function ProtegidoLayout({ children }) {
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      <header
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          background: "var(--verde)",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 20px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <Link href={esAdmin ? "/admin" : "/"} style={{ color: "#fff", textDecoration: "none" }}>
-            <strong style={{ fontSize: 15, letterSpacing: 0.2 }}>
-              SIGAF · HGZ No. 02
-            </strong>
-          </Link>
-          {esAdmin === false && (
-            <>
-              <Link href="/" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Panel</Link>
-              <Link href="/facturas" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Facturas</Link>
-              <Link href="/cedula" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Cédula</Link>
-              <Link href="/contratos" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Contratos</Link>
-              <Link href="/dictamenes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Dictámenes</Link>
-              <Link href="/comprobantes" style={{ color: "#fff", fontSize: 13, textDecoration: "none", opacity: 0.9 }}>Cargar reportes</Link>
-            </>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.9)" }}>
-            {nombreAdmin || nombre}
-          </span>
-          <button
-            onClick={cerrarSesion}
-            style={{
-              background: "transparent",
-              color: "#fff",
-              border: "1px solid rgba(255,255,255,0.6)",
-            }}
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
+      <TopNav />
 
       {/* Las pantallas tipo cédula (tablas anchas) usan todo el ancho del monitor */}
       <main style={["/cedula", "/comprobantes", "/contratos", "/dictamenes"].some((p) => pathname?.startsWith(p))

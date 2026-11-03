@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
+import TopNav from './components/TopNav';
 import { leerTodo } from '../lib/paginar';
 import { cargarAvisos } from '../lib/avisos';
 
@@ -203,19 +204,7 @@ export default function Portal() {
 
   return (
     <>
-      <header className="encabezado">
-        <div>
-          <div className="marca">SIGAF</div>
-          <div className="sede">Hospital General de Zona No. 02 · Oficina de Presupuesto</div>
-        </div>
-        <div className="usuario">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
-            <span style={{ fontWeight: 600 }}>{usuario?.nombre || 'Usuario'}</span>
-            {cargo && <span style={{ fontSize: 11, opacity: 0.85 }}>{cargo}</span>}
-          </div>
-          <button className="boton secundario" onClick={salir}>Salir</button>
-        </div>
-      </header>
+      <TopNav />
 
       <main className="contenedor">
         <h1 className="titulo">
