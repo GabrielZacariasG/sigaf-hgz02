@@ -13,6 +13,8 @@ import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
 import { calcularContrato, calcularDictamen, sumar, ANIO, apoyosPorDictamen } from "../../../lib/contratos";
 import { dictamenDe } from "../../../lib/avisos";
+import { saldoAlDia } from "../../../lib/dictamenVivo";
+import { leerCrValidados, corteMasViejo } from "../../../lib/crValidados";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -79,7 +81,9 @@ export default function ContratosPage() {
     }
     const ppto = {}; // E si alguna línea cayó en error · V si todas están validadas · N lo demás
     for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
-    setDatos({ contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios, apoyos: rAp.error ? [] : rAp.data || [], hayApoyos: !rAp.error });
+    // CR validados después del corte de cada IMKK036 (todas las unidades): saldo al día del dictamen
+    const comprobantes = await leerCrValidados(corteMasViejo(Object.values(dictamenes))).catch(() => []);
+    setDatos({ comprobantes, contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios, apoyos: rAp.error ? [] : rAp.data || [], hayApoyos: !rAp.error });
   };
 
   // ---------- Comentarios por contrato ----------
@@ -132,6 +136,11 @@ export default function ContratosPage() {
     if (!datos) return [];
     const por = (arr, k) => { const m = {}; for (const x of arr) (m[x[k]] ||= []).push(x); return m; };
     const fPor = por(datos.facturas, "contrato_id"), aPor = por(datos.amp, "contrato_id"), pPor = por(datos.prog, "contrato_id"), dPor = por(datos.dev, "contrato_id"), apPor = por(datos.apoyos, "contrato_id"), apDic = apoyosPorDictamen(datos.apoyos);
+    // Contratos que gastan de cada dictamen (principal y ligados): sus CR validados bajan el saldo al día
+    const numsDic = {};
+    const agrega = (d, c) => { if (d) (numsDic[d] ||= new Set()).add(c.numero_interno).add(c.numero_alterno); };
+    for (const c of datos.contratos) { agrega(c.dictamen_numero, c); for (const l of datos.links[c.id] || []) agrega(l.dictamen, c); }
+    const diaDe = (dv) => saldoAlDia({ saldos: datos.saldosDic[dv] || [], corte: datos.dictamenes[dv]?.corte, contratos: [...(numsDic[dv] || [])].filter(Boolean), comprobantes: datos.comprobantes || [], apoyos: apDic[dv] || [] });
     const q = busca.trim().toLowerCase();
     const lista = datos.contratos
       .filter((c) => !esGenerico(c))
@@ -141,7 +150,7 @@ export default function ContratosPage() {
         // Dictamen vigente: el de pasivo 2026 si el contrato es de un año anterior y lo tiene ligado; si no, el principal
         const dv = dictamenDe(c, { estatus_general: "pendiente" }, datos.links);
         const fDic = (fPor[c.id] || []).filter((f) => dictamenDe(c, f, datos.links) === dv);
-        const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero, _apoyos: apDic[dv] || [] }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
+        const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero, _apoyos: apDic[dv] || [], _dia: diaDe(dv) }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
         if (dic) x.avisos = [...x.avisos, ...dic.avisos];
         return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
       })
@@ -247,8 +256,8 @@ export default function ContratosPage() {
                   <div style={{ marginBottom: 4 }}><strong>{dic.esPasivo ? "Dictamen de pasivo" : "Dictamen"} {dic.numero}</strong>{dic.origen ? ` (${dic.origen})` : ""} · FINAT IMKK036 al {fechaTxt(dic.corte)}</div>
                   <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
                     <span>Asignado HGZ 2: <strong>{money(dic.asignado)}</strong></span>
-                    <span>Pagado (FINAT): <strong>{money(dic.pagado)}</strong></span>
-                    <span>Disponible acumulado HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong>{dic.apoyosDesc > 0 ? ` (ya descuenta ${money(dic.apoyosDesc)} de apoyos dados)` : ""}</span>
+                    <span title={dic.gastoPosterior > 0.005 ? `IMKK036 + CR validados después del corte (${dic.aplicados.map((l) => l.cbte).join(", ")})` : "Según el IMKK036"}>Pagado (FINAT, al día): <strong>{money(dic.pagado)}</strong></span>
+                    <span>Saldo al día HGZ 2: <strong>{dic.viejo ? "falta IMKK036 del mes" : money(dic.disponible)}</strong>{[dic.gastoPosterior > 0.005 ? `ya descuenta ${money(dic.gastoPosterior)} glosado después del corte` : "", dic.apoyosDesc > 0 ? `${money(dic.apoyosDesc)} de apoyos dados` : ""].filter(Boolean).length ? ` (${[dic.gastoPosterior > 0.005 ? `ya descuenta ${money(dic.gastoPosterior)} glosado después del corte` : "", dic.apoyosDesc > 0 ? `${money(dic.apoyosDesc)} de apoyos dados` : ""].filter(Boolean).join(" y ")})` : ""}</span>
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
                     <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato actual" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
@@ -257,7 +266,7 @@ export default function ContratosPage() {
                     {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}
                   </div>}
                   <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible de cada mes del HGZ 2 (informativo): {Object.entries(dic.porMes).sort(([a], [b]) => a - b).map(([k, v]) => `${MESES[Number(k) % 100].slice(0, 3)} ${money0(v)}`).join(" · ")}</div>
-                  {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible acumulado en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
+                  {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo al día en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
                 </div>
               )}
               <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>

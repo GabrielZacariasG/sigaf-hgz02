@@ -77,12 +77,15 @@ export default function DictamenesPage() {
       const sm = saldoDelMes(sal); const viejo = corteViejo(d.corte);
       const cs = contratosDe(d.numero);
       const apoyosDesc = descuentoApoyos(datos.apoyos?.[d.numero], d.corte);
+      // Con el 1043 cargado, el saldo de la lista es el saldo al día (el mismo de Avisos, Contratos y el oficio de apoyo)
+      const v = vivo?.porNum?.[d.numero];
+      if (v) return { d, hg, viejo, apoyosDesc, alDia: true, saldoMes: Math.max(0, v.saldoHoy), otras: v.otras.map((o) => [o.ui, o.saldo]), otrasDisp: v.otrasDisp, cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
       return { d, hg, viejo, apoyosDesc, saldoMes: Math.max(0, sm.disponible - apoyosDesc), otras: sm.otras.map((o) => [o.ui, o.disponible]), otrasDisp: sm.otrasDisp, cs, enlace: cs.length === 1 && !cs[0].ligaPasivo ? enlaceDe(cs[0]) : null };
     });
     const sinCarga = [...new Set(datos.contratos.map((c) => c.dictamen_numero).filter((n) => /^\d{10}-\d{4}$/.test(n || "") && !datos.dictamenes.some((d) => d.numero === n)))]
       .map((n) => ({ sinCarga: true, d: { numero: n }, cs: contratosDe(n) }));
     return [...lista, ...sinCarga].filter((x) => !q || [x.d.numero, ...x.cs.map((c) => `${c.numero_interno} ${c.numero_alterno || ""} ${c.concepto || ""} ${c.proveedores?.razon_social || ""}`)].join(" ").toLowerCase().includes(q));
-  }, [datos, busca]);
+  }, [datos, busca, vivo]);
 
   // ---------- Revisar PDF ----------
   const revisar = async () => {
@@ -153,7 +156,7 @@ export default function DictamenesPage() {
                   <td style={td}>{q.centro}</td><td style={td}>{q.cuenta}</td>
                   <td style={tdN}>{money(q.saldo)}</td><td style={tdN}>{money(q.comprometido)}</td>
                   <td style={{ ...tdN, fontWeight: 700, color: q.estado === "ok" ? "var(--verde)" : q.estado === "espera" ? "#b7791f" : "var(--rojo)" }}>{money(q.diferencia)}</td>
-                  <td style={{ ...td, fontSize: 12.5 }}>{q.texto}</td>
+                  <td style={{ ...td, fontSize: 12.5 }}>{q.texto}{q.estado === "revisar" && q.dictamenes.length ? <><br /><strong>Baja solo el IMKK036 de: {q.dictamenes.join(", ")}</strong></> : null}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -184,7 +187,7 @@ export default function DictamenesPage() {
                       {x.sinCarga ? <td colSpan={8} style={{ ...td, color: "#b7791f" }}>Sin IMKK036: córrelo en FINAT (control SALDO_DICT) y súbelo aquí</td> : <>
                         <td style={{ ...td, whiteSpace: "nowrap", color: dias > 7 ? "#b7791f" : undefined }} title={dias > 7 ? `Hace ${dias} días: conviene actualizarlo` : ""}>{fechaTxt(x.d.corte)}</td>
                         <td style={tdN}>{money(x.hg.asignado)}</td><td style={tdN}>{money(x.hg.pagado)}</td>
-                        <td style={{ ...tdN, fontWeight: 700, color: x.viejo ? "#b7791f" : x.saldoMes < 0.5 ? "var(--rojo)" : "var(--verde)" }} title={x.viejo ? "El IMKK036 cargado es de un mes anterior" : ""}>{x.viejo ? "Falta IMKK036 del mes" : money(x.saldoMes)}</td>
+                        <td style={{ ...tdN, fontWeight: 700, color: x.viejo ? "#b7791f" : x.saldoMes < 0.5 ? "var(--rojo)" : "var(--verde)" }} title={x.viejo ? "El IMKK036 cargado es de un mes anterior" : x.alDia ? "Saldo al día: IMKK036 menos CR validados después del corte" : "Saldo del IMKK036"}>{x.viejo ? "Falta IMKK036 del mes" : money(x.saldoMes)}</td>
                         <td style={{ ...tdN, fontWeight: 700, color: !v ? undefined : v.saldoHoy < 0.5 ? "var(--rojo)" : "var(--verde)" }} title={v?.gastoPosterior ? `Ya descuenta ${money(v.gastoPosterior)} de CR validados después del corte` : ""}>{v ? money(v.saldoHoy) : ""}</td>
                         <td style={{ ...tdN, color: su?.faltante > 0.5 ? "var(--rojo)" : undefined, fontWeight: su?.faltante > 0.5 ? 700 : 400 }} title={su?.faltante > 0.5 ? `Faltan ${money(su.faltante)} para las facturas pendientes` : ""}>{su?.pendiente ? money(su.pendiente) : su?.avisos.length ? "⚠" : ""}</td>
                         <td style={tdN}>{!x.viejo && x.otrasDisp ? money(x.otrasDisp) : ""}</td>
@@ -201,7 +204,7 @@ export default function DictamenesPage() {
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12, margin: "10px 0" }}>
                             <div>
                               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Saldo al día</div>
-                              <div style={{ fontSize: 12.5 }}>Disponible Acum del PDF: {money(v.saldoPdf)}</div>
+                              <div style={{ fontSize: 12.5 }}>{v.esAnio ? "Disponible Acum del PDF" : "Impte Def + Pagos del PDF"}: {money(v.saldoPdf)}</div>
                               {v.aplicados.length > 0 && <div style={{ fontSize: 12.5 }}>CR válidos después del corte: −{money(v.gastoPosterior)} ({v.aplicados.map((l) => `${l.cbte} ${l.factura_txt || ""}`.trim()).join("; ")})</div>}
                               {v.apoyosDesc > 0 && <div style={{ fontSize: 12.5 }}>Apoyos dados a otras unidades: −{money(v.apoyosDesc)}</div>}
                               <div style={{ fontSize: 13, fontWeight: 700 }}>Saldo al día: {money(v.saldoHoy)}</div>
