@@ -15,6 +15,7 @@ import { calcularContrato, calcularDictamen, sumar, ANIO, apoyosPorDictamen } fr
 import { dictamenDe } from "../../../lib/avisos";
 import { saldoAlDia } from "../../../lib/dictamenVivo";
 import { leerCrValidados, corteMasViejo } from "../../../lib/crValidados";
+import { dibujarCaptura, copiarCaptura } from "../../../lib/capturaContratos";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -195,6 +196,17 @@ export default function ContratosPage() {
     XLSX.writeFile(wb, `CONTRATOS SIGAF ${capitulo === "*" ? "TODOS" : capitulo.toUpperCase()}.xlsx`);
   };
 
+  // ---------- Captura ejecutiva para el correo de los viernes (devengado de subrogados) ----------
+  const captura = async () => {
+    const filas = bloques.flatMap((b) => b.filas).filter(({ x }) => x.enlace > 0 || x.facDev > 0);
+    if (!filas.length) { setMsg("No hay contratos en la vista para la captura."); return; }
+    const titulo = capitulo === "*" ? "Saldos de contratos vigentes" : `Saldos de contratos vigentes · ${capitulo}`;
+    try {
+      const r = await copiarCaptura(dibujarCaptura(filas, { titulo }), `SALDOS CONTRATOS ${new Date().toLocaleDateString("en-CA")}.png`);
+      setMsg(r === "copiada" ? "Captura copiada: pégala en el correo con Ctrl+V." : "Tu navegador no dejó copiarla; se descargó como imagen.");
+    } catch (e) { setMsg("No se pudo hacer la captura: " + e.message); }
+  };
+
   // ---------- estilos ----------
   const th = { background: "var(--verde)", color: "#fff", fontSize: 11, fontWeight: 700, textTransform: "uppercase", padding: "6px 8px", textAlign: "center", border: "1px solid rgba(255,255,255,.25)", lineHeight: 1.15, position: "sticky", top: 0, zIndex: 2 };
   const td = { padding: "4px 8px", borderBottom: "1px solid var(--borde)", borderRight: "1px solid var(--borde)", fontSize: 12.5, whiteSpace: "nowrap" };
@@ -344,6 +356,7 @@ export default function ContratosPage() {
       <label style={{ fontSize: 13 }}><input type="checkbox" checked={con2025} onChange={(e) => setCon2025(e.target.checked)} /> incluir contratos 2025 ya cerrados</label>
       <input placeholder="Buscar contrato, proveedor, dictamen…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
       <button className="boton secundario" onClick={exportar} style={{ fontSize: 13 }}>⬇ Descargar como cédula</button>
+      <button className="boton" onClick={captura} title="Imagen ejecutiva de los contratos que estás viendo (filtro y búsqueda), lista para pegar en el correo de los viernes" style={{ fontSize: 13 }}>📷 Captura para correo</button>
     </div>
   );
 
@@ -356,7 +369,7 @@ export default function ContratosPage() {
         </div>
         {filtros}
       </div>
-      {msg && <p style={{ color: "var(--rojo)", fontSize: 13 }}>{msg}</p>}
+      {msg && <p style={{ color: msg.startsWith("Captura copiada") ? "var(--verde)" : "var(--rojo)", fontSize: 13 }}>{msg}</p>}
 
       {vista === "control" && (
         <div style={{ overflow: "auto", maxHeight: "calc(100vh - 170px)", border: "1px solid var(--borde)", borderRadius: 8, background: "var(--blanco)" }}>
