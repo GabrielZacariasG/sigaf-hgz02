@@ -533,7 +533,7 @@ export default function ContratosPage() {
         Semáforo: amarillo al 80% del contrato o a 30 días de vencer; rojo si se rebasa o si la proyección no alcanza.
       </p>
       {avanceDe && trasMeses && (
-        <AvanceTraslados c={avanceDe.c} x={avanceDe.x} meses={trasMeses.lista} ritmo={trasMeses.ritmo} ultimoViaje={trasMeses.ultimo} onCerrar={() => setAvanceDe(null)} />
+        <AvanceTraslados c={avanceDe.c} x={avanceDe.x} meses={trasMeses.lista} ritmo={trasMeses.ritmo} ultimoViaje={trasMeses.ultimo} folios={datos.traslados.clasificados.filter((f) => f.contrato_id === avanceDe.c.id)} onCerrar={() => setAvanceDe(null)} />
       )}
     </div>
   );
