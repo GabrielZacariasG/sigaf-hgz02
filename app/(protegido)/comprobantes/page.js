@@ -389,7 +389,7 @@ export default function ComprobantesPage() {
             <Tab id="faltan" t="Faltan en SIGAF" n={res.faltan.length + res.sinFactura1013.length} />
             <Tab id="estancadas" t="Estancadas" n={b?.estancadas.length || 0} />
             <input placeholder="Buscar proveedor, folio, CR…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ marginLeft: "auto", padding: "6px 10px", borderRadius: 8, border: "1px solid var(--borde)", minWidth: 220 }} />
-            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar todo (${[res.folios?.items.length ? `${res.folios.items.length} folios` : "", res.dispo?.length ? `${res.dispo.length} dispo` : "", aGuardar(res.dict).length ? `${aGuardar(res.dict).length} dictamen(es)` : "", `${nMarc} palomeadas`].filter(Boolean).join(" · ")})`}</button>
+            <button className="boton" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : `Guardar todo (${[res.folios?.items.length ? `${res.folios.items.length} folios` : "", res.traslados?.filas.length ? `${res.traslados.filas.length} folios de traslados` : "", res.dispo?.length ? `${res.dispo.length} dispo` : "", aGuardar(res.dict).length ? `${aGuardar(res.dict).length} dictamen(es)` : "", `${nMarc} palomeadas`].filter(Boolean).join(" · ")})`}</button>
           </div>
 
           <div style={{ marginTop: 10 }}>
