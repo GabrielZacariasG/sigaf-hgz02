@@ -21,11 +21,12 @@ import { cargarDatosDictamenes, revisarDictamenes, guardarDictamenes, aGuardar }
 import RevisionDictamenes from "../../../lib/RevisionDictamenes";
 import { esCDSMS, leerCDSMS, esAvanceSMS, leerAvanceSMS } from "../../../lib/subrogados";
 import { cargarDatosFolios, prepararFolios, guardarFolios } from "../../../lib/subrogadosCarga";
+import { esSCACE, gridSCACE, leerSCACE, cargarTraslados, resumenCarga, guardarTraslados, ETIQUETA_ESTADO } from "../../../lib/traslados";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const fechaTxt = (f) => (f ? new Date(String(f).slice(0, 10) + "T00:00:00").toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 const GEN = (s) => LABEL_GENERAL?.[s] || s;
-const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)", dispo: "Disponibilidad (IMKK022)", imkk036: "Dictamen (IMKK036)", cdsms: "Folios de subrogados (CD_SMS)", avance_sms: "Avance SMS (historial de folios)" };
+const NOMBRE = { "1043": "Comprobantes (1043)", "4002": "Pagos (4002)", "4007": "Pagos de pedidos (4007)", "1013": "Recepciones sin CR (1013)", dispo: "Disponibilidad (IMKK022)", imkk036: "Dictamen (IMKK036)", cdsms: "Folios de subrogados (CD_SMS)", avance_sms: "Avance SMS (historial de folios)", scace: "Traslados de pacientes (SCACE)" };
 const estadoC = (c) => (c.eliminado ? "Eliminado" : c.pagado ? `Pagado (${fechaTxt(c.fecha_prog_pago)})` : c.estado_pago === "X" ? "Pago cancelado" : "Sin pagar");
 
 // 1043 → forma común de los renglones
@@ -56,7 +57,7 @@ export default function ComprobantesPage() {
     try {
       // 1) Leer y reconocer cada archivo
       // PDF → dictamen IMKK036 · Excel → N_AP (1043/4002/4007/1013) o disponibilidad IMKK022
-      const leidos = [], pdfs = [], dispo = [], folFilas = [];
+      const leidos = [], pdfs = [], dispo = [], folFilas = [], trasFilas = [];
       for (const file of archivos) {
         if (/\.pdf$/i.test(file.name)) { pdfs.push(file); leidos.push({ nombre: file.name, tipo: "imkk036" }); continue; }
         // Folios de subrogados: CD_SMS (CSV dentro de la página del sistema)
@@ -76,6 +77,14 @@ export default function ComprobantesPage() {
           folFilas.unshift(...l.filas); leidos.push({ nombre: file.name, tipo: "avance_sms", n: l.filas.length }); continue;
         }
         const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
+        // Traslados de pacientes: SCACE "Gastos TP por Unidad" (se guarda sin NSS ni nombres)
+        if (esSCACE(grid)) {
+          const l = await leerSCACE(gridSCACE(XLSX, wb.Sheets[wb.SheetNames[0]]), file.name);
+          if (l.error) leidos.push({ nombre: file.name, error: l.error });
+          else if (!/ZONA NO\.? ?2\b/i.test(l.unidad.normalize("NFD").replace(/[̀-ͯ]/g, ""))) leidos.push({ nombre: file.name, error: `Es de otra unidad (${l.unidad}); solo se cargan los del HGZ No. 2.` });
+          else { trasFilas.push(...l.filas); leidos.push({ nombre: file.name, tipo: "scace", n: l.filas.length, desde: l.desde, hasta: l.hasta }); }
+          continue;
+        }
         const tipo = tipoReporte(grid);
         if (tipo) { leidos.push({ nombre: file.name, tipo, grid }); continue; }
         const d = await leerDispoIMKK022(file).catch((e) => ({ error: e.message }));
@@ -93,6 +102,13 @@ export default function ComprobantesPage() {
         const porClave = new Map();
         for (const f of folFilas) porClave.set(f.clave, { ...(porClave.get(f.clave) || {}), ...Object.fromEntries(Object.entries(f).filter(([, v]) => v !== null && v !== "")) });
         folios = prepararFolios([...porClave.values()], await cargarDatosFolios());
+      }
+      // Traslados: si el mismo folio viene en dos archivos, se queda el del último
+      let traslados = null;
+      if (trasFilas.length) {
+        const porFolio = new Map(); for (const f of trasFilas) porFolio.set(f.folio, f);
+        const filas = [...porFolio.values()], datosT = await cargarTraslados();
+        traslados = { filas, contratos: datosT.contratos, ...resumenCarga(datosT, filas) };
       }
       // 2) Datos de SIGAF
       const [rF, rH, rU, rB] = await Promise.all([
@@ -112,8 +128,9 @@ export default function ComprobantesPage() {
       const aplicar = (items) => { for (const it of items) for (const f of it.facturas) Object.assign(sim.get(f.id) || {}, it.cambiosPorFactura[f.id] || {}); };
       const simLista = () => [...sim.values()];
 
-      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {}, dispo: dispoCortes, dict, folios };
+      const out = { archivos: leidos.map(({ nombre, tipo, error: e }) => ({ nombre, tipo, error: e })), automaticas: [], porConfirmar: [], alertas: [], faltan: [], sinFactura1013: [], lec1043: [], resumen: {}, dispo: dispoCortes, dict, folios, traslados };
       for (const l of leidos.filter((x) => x.tipo === "cdsms" || x.tipo === "avance_sms")) out.resumen[l.nombre] = `${l.n} renglones de folios de subrogados`;
+      for (const l of leidos.filter((x) => x.tipo === "scace")) out.resumen[l.nombre] = `${l.n} folios TP · viajes del ${fechaTxt(l.desde)} al ${fechaTxt(l.hasta)}`;
       for (const d of dispoCortes) out.resumen[d.archivo] = `corte del ${fechaTxt(d.fecha)} · ${d.cuentas.length} cuentas del HGZ 2`;
       for (const r of dict) out.resumen[r.archivo] = r.ok ? `dictamen ${r.dictamen} · corte ${fechaTxt(r.corte)}` : r.problema;
 
@@ -175,6 +192,10 @@ export default function ComprobantesPage() {
       if (res.folios?.items.length) {
         const n = await guardarFolios(res.folios.items, (t) => setOk(t));
         partes.push(`${n} folios de subrogados`);
+      }
+      if (res.traslados?.filas.length) {
+        const n = await guardarTraslados(res.traslados.filas, res.traslados.contratos, (t) => setOk(t));
+        partes.push(`${n} folios de traslados`);
       }
       if (aGuardar(res.dict).length) {
         const r = await guardarDictamenes(res.dict);
@@ -282,7 +303,8 @@ export default function ComprobantesPage() {
       <h1 style={{ fontSize: 22, margin: 0 }}>Cargar reportes del sistema → SIGAF al día</h1>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950 }}>
         Aquí se sube <strong>todo</strong>, junto y de una vez: <strong>1043</strong> (comprobantes), <strong>4002</strong> y <strong>4007</strong> (pagos),
-        <strong> 1013</strong> (recepciones sin comprobante), la <strong>disponibilidad IMKK022</strong> (xlsx) y los <strong>PDF del IMKK036</strong> (dictámenes).
+        <strong> 1013</strong> (recepciones sin comprobante), la <strong>disponibilidad IMKK022</strong> (xlsx), los <strong>PDF del IMKK036</strong> (dictámenes)
+        y el <strong>SCACE "Gastos TP por Unidad"</strong> (traslados de pacientes: el devengo se toma por la fecha del viaje).
         SIGAF reconoce cada archivo solo, pone CR, fechas reales de pago y pedido-recepción, actualiza la dispo y los saldos de dictamen,
         y te arma la bandeja de avisos. Solo cuenta lo del HGZ 2. <strong>No guarda nada hasta que revises.</strong>
       </p>
@@ -335,6 +357,19 @@ export default function ComprobantesPage() {
                 </details>
               )}
               <div style={{ marginTop: 6 }}><strong>Devengo por contrato</strong> (folios sin factura): {Object.entries(res.folios.devengo).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "ninguno"}</div>
+            </div>
+          )}
+
+          {res.traslados && (
+            <div style={{ ...card, marginTop: 12, overflowX: "auto", fontSize: 13 }}>
+              <strong>Traslados de pacientes (SCACE): {res.traslados.filas.length} folios</strong>
+              <span style={{ color: "var(--texto-suave)" }}> · viajes del {fechaTxt(res.traslados.desde)} al {fechaTxt(res.traslados.hasta)} · {res.traslados.nuevos} nuevos · {res.traslados.actualizados} ya estaban (se actualizan) · se guardan sin NSS ni nombres</span>
+              <div style={{ marginTop: 6 }}>
+                {Object.entries(res.traslados.porEstado).map(([k, v]) => <span key={k} style={{ marginRight: 14 }}>{ETIQUETA_ESTADO[k] || k}: <strong>{v.n}</strong> ({money(v.imp)})</span>)}
+              </div>
+              <div style={{ marginTop: 6 }}><strong>Devengo por contrato</strong> (viajes sin factura, por fecha del viaje): {Object.entries(res.traslados.devengo).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "ninguno"}</div>
+              {res.traslados.repetidos.n > 0 && <div style={{ color: "#b7791f", marginTop: 4 }}>{res.traslados.repetidos.n} folio(s) del mismo paciente el mismo día ({money(res.traslados.repetidos.imp)}): sí cuentan, pero conviene revisarlos en Reportes → Traslados.</div>}
+              {res.traslados.porEstado.sin_contrato &&<div style={{ color: "#b7791f", marginTop: 4 }}>Hay viajes en fechas sin contrato de traslados vigente en SIGAF: se guardan, pero no cuentan como devengo.</div>}
             </div>
           )}
 

@@ -16,6 +16,8 @@ import { dictamenDe } from "../../../lib/avisos";
 import { saldoAlDia } from "../../../lib/dictamenVivo";
 import { leerCrValidados, corteMasViejo } from "../../../lib/crValidados";
 import { dibujarCaptura, copiarCaptura } from "../../../lib/capturaContratos";
+import { cargarTraslados, clasificar, devengoPorContrato, CUENTAN } from "../../../lib/traslados";
+import AvanceTraslados from "../../../lib/AvanceTraslados";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -67,6 +69,14 @@ export default function ContratosPage() {
       const dv = (devFolios[f.contrato_id] ||= Array(13).fill(0));
       if (!f.factura_id && !f.factura_txt && !f.cancelado && Number(f.anio) === ANIO && f.mes >= 1 && f.mes <= 12) dv[f.mes] += Number(f.importe) || 0;
     }
+    // Devengo de traslados de pacientes (migración 060): viajes del SCACE sin factura, por contrato y mes DEL VIAJE
+    let traslados = null;
+    try {
+      const t = await cargarTraslados();
+      const clasificados = clasificar(t);
+      for (const [id, arr] of Object.entries(devengoPorContrato(clasificados, ANIO))) { const dv = (devFolios[id] ||= Array(13).fill(0)); arr.forEach((v, m) => (dv[m] += v)); }
+      traslados = { ...t, clasificados };
+    } catch { traslados = null; } // sin la migración 060 la pantalla sigue igual
     // Comentarios por contrato (migración 052), el más reciente primero
     const comentarios = {}; for (const k of rCm.error ? [] : rCm.data || []) (comentarios[k.contrato_id] ||= []).push(k);
     const links = {}; for (const l of rLi.error ? [] : rLi.data || []) (links[l.contrato_id] ||= []).push(l);
@@ -84,7 +94,7 @@ export default function ContratosPage() {
     for (const [cr, es] of Object.entries(lineas)) ppto[cr] = es.includes("E") ? "E" : es.every((e) => e === "V") ? "V" : "N";
     // CR validados después del corte de cada IMKK036 (todas las unidades): saldo al día del dictamen
     const comprobantes = await leerCrValidados(corteMasViejo(Object.values(dictamenes))).catch(() => []);
-    setDatos({ comprobantes, contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios, apoyos: rAp.error ? [] : rAp.data || [], hayApoyos: !rAp.error });
+    setDatos({ comprobantes, contratos: rC.data || [], facturas: rF.data || [], amp: rA.data || [], prog: rP.data || [], dev: rD.data || [], reservas: rR.data || [], presupuesto, fechaDispo, dictamenes, saldosDic, ppto, links, comentarios, devFolios, apoyos: rAp.error ? [] : rAp.data || [], hayApoyos: !rAp.error, traslados });
   };
 
   // ---------- Comentarios por contrato ----------
@@ -162,6 +172,59 @@ export default function ContratosPage() {
     for (const r of datos.reservas) { const k = r.partidas?.cuenta_finat; if (g[k] && !q) g[k].reservas.push(r); }
     return Object.values(g).sort((a, b) => a.cuenta.localeCompare(b.cuenta)).map((b) => ({ ...b, filas: b.filas.sort((p, s) => (p.c.vigencia_inicio || "").localeCompare(s.c.vigencia_inicio || "")) }));
   }, [datos, capitulo, con2025, busca]);
+
+  // ---------- Traslados de pacientes: gasto propio por mes (los contratos de la cuenta 52411011 juntos) ----------
+  // Gasto del mes = facturas + devengo de viajes − apoyos a otras unidades. Para que quien manda el correo elija meses.
+  const [avanceDe, setAvanceDe] = useState(null);
+  const trasIds = useMemo(() => new Set((datos?.traslados?.contratos || []).map((c) => c.id)), [datos]);
+  const trasMeses = useMemo(() => {
+    if (!datos?.traslados || !trasIds.size) return null;
+    const por = (arr, k) => { const m = {}; for (const x of arr) (m[x[k]] ||= []).push(x); return m; };
+    const fPor = por(datos.facturas, "contrato_id"), aPor = por(datos.amp, "contrato_id"), pPor = por(datos.prog, "contrato_id"), dPor = por(datos.dev, "contrato_id"), apPor = por(datos.apoyos, "contrato_id");
+    const cs = datos.contratos.filter((c) => trasIds.has(c.id));
+    const hoy = new Date(), mesHoy = hoy.getFullYear() > ANIO ? 13 : hoy.getMonth() + 1;
+    const meses = Array.from({ length: 13 }, (_, m) => ({ m, fact: 0, dev: 0, apoyo: 0, notas: [] }));
+    for (const c of cs) {
+      const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [], devengoFolios: datos.devFolios[c.id] || null, apoyos: apPor[c.id] || [] });
+      for (let m = 1; m <= 12; m++) { meses[m].fact += x.mensual[m]; meses[m].dev += x.devengoMes[m]; }
+      for (const a of apPor[c.id] || []) {
+        const d = String((a.estado === "gasto" && a.fecha_gasto) || a.fecha || ""), m = Number(d.slice(5, 7));
+        if (Number(d.slice(0, 4)) === ANIO && m >= 1 && m <= 12) meses[m].apoyo += Number(a.importe) || 0;
+      }
+    }
+    // Avisos para elegir: facturas de todo el mes sin detalle de viajes junto a otras con detalle (p. ej. viajes de otra
+    // unidad que pagó el HGZ 2), cambio de contrato dentro del mes, gasto fuera de lo normal y mes en curso
+    const conDet = new Set(datos.traslados.detalle.map((d) => d.factura_id));
+    const facMes = {}; for (const f of datos.traslados.facturas) { const m = Number(f.anio_presupuestal) === ANIO ? Number(f.mes_presupuestal) : Number(String(f.periodo_inicio || "").slice(0, 4)) === ANIO ? Number(String(f.periodo_inicio).slice(5, 7)) : 0; if (m) (facMes[m] ||= []).push(f); }
+    const lista = [];
+    const inicio = cs.map((c) => c.vigencia_inicio).filter((v) => v?.startsWith(String(ANIO))).sort()[0] || `${ANIO}-01-01`;
+    for (let m = Number(inicio.slice(5, 7)); m <= Math.min(12, mesHoy); m++) {
+      const k = meses[m], gasto = Math.round((k.fact + k.dev - k.apoyo) * 100) / 100;
+      const notas = [];
+      const fs = facMes[m] || [], sin = fs.filter((f) => !conDet.has(f.id));
+      if (sin.length && sin.length < fs.length) notas.push(`${sin.length} factura(s) sin detalle de viajes por ${money(sin.reduce((s, f) => s + Number(f.importe_factura || 0), 0))} (¿viajes de otra unidad?)`);
+      const pref = `${ANIO}-${String(m).padStart(2, "0")}`;
+      if (cs.some((c) => (c.vigencia_inicio?.startsWith(pref) && !c.vigencia_inicio.endsWith("-01")) || (c.vigencia_fin?.startsWith(pref) && Number(c.vigencia_fin.slice(8)) < new Date(ANIO, m, 0).getDate()))) notas.push("cambio de contrato a medio mes");
+      if (m === mesHoy) notas.push("mes en curso");
+      lista.push({ m, gasto, notas, enCurso: m === mesHoy });
+    }
+    const normales = lista.filter((k) => !k.enCurso && k.gasto > 0.5).map((k) => k.gasto).sort((a, b) => a - b);
+    const mediana = normales.length ? normales[Math.floor(normales.length / 2)] : 0;
+    for (const k of lista) if (mediana && !k.enCurso && k.gasto > 0.5) {
+      if (k.gasto > mediana * 1.25) k.notas.push("gasto más alto de lo normal");
+      else if (k.gasto < mediana * 0.75 && !k.notas.includes("cambio de contrato a medio mes")) k.notas.push("gasto más bajo de lo normal");
+    }
+    // Ritmo actual: viajes del contrato (sin FF ni repetidos) del 1 del mes en curso al último viaje cargado
+    const delMes = datos.traslados.clasificados.filter((f) => CUENTAN.has(f.estado) && f.anio === ANIO && f.mes === mesHoy);
+    let ritmo = null;
+    if (delMes.length) {
+      const hasta = delMes.map((f) => f.fecha_viaje).sort().pop(), dias = Number(hasta.slice(8));
+      const importe = Math.round(delMes.reduce((s, f) => s + f.valor, 0) * 100) / 100;
+      ritmo = { desde: `${hasta.slice(0, 8)}01`, hasta, dias, importe, diario: importe / dias, mensual: Math.round((importe / dias) * 30 * 100) / 100 };
+    }
+    const ultimo = datos.traslados.clasificados.map((f) => f.fecha_viaje).sort().pop() || null;
+    return { lista, ritmo, ultimo };
+  }, [datos, trasIds]);
 
   // ---------- Devengo: captura por contrato y mes ----------
   const guardarDevengo = async (contratoId, mes, valor) => {
@@ -284,6 +347,7 @@ export default function ContratosPage() {
               <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
                 <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 6 }}>
                   <span>Gasto promedio mensual: <strong>{money(x.promedio)}</strong></span>
+                  {trasIds.has(c.id) && trasMeses && <button className="boton" style={{ fontSize: 12, padding: "3px 10px" }} onClick={(e) => { e.stopPropagation(); setAvanceDe({ c, x }); }} title="Tabla del avance semanal del contrato de traslados (vigencia, devengo, saldo, promedio, proyección y economía) para pegar en el correo">✉ Avance para correo</button>}
                   <span>El saldo alcanza: <strong>{x.cobertura == null ? "—" : `${x.cobertura.toFixed(1)} meses`}</strong> · faltan {x.mesesRestantes} meses de vigencia</span>
                   {x.maxU > 0 && <span>Ampliación todavía posible (hasta {c.tope_ampliacion_pct ?? 20}%): <strong>{money(x.ampDisponible)}</strong></span>}
                 </div>
@@ -468,6 +532,9 @@ export default function ContratosPage() {
         Enlace = máximo de la unidad + ampliaciones. Saldo = enlace − (facturado + devengo). Gasto promedio mensual = gasto ÷ solo los meses donde hubo gasto. Proyección = gasto transcurrido + promedio × meses de vigencia que faltan (+ pasivo).
         Semáforo: amarillo al 80% del contrato o a 30 días de vencer; rojo si se rebasa o si la proyección no alcanza.
       </p>
+      {avanceDe && trasMeses && (
+        <AvanceTraslados c={avanceDe.c} x={avanceDe.x} meses={trasMeses.lista} ritmo={trasMeses.ritmo} ultimoViaje={trasMeses.ultimo} onCerrar={() => setAvanceDe(null)} />
+      )}
     </div>
   );
 }

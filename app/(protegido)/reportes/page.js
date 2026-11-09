@@ -3,11 +3,82 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
+import { cargarTraslados, clasificar, scaceContraFacturas, CUENTAN, NOMBRE_CIUDAD } from "../../../lib/traslados";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date();
 const diasHasta = (fecha) => fecha ? Math.round((new Date(fecha).getTime() - hoy().getTime()) / 86400000) : null;
 const fechaMX = (d) => d ? new Date(d).toLocaleDateString("es-MX") : "—";
+
+const MES_NOM = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const pct = (a, b) => (b ? `${Math.round((a / b) * 1000) / 10}%` : "—");
+const fISO = (s) => (s ? fechaMX(s + "T00:00:00") : "—");
+// Informes de traslados (SCACE): todos por FECHA DEL VIAJE; sin NSS ni nombres
+function informeTraslados(key, t, { desde, hasta }) {
+  const enRango = (f) => (!desde || f.fecha_viaje >= desde) && (!hasta || f.fecha_viaje <= hasta);
+  const todos = t.clasificados.filter(enRango), viajes = todos.filter((f) => CUENTAN.has(f.estado));
+  const fechas = viajes.map((f) => f.fecha_viaje).sort();
+  const rango = fechas.length ? `viajes del ${fISO(fechas[0])} al ${fISO(fechas[fechas.length - 1])}` : "sin viajes en el rango";
+  const tot = (lista) => ({ folios: lista.length, boletos: r2(lista.reduce((s, f) => s + (f.boletos || 0), 0)), importe: r2(lista.reduce((s, f) => s + f.valor, 0)) });
+  const nota = "Fuente: SCACE \"Gastos TP por Unidad\" cargado en SIGAF, por fecha del viaje. Sin fondo fijo ni folios sin importe. Los posibles repetidos (mismo paciente, mismo día) sí cuentan. Importe = boletos × precio del contrato con IVA.";
+  const suma = (rows, k) => r2(rows.reduce((s, r) => s + (Number(r[k]) || 0), 0));
+  if (key === "t1") {
+    const g = {}; for (const f of todos) (g[f.fecha_viaje.slice(0, 7)] ||= []).push(f);
+    const rows = Object.keys(g).sort().map((k) => {
+      const l = g[k], v = l.filter((f) => CUENTAN.has(f.estado)), s = (e) => r2(l.filter((f) => f.estado === e).reduce((a, f) => a + f.valor, 0));
+      const ff = l.filter((f) => f.estado === "fondo_fijo"), rep = v.filter((f) => f.repetido);
+      return { mes: `${MES_NOM[Number(k.slice(5))]} ${k.slice(0, 4)}`, ...tot(v), devengo: s("devengo"), facturado: s("facturado"), pagado: s("pagado"),
+        acomp: v.filter((f) => f.acompanante).length, ff: ff.length, ffImp: r2(ff.reduce((a, f) => a + (Number(f.importe_emitido) || 0), 0)), rep: rep.length, repImp: r2(rep.reduce((a, f) => a + f.valor, 0)) };
+    });
+    return { titulo: "Gasto de traslados por mes", resumen: rango, nota, columns: [
+      { key: "mes", label: "Mes del viaje" }, { key: "folios", label: "Folios", align: "right" }, { key: "boletos", label: "Boletos", align: "right" },
+      { key: "importe", label: "Importe", money: true, align: "right" }, { key: "devengo", label: "Devengo (sin factura)", money: true, align: "right" },
+      { key: "facturado", label: "Facturado sin pagar", money: true, align: "right" }, { key: "pagado", label: "Pagado", money: true, align: "right" },
+      { key: "acomp", label: "Con acompañante", align: "right" }, { key: "ff", label: "Fondo fijo (folios)", align: "right" }, { key: "ffImp", label: "Fondo fijo", money: true, align: "right" },
+      { key: "rep", label: "De ellos, posibles repetidos", align: "right" }, { key: "repImp", label: "Repetidos ($, incluidos)", money: true, align: "right" },
+    ], rows, totales: { mes: "TOTAL", ...tot(viajes), ...Object.fromEntries(["devengo", "facturado", "pagado", "acomp", "ff", "ffImp", "rep", "repImp"].map((k) => [k, suma(rows, k)])) } };
+  }
+  if (key === "t2" || key === "t4") {
+    const llave = key === "t2" ? (f) => `${NOMBRE_CIUDAD[f.ciudad]}|${f.unidad_receptora}` : (f) => f.especialidad || "(sin especialidad)";
+    const g = {}; for (const f of viajes) (g[llave(f)] ||= []).push(f);
+    const T = tot(viajes);
+    const rows = Object.entries(g).map(([k, l]) => {
+      const x = tot(l), ciudades = {}; for (const f of l) ciudades[NOMBRE_CIUDAD[f.ciudad]] = (ciudades[NOMBRE_CIUDAD[f.ciudad]] || 0) + 1;
+      const base = key === "t2" ? { ciudad: k.split("|")[0], hospital: k.split("|")[1] } : { especialidad: k, destinos: Object.entries(ciudades).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join(", ") };
+      return { ...base, ...x, peso: pct(x.importe, T.importe), acomp: l.filter((f) => f.acompanante).length };
+    }).sort((a, b) => (key === "t2" ? a.ciudad.localeCompare(b.ciudad) || b.importe - a.importe : b.importe - a.importe));
+    const cols = key === "t2" ? [{ key: "ciudad", label: "Ciudad" }, { key: "hospital", label: "Hospital destino" }] : [{ key: "especialidad", label: "Especialidad" }, { key: "destinos", label: "Destinos (folios)" }];
+    return { titulo: key === "t2" ? "Traslados por destino" : "Traslados por especialidad", resumen: rango, nota, columns: [...cols,
+      { key: "folios", label: "Folios", align: "right" }, { key: "boletos", label: "Boletos", align: "right" }, { key: "importe", label: "Importe", money: true, align: "right" },
+      { key: "peso", label: "% del importe", align: "right" }, { key: "acomp", label: "Con acompañante", align: "right" }],
+      rows, totales: { [cols[0].key]: "TOTAL", ...T, peso: "100%", acomp: viajes.filter((f) => f.acompanante).length } };
+  }
+  if (key === "t3") {
+    const g = {}; for (const f of viajes) (g[`${f.fecha_viaje.slice(0, 7)}|${f.ciudad}`] ||= []).push(f);
+    const rows = Object.entries(g).sort(([a], [b]) => a.localeCompare(b)).map(([k, l]) => {
+      const con = l.filter((f) => f.acompanante);
+      return { mes: `${MES_NOM[Number(k.slice(5, 7))]} ${k.slice(0, 4)}`, ciudad: NOMBRE_CIUDAD[k.split("|")[1]], viajes: l.length, con: con.length, pct: pct(con.length, l.length),
+        boletosA: r2(con.reduce((s, f) => s + f.boletosAcomp, 0)), importeA: r2(con.reduce((s, f) => s + (f.boletos ? (f.valor * f.boletosAcomp) / f.boletos : 0), 0)), sinNombre: con.filter((f) => !f.con_acompanante).length };
+    });
+    const viajesT = rows.reduce((s, r) => s + r.viajes, 0), conT = rows.reduce((s, r) => s + r.con, 0);
+    return { titulo: "Acompañantes", resumen: rango, nota: "Con acompañante = la columna \"Acompañante\" del SCACE trae dato o el folio lleva más de un boleto (1.5 o 2). \"Sin nombre capturado\" = se cobró boleto de acompañante pero el SCACE no trae su nombre.", columns: [
+      { key: "mes", label: "Mes del viaje" }, { key: "ciudad", label: "Ciudad" }, { key: "viajes", label: "Viajes", align: "right" }, { key: "con", label: "Con acompañante", align: "right" },
+      { key: "pct", label: "%", align: "right" }, { key: "boletosA", label: "Boletos de acompañante", align: "right" }, { key: "importeA", label: "Costo acompañantes", money: true, align: "right" },
+      { key: "sinNombre", label: "Sin nombre capturado", align: "right" },
+    ], rows, totales: { mes: "TOTAL", viajes: viajesT, con: conT, pct: pct(conT, viajesT), boletosA: suma(rows, "boletosA"), importeA: suma(rows, "importeA"), sinNombre: suma(rows, "sinNombre") } };
+  }
+  if (key === "t5") {
+    const rows = scaceContraFacturas(t, t.clasificados, { desde, hasta }).map((x) => ({ factura: x.factura.folio_proveedor, periodo: `${fISO(x.factura.periodo_inicio)} al ${fISO(x.factura.periodo_fin)}`, contrato: x.contrato,
+      ciudad: NOMBRE_CIUDAD[x.ciudad], emitidos: x.emitidos, facturados: x.facturados, diferencia: x.diferencia, importeDif: x.importeDif, repetidos: x.repetidos || "", lectura: x.lectura }));
+    return { titulo: "SCACE contra factura", resumen: `${new Set(rows.map((r) => r.factura)).size} facturas con detalle de viajes`, nota: "Solo facturas con detalle de viajes y periodo capturados. Boletos SCACE = folios (sin fondo fijo; los posibles repetidos incluidos y señalados aparte) con fecha de viaje dentro del periodo de la factura. Las facturas sin detalle (p. ej. viajes de otra unidad pagados por el HGZ 2) no entran. Si no se ha cargado el SCACE de ese periodo, todo sale como \"cobrado de más\".", columns: [
+      { key: "factura", label: "Factura" }, { key: "periodo", label: "Periodo" }, { key: "contrato", label: "Contrato" }, { key: "ciudad", label: "Ciudad" },
+      { key: "emitidos", label: "Boletos SCACE", align: "right" }, { key: "facturados", label: "Boletos facturados", align: "right" }, { key: "diferencia", label: "Diferencia", align: "right" },
+      { key: "importeDif", label: "Importe de la diferencia", money: true, align: "right" }, { key: "repetidos", label: "De ellos, posibles repetidos", align: "right" }, { key: "lectura", label: "Lectura" },
+    ], rows, totales: { factura: "TOTAL", emitidos: suma(rows, "emitidos"), facturados: suma(rows, "facturados"), diferencia: suma(rows, "diferencia"), importeDif: suma(rows, "importeDif") } };
+  }
+  return null;
+}
 
 const inp = { padding: "8px 10px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14, width: "100%", boxSizing: "border-box" };
 const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px" };
@@ -45,6 +116,7 @@ export default function ReportesPage() {
   const [servSel, setServSel] = useState(() => new Set());
   const [buscaConcepto, setBuscaConcepto] = useState("");
   const [folioOpen, setFolioOpen] = useState(false); // dropdown de sugerencias de folio (R2)
+  const [trasCache, setTrasCache] = useState(null); // folios del SCACE ya clasificados (informes de traslados)
 
   useEffect(() => {
     (async () => {
@@ -95,6 +167,11 @@ export default function ReportesPage() {
     { key: "r3b", grupo: "Facturas", label: "Consumo por conceptos (elige del contrato)", desc: "Elige contrato → marca los conceptos que quieras → te dice en qué facturas salen y cuánto. Sin contrato, puedes buscar por texto. Requiere desglose capturado.", filtros: ["proveedor", "contrato", "fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
+    { key: "t1", grupo: "Traslados", label: "Gasto de traslados por mes", desc: "Viajes del SCACE por mes del viaje: folios, boletos, importe, cuánto es devengo, facturado y pagado, acompañantes, fondo fijo y posibles repetidos.", filtros: ["fechas"] },
+    { key: "t2", grupo: "Traslados", label: "Traslados por destino", desc: "A qué ciudad y hospital van los pacientes: folios, boletos, importe y su peso en el total.", filtros: ["fechas"] },
+    { key: "t3", grupo: "Traslados", label: "Acompañantes", desc: "Viajes con acompañante por mes y ciudad, y cuánto cuestan los boletos de acompañante.", filtros: ["fechas"] },
+    { key: "t4", grupo: "Traslados", label: "Traslados por especialidad", desc: "Qué servicios mandan más pacientes y a dónde.", filtros: ["fechas"] },
+    { key: "t5", grupo: "Traslados", label: "SCACE contra factura", desc: "Por factura de Autobuses y destino: boletos emitidos en el SCACE contra los facturados. Más emitidos = posible \"no viajó\"; más facturados = pedir aclaración.", filtros: ["fechas"] },
   ];
   const rep = REPORTES.find((r) => r.key === repKey);
   const setF = (k, v) => setFiltros((p) => ({ ...p, [k]: v }));
@@ -114,7 +191,12 @@ export default function ReportesPage() {
   async function generar() {
     setGenerando(true); setMsg("");
     try {
-      if (repKey === "r1") {
+      if (repKey.startsWith("t")) {
+        let t = trasCache;
+        if (!t) { const d = await cargarTraslados(); t = { ...d, clasificados: clasificar(d) }; setTrasCache(t); }
+        if (!t.folios.length) setMsg("Todavía no hay folios del SCACE en SIGAF: súbelos en Cargar reportes.");
+        setRes(informeTraslados(repKey, t, filtros));
+      } else if (repKey === "r1") {
         const filas = filtraFacturas();
         const rows = filas.map((f) => ({
           folio_ingreso: f.folio_ingreso, folio_proveedor: f.folio_proveedor, prov: f.prov, contrato: f.contrato, capNom: f.capNom,
@@ -358,7 +440,7 @@ export default function ReportesPage() {
       <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
         {/* Catálogo de reportes */}
         <div className="no-print" style={{ ...card, width: 260, flexShrink: 0 }}>
-          {["Facturas", "Contratos"].map((g) => (
+          {["Facturas", "Contratos", "Traslados"].map((g) => (
             <div key={g} style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--texto-suave)", marginBottom: 4 }}>{g}</div>
               {REPORTES.filter((r) => r.grupo === g).map((r) => (
