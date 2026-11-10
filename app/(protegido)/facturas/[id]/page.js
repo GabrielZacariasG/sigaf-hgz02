@@ -164,6 +164,7 @@ export default function FacturaEstatusPage() {
   const [fIni, setFIni] = useState("");
   const [fFin, setFFin] = useState("");
   const [guardandoFechas, setGuardandoFechas] = useState(false);
+  const [oficiosFac, setOficiosFac] = useState([]); // oficios (envío a pago, devolución, servicio) que incluyen esta factura
   const [semDic, setSemDic] = useState(null); // semáforo de dictamen del contrato (lib/avisos)
   // Folios de subrogados: los ligados a esta factura + los pendientes (devengo) del contrato
   const [folios, setFolios] = useState({ lista: [], ligados: new Set() });
@@ -189,14 +190,16 @@ export default function FacturaEstatusPage() {
   };
 
   async function cargar() {
-    const [rFac, rHist, rAlertas, rDet] = await Promise.all([
+    const [rFac, rHist, rAlertas, rDet, rOfi] = await Promise.all([
       supabase.from("facturas").select(
         "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, fecha_factura, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
       supabase.from("factura_detalle").select("cantidad, contrato_servicios ( nombre_servicio, precio_unitario )").eq("factura_id", facturaId),
+      supabase.from("oficios").select("tipo, folio, created_at, motivo").contains("factura_ids", [facturaId]).order("created_at", { ascending: true }),
     ]);
+    setOficiosFac((rOfi && rOfi.data) || []);
 
     if (rFac.error || !rFac.data) {
       setMensaje("No se pudo cargar la factura: " + (rFac.error?.message || "no existe"));
@@ -484,6 +487,23 @@ export default function FacturaEstatusPage() {
             ) : (
               <span style={{ color: "var(--ambar)", fontWeight: 600 }}>Aún sin asignar · {LABEL_PEDIDO[factura.estatus_pedido_recepcion] || factura.estatus_pedido_recepcion}</span>
             )}
+          </div>
+        )}
+        {oficiosFac.length > 0 && (
+          <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)" }}>
+            <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--texto-suave)" }}>Oficios de esta factura</span>
+            <div style={{ display: "grid", gap: 4, marginTop: 5 }}>
+              {oficiosFac.map((o) => {
+                const lbl = o.tipo === "envio_pago" ? "📨 Envío a pago (OOAD)" : o.tipo === "devolucion" ? "↩️ Devolución al proveedor" : o.tipo === "envio_servicio" ? "✔️ Envío a servicio" : o.tipo;
+                return (
+                  <div key={o.folio} style={{ fontSize: 13.5 }}>
+                    <strong>{lbl}:</strong> <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{o.folio}</span>
+                    {o.created_at && <span style={{ color: "var(--texto-suave)", fontSize: 12 }}> · {new Date(o.created_at).toLocaleDateString("es-MX")}</span>}
+                    {o.motivo && <span style={{ color: "var(--texto-suave)", fontSize: 12 }}> · {o.motivo}</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
         <div style={{ gridColumn: "1 / -1" }}><Link href={`/facturas/${factura.id}/detalle`}>Ver / capturar detalle de servicios →</Link></div>
