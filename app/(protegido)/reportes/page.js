@@ -108,7 +108,7 @@ export default function ReportesPage() {
   const [contratos, setContratos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [repKey, setRepKey] = useState("r1");
-  const [filtros, setFiltros] = useState({ contrato: "", proveedor: "", capitulo: "", etapa: "", desde: "", hasta: "", folio: "", concepto: "", soloVencidos: false });
+  const [filtros, setFiltros] = useState({ contrato: "", proveedor: "", capitulo: "", etapa: "", desde: "", hasta: "", folio: "", concepto: "", soloVencidos: false, detalleCE: false });
   const [res, setRes] = useState(null); // { columns, rows, totales, titulo }
   const [generando, setGenerando] = useState(false);
   const [msg, setMsg] = useState("");
@@ -123,7 +123,7 @@ export default function ReportesPage() {
       let todas = [], desde = 0;
       for (;;) {
         const { data, error } = await supabase.from("facturas").select(
-          "id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, validacion_ok, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, created_at, contrato_id, proveedor_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+          "id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, validacion_ok, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, created_at, contrato_id, proveedor_id, orden_compra, cr_contrarecibo, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
         ).eq("anulada", false).range(desde, desde + 999);
         if (error) { setMsg("No se pudieron cargar facturas: " + error.message); break; }
         todas = todas.concat(data || []);
@@ -165,6 +165,7 @@ export default function ReportesPage() {
     { key: "r2", grupo: "Facturas", label: "Detalle de servicios de una factura", desc: "Conceptos, cantidad, precio unitario e importe de una factura (requiere desglose capturado).", filtros: ["folio"] },
     { key: "r3", grupo: "Facturas", label: "Servicios de mayor impacto", desc: "Ranking de conceptos por importe y cantidad (facturas con desglose).", filtros: ["contrato", "capitulo", "fechas"] },
     { key: "r3b", grupo: "Facturas", label: "Consumo por conceptos (elige del contrato)", desc: "Elige contrato → marca los conceptos que quieras → te dice en qué facturas salen y cuánto. Sin contrato, puedes buscar por texto. Requiere desglose capturado.", filtros: ["proveedor", "contrato", "fechas"] },
+    { key: "r9", grupo: "Facturas", label: "Compra Emergente sin CR", desc: "Facturas de Compra Emergente que aún NO tienen contra-recibo (CR), agrupadas por cuenta: cuántas son y cuánto importe. Son las que todavía no reflejan gasto.", filtros: ["proveedor", "capitulo", "fechas", "detalleCE"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
     { key: "t1", grupo: "Traslados", label: "Gasto de traslados por mes", desc: "Viajes del SCACE por mes del viaje: folios, boletos, importe, cuánto es devengo, facturado y pagado, acompañantes, fondo fijo y posibles repetidos.", filtros: ["fechas"] },
@@ -359,6 +360,50 @@ export default function ReportesPage() {
           ],
           rows, totales: { contrato: `TOTAL (${rows.length})`, contratado: rows.reduce((s, r) => s + r.contratado, 0), ejercido: rows.reduce((s, r) => s + r.ejercido, 0), pagado: rows.reduce((s, r) => s + r.pagado, 0), adeudo: rows.reduce((s, r) => s + r.adeudo, 0) },
         });
+      } else if (repKey === "r9") {
+        // Compra Emergente (marco CE-) SIN contra-recibo (CR).
+        const sinCR = (f) => !String(f.cr_contrarecibo ?? "").trim();
+        const base = facturas.filter((f) =>
+          (f.contrato || "").startsWith("CE-") && sinCR(f)
+          && (!filtros.proveedor || f.prov === filtros.proveedor)
+          && (!filtros.capitulo || f.capNom === filtros.capitulo)
+          && (!filtros.desde || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") >= filtros.desde)
+          && (!filtros.hasta || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") <= filtros.hasta)
+        );
+        if (filtros.detalleCE) {
+          const rows = base
+            .map((f) => ({ cuenta: (f.contrato || "").replace("CE-", ""), oc: f.orden_compra || "—", folio: f.folio_ingreso || "—", folioProv: f.folio_proveedor || "—",
+              prov: f.prov, etapa: f.etapa, fecha: fechaMX(f.periodo_inicio || f.created_at), importe: Number(f.importe_factura) || 0 }))
+            .sort((a, b) => (a.cuenta === b.cuenta ? b.importe - a.importe : a.cuenta.localeCompare(b.cuenta)));
+          setRes({
+            titulo: "Compra Emergente sin CR — detalle por factura",
+            resumen: `${rows.length} factura(s) sin contra-recibo`,
+            nota: rows.length === 0 ? "No hay facturas de Compra Emergente sin CR con estos filtros." : "Sin CR = aún no tiene contra-recibo capturado (todavía no refleja gasto).",
+            columns: [
+              { key: "cuenta", label: "Cuenta" }, { key: "oc", label: "OC" }, { key: "folio", label: "Folio ingreso" }, { key: "folioProv", label: "Folio prov." },
+              { key: "prov", label: "Proveedor" }, { key: "etapa", label: "Etapa" }, { key: "fecha", label: "Fecha" }, { key: "importe", label: "Importe", money: true, align: "right" },
+            ],
+            rows, totales: { prov: `TOTAL (${rows.length})`, importe: rows.reduce((s, r) => s + r.importe, 0) },
+          });
+        } else {
+          const g = new Map();
+          for (const f of base) {
+            const cuenta = (f.contrato || "").replace("CE-", "");
+            const x = g.get(cuenta) || { cuenta, capNom: f.capNom, facturas: 0, importe: 0 };
+            x.facturas += 1; x.importe += Number(f.importe_factura) || 0; g.set(cuenta, x);
+          }
+          const rows = [...g.values()].sort((a, b) => b.importe - a.importe);
+          setRes({
+            titulo: "Compra Emergente sin CR — por cuenta",
+            resumen: `${base.length} factura(s) en ${rows.length} cuenta(s)`,
+            nota: rows.length === 0 ? "No hay facturas de Compra Emergente sin CR con estos filtros." : "Sin CR = aún no tiene contra-recibo capturado (todavía no refleja gasto). Marca “Ver detalle por factura” para el desglose.",
+            columns: [
+              { key: "cuenta", label: "Cuenta" }, { key: "capNom", label: "Capítulo" },
+              { key: "facturas", label: "Facturas sin CR", align: "right" }, { key: "importe", label: "Importe", money: true, align: "right" },
+            ],
+            rows, totales: { cuenta: `TOTAL (${rows.length} cuentas)`, facturas: rows.reduce((s, r) => s + r.facturas, 0), importe: rows.reduce((s, r) => s + r.importe, 0) },
+          });
+        }
       }
     } catch (e) { setMsg("Error al generar: " + e.message); }
     setGenerando(false);
@@ -429,6 +474,7 @@ export default function ReportesPage() {
     ),
     concepto: <div key="co"><label style={lbl}>Concepto / insumo</label><input style={inp} value={filtros.concepto} onChange={(e) => setF("concepto", e.target.value)} placeholder="Ej. jitomate, gasa, oxígeno…" /></div>,
     soloVencidos: <label key="sv" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.soloVencidos} onChange={(e) => setF("soloVencidos", e.target.checked)} /> Solo contratos vencidos</label>,
+    detalleCE: <label key="dce" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.detalleCE} onChange={(e) => setF("detalleCE", e.target.checked)} /> Ver detalle por factura</label>,
   };
 
   return (
