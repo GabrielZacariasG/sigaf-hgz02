@@ -24,6 +24,7 @@ const PAGADA = "gasto_reflejado";
 const card = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 12, padding: "14px 16px" };
 const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "2px solid var(--borde)", whiteSpace: "nowrap" };
 const td = { padding: "7px 10px", borderBottom: "1px solid var(--borde)", fontSize: 13, verticalAlign: "top" };
+const linkBtn = { background: "none", border: "none", color: "var(--verde)", cursor: "pointer", fontSize: 12.5, padding: 0 };
 
 // Estado de un folio
 function estadoDe(f) {
@@ -44,6 +45,8 @@ export default function SubrogadosPage() {
   const [selDev, setSelDev] = useState(new Set());
   const [selCanc, setSelCanc] = useState(new Set());
   const [trabajando, setTrabajando] = useState(false);
+  const [vista, setVista] = useState("facturado");   // facturado | devengo | cancelado
+  const [expandF, setExpandF] = useState(new Set());  // facturas (bloques) expandidas
 
   async function cargar() {
     setCargando(true); setMsg("");
@@ -142,6 +145,26 @@ export default function SubrogadosPage() {
     setTrabajando(false);
   }
 
+  async function exportarExcel() {
+    if (!det) return;
+    const mod = await import("xlsx");
+    const XLSX = mod.default || mod;
+    const fila = (f, estatus, factura, folioSigaf) => ({
+      Folio: f.folio, Fecha: fechaMX(f.fecha), Paciente: f.paciente || "", Médico: f.medico || "",
+      Estudio: f.estudio || "", Importe: Number(f.importe) || 0, Factura: factura || "", "Folio SIGAF": folioSigaf || "", Estatus: estatus,
+    });
+    const rows = [];
+    for (const b of det.bloques) for (const f of b.folios)
+      rows.push(fila(f, b.pagada ? "Facturado (pagada)" : "Facturado", b.factura?.folio_proveedor || b.txt, b.factura?.folio_ingreso));
+    for (const f of det.devengo) rows.push(fila(f, "Devengo", "", ""));
+    for (const f of det.cancelados) rows.push(fila(f, "Cancelado", "", ""));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 8 }, { wch: 11 }, { wch: 30 }, { wch: 26 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Folios");
+    XLSX.writeFile(wb, `Subrogados_${(det.contrato || "contrato").replace(/[^\w]+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   if (cargando) return <p style={{ padding: 8 }}>Cargando folios de subrogados…</p>;
 
   // ---------- Vista DETALLE ----------
@@ -167,83 +190,117 @@ export default function SubrogadosPage() {
         <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 10 }}>{det.servicio !== "—" ? det.servicio : "Sin servicio capturado"} · Vigencia {det.vigencia}</div>
         {msg && <div style={{ background: "#eef7f1", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>{msg}</div>}
 
-        {/* Bloques por factura (solo lectura) */}
-        {det.bloques.map((b) => (
-          <div key={b.key} style={{ ...card, marginBottom: 12, borderColor: b.pagada ? "#86efac" : "var(--borde)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-              <div>
-                <strong style={{ fontSize: 14 }}>
-                  {b.factura ? <>Factura {b.factura.folio_proveedor || "—"} · <Link href={`/facturas/${b.factura.id}`} style={{ color: "var(--verde)" }}>{b.factura.folio_ingreso}</Link></>
-                    : <>Factura {b.txt} <span style={{ fontWeight: 400, color: "var(--texto-suave)" }}>(del Avance SMS; no capturada en SIGAF)</span></>}
-                </strong>
-                {b.pagada && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#15803d" }}>🔒 Pagada — folios atrapados</span>}
+        {/* Barra: chips para ir directo a cada grupo + descargar Excel */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+          {[
+            ["facturado", `Facturados (${det.bloques.reduce((s, b) => s + b.folios.length, 0)})`, "#166534", "#dcfce7"],
+            ["devengo", `Devengo (${det.devengo.length})`, "#6d28d9", "#f3e8ff"],
+            ["cancelado", `Cancelados (${det.cancelados.length})`, "#6b7280", "#eef2f5"],
+          ].map(([v, label, col, bg]) => (
+            <button key={v} onClick={() => setVista(v)} style={{ cursor: "pointer", fontSize: 13, fontWeight: vista === v ? 700 : 500, padding: "7px 14px", borderRadius: 999, border: `1px solid ${vista === v ? col : "var(--borde)"}`, background: vista === v ? bg : "var(--blanco)", color: vista === v ? col : "var(--texto)" }}>{label}</button>
+          ))}
+          <button className="boton secundario" onClick={exportarExcel} style={{ marginLeft: "auto", fontSize: 12.5 }}>⬇ Excel del contrato</button>
+        </div>
+
+        {/* FACTURADOS (facturas colapsables: una línea cada una, se abre al clic) */}
+        {vista === "facturado" && (
+          <div>
+            {det.bloques.length > 1 && (
+              <div style={{ marginBottom: 8, fontSize: 12.5 }}>
+                <button onClick={() => setExpandF(new Set(det.bloques.map((b) => b.key)))} style={linkBtn}>Abrir todas</button>
+                <span style={{ color: "var(--borde)" }}> · </span>
+                <button onClick={() => setExpandF(new Set())} style={linkBtn}>Cerrar todas</button>
               </div>
-              <span style={{ fontSize: 13 }}>{b.folios.length} folio(s) · <strong>{money(b.subtotal)}</strong></span>
+            )}
+            {det.bloques.map((b) => {
+              const abierto = expandF.has(b.key);
+              return (
+                <div key={b.key} style={{ ...card, marginBottom: 8, padding: "10px 14px", borderColor: b.pagada ? "#86efac" : "var(--borde)" }}>
+                  <div onClick={() => setExpandF((p) => { const n = new Set(p); n.has(b.key) ? n.delete(b.key) : n.add(b.key); return n; })}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, cursor: "pointer" }}>
+                    <div>
+                      <span style={{ color: "var(--texto-suave)", marginRight: 6 }}>{abierto ? "▾" : "▸"}</span>
+                      <strong style={{ fontSize: 14 }}>
+                        {b.factura ? <>Factura {b.factura.folio_proveedor || "—"} · <Link href={`/facturas/${b.factura.id}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--verde)" }}>{b.factura.folio_ingreso}</Link></>
+                          : <>Factura {b.txt} <span style={{ fontWeight: 400, color: "var(--texto-suave)" }}>(del Avance SMS)</span></>}
+                      </strong>
+                      {b.pagada && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: "#15803d" }}>🔒 Pagada</span>}
+                    </div>
+                    <span style={{ fontSize: 13 }}>{b.folios.length} folio(s) · <strong>{money(b.subtotal)}</strong></span>
+                  </div>
+                  {abierto && (
+                    <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 8, marginTop: 8 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead><tr>{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                        <tbody>{b.folios.map((f) => tdRow(f))}</tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {det.bloques.length === 0 && <div style={{ ...card, color: "var(--texto-suave)", fontSize: 13 }}>Este contrato aún no tiene folios facturados.</div>}
+          </div>
+        )}
+
+        {/* DEVENGO (sin factura) — se puede cancelar a mano */}
+        {vista === "devengo" && (
+          <div style={{ ...card, marginBottom: 12, borderColor: "#c4b5fd" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <strong style={{ fontSize: 14, color: "#6d28d9" }}>Devengo (sin factura) — {det.devengo.length} folio(s) · {money(det.impDev)}</strong>
+              {puedeToggle && det.devengo.length > 0 && (
+                <button className="boton secundario" disabled={!selDev.size || trabajando} onClick={() => alternar([...selDev], true)} style={{ fontSize: 12.5 }}>
+                  Marcar {selDev.size || ""} como cancelado(s)
+                </button>
+              )}
             </div>
             <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 8 }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
-                <tbody>{b.folios.map((f) => tdRow(f, "facturado"))}</tbody>
+                <thead><tr>{puedeToggle && <th style={{ ...th, width: 28 }} />}{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                <tbody>{det.devengo.map((f) => (
+                  <tr key={f.clave} onClick={() => puedeToggle && setSelDev((p) => { const n = new Set(p); n.has(f.clave) ? n.delete(f.clave) : n.add(f.clave); return n; })}
+                    style={{ cursor: puedeToggle ? "pointer" : "default", background: selDev.has(f.clave) ? "#f3e8ff" : undefined }}>
+                    {puedeToggle && <td style={td}><input type="checkbox" checked={selDev.has(f.clave)} readOnly /></td>}
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>{f.folio}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{fechaMX(f.fecha)}</td>
+                    <td style={td}>{f.paciente || "—"}</td><td style={td}>{f.estudio || "—"}</td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(f.importe)}</td>
+                  </tr>
+                ))}
+                {det.devengo.length === 0 && <tr><td colSpan={puedeToggle ? 6 : 5} style={{ ...td, color: "var(--texto-suave)" }}>Nada en devengo.</td></tr>}</tbody>
+              </table>
+            </div>
+            {!puedeToggle && <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>Solo Presupuesto, Finanzas o ventanilla pueden mover devengo/cancelado.</div>}
+          </div>
+        )}
+
+        {/* CANCELADOS — se pueden regresar a devengo */}
+        {vista === "cancelado" && (
+          <div style={{ ...card, marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <strong style={{ fontSize: 14, color: "var(--texto-suave)" }}>Cancelados — {det.cancelados.length} folio(s) · no cuentan</strong>
+              {puedeToggle && det.cancelados.length > 0 && (
+                <button className="boton secundario" disabled={!selCanc.size || trabajando} onClick={() => alternar([...selCanc], false)} style={{ fontSize: 12.5 }}>
+                  Regresar {selCanc.size || ""} a devengo
+                </button>
+              )}
+            </div>
+            <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 8 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr>{puedeToggle && <th style={{ ...th, width: 28 }} />}{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                <tbody>{det.cancelados.map((f) => (
+                  <tr key={f.clave} onClick={() => puedeToggle && setSelCanc((p) => { const n = new Set(p); n.has(f.clave) ? n.delete(f.clave) : n.add(f.clave); return n; })}
+                    style={{ cursor: puedeToggle ? "pointer" : "default", color: "var(--texto-suave)", background: selCanc.has(f.clave) ? "#f1f5f9" : undefined }}>
+                    {puedeToggle && <td style={td}><input type="checkbox" checked={selCanc.has(f.clave)} readOnly /></td>}
+                    <td style={{ ...td, whiteSpace: "nowrap" }}>{f.folio}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{fechaMX(f.fecha)}</td>
+                    <td style={td}>{f.paciente || "—"}</td><td style={td}>{f.estudio || "—"}</td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", textDecoration: "line-through" }}>{money(f.importe)}</td>
+                  </tr>
+                ))}
+                {det.cancelados.length === 0 && <tr><td colSpan={puedeToggle ? 6 : 5} style={{ ...td, color: "var(--texto-suave)" }}>Sin cancelados.</td></tr>}</tbody>
               </table>
             </div>
           </div>
-        ))}
-        {det.bloques.length === 0 && <div style={{ ...card, marginBottom: 12, color: "var(--texto-suave)", fontSize: 13 }}>Este contrato aún no tiene folios facturados.</div>}
-
-        {/* Devengo (sin factura) — se puede cancelar a mano */}
-        <div style={{ ...card, marginBottom: 12, borderColor: "#c4b5fd" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-            <strong style={{ fontSize: 14, color: "#6d28d9" }}>Devengo (sin factura) — {det.devengo.length} folio(s) · {money(det.impDev)}</strong>
-            {puedeToggle && det.devengo.length > 0 && (
-              <button className="boton secundario" disabled={!selDev.size || trabajando} onClick={() => alternar([...selDev], true)} style={{ fontSize: 12.5 }}>
-                Marcar {selDev.size || ""} como cancelado(s)
-              </button>
-            )}
-          </div>
-          <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{puedeToggle && <th style={{ ...th, width: 28 }} />}{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
-              <tbody>{det.devengo.map((f) => (
-                <tr key={f.clave} onClick={() => puedeToggle && setSelDev((p) => { const n = new Set(p); n.has(f.clave) ? n.delete(f.clave) : n.add(f.clave); return n; })}
-                  style={{ cursor: puedeToggle ? "pointer" : "default", background: selDev.has(f.clave) ? "#f3e8ff" : undefined }}>
-                  {puedeToggle && <td style={td}><input type="checkbox" checked={selDev.has(f.clave)} readOnly /></td>}
-                  <td style={{ ...td, whiteSpace: "nowrap" }}>{f.folio}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{fechaMX(f.fecha)}</td>
-                  <td style={td}>{f.paciente || "—"}</td><td style={td}>{f.estudio || "—"}</td>
-                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(f.importe)}</td>
-                </tr>
-              ))}
-              {det.devengo.length === 0 && <tr><td colSpan={puedeToggle ? 6 : 5} style={{ ...td, color: "var(--texto-suave)" }}>Nada en devengo.</td></tr>}</tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Cancelados — se pueden regresar a devengo */}
-        <div style={{ ...card, marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-            <strong style={{ fontSize: 14, color: "var(--texto-suave)" }}>Cancelados — {det.cancelados.length} folio(s) · no cuentan</strong>
-            {puedeToggle && det.cancelados.length > 0 && (
-              <button className="boton secundario" disabled={!selCanc.size || trabajando} onClick={() => alternar([...selCanc], false)} style={{ fontSize: 12.5 }}>
-                Regresar {selCanc.size || ""} a devengo
-              </button>
-            )}
-          </div>
-          <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr>{puedeToggle && <th style={{ ...th, width: 28 }} />}{cab.map((h) => <th key={h} style={{ ...th, textAlign: h === "Importe" ? "right" : "left" }}>{h}</th>)}</tr></thead>
-              <tbody>{det.cancelados.map((f) => (
-                <tr key={f.clave} onClick={() => puedeToggle && setSelCanc((p) => { const n = new Set(p); n.has(f.clave) ? n.delete(f.clave) : n.add(f.clave); return n; })}
-                  style={{ cursor: puedeToggle ? "pointer" : "default", color: "var(--texto-suave)", background: selCanc.has(f.clave) ? "#f1f5f9" : undefined }}>
-                  {puedeToggle && <td style={td}><input type="checkbox" checked={selCanc.has(f.clave)} readOnly /></td>}
-                  <td style={{ ...td, whiteSpace: "nowrap" }}>{f.folio}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{fechaMX(f.fecha)}</td>
-                  <td style={td}>{f.paciente || "—"}</td><td style={td}>{f.estudio || "—"}</td>
-                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", textDecoration: "line-through" }}>{money(f.importe)}</td>
-                </tr>
-              ))}
-              {det.cancelados.length === 0 && <tr><td colSpan={puedeToggle ? 6 : 5} style={{ ...td, color: "var(--texto-suave)" }}>Sin cancelados.</td></tr>}</tbody>
-            </table>
-          </div>
-        </div>
-        {!puedeToggle && <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>Solo Presupuesto, Finanzas o ventanilla pueden mover devengo/cancelado. Los folios facturados nunca se modifican aquí.</div>}
+        )}
       </div>
     );
   }
@@ -277,7 +334,7 @@ export default function SubrogadosPage() {
             </tr></thead>
             <tbody>
               {resumen.map((r) => (
-                <tr key={r.k} style={{ cursor: "pointer" }} onClick={() => { setDetalle(r.k); setMsg(""); setSelDev(new Set()); setSelCanc(new Set()); }}>
+                <tr key={r.k} style={{ cursor: "pointer" }} onClick={() => { setDetalle(r.k); setMsg(""); setSelDev(new Set()); setSelCanc(new Set()); setVista("facturado"); setExpandF(new Set()); }}>
                   <td style={{ ...td, fontWeight: 600 }}>{r.contrato}</td>
                   <td style={td}>{r.prov}</td>
                   <td style={{ ...td, maxWidth: 260, fontSize: 12.5 }}>{r.servicio}</td>
