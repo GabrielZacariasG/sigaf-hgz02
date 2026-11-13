@@ -362,6 +362,13 @@ export default function NuevaFacturaPage() {
     if (err) { setMensaje(err); setPaso(1); return; }
     if (!calc.ok) { setMensaje("El subtotal + IVA aún no coincide con el total de la factura. Ajústalo antes de guardar."); return; }
     if (requiereDesglose && !desgloseListo) { setMensaje("Captura el desglose por servicio: es obligatorio en este contrato."); return; }
+    // 🔒 Candado de subrogación: una factura de contrato de Subrogados debe amparar al menos un folio (devengo).
+    if (/subrog/i.test(capituloSel?.nombre || "") && selFolios.size === 0) {
+      setMensaje(foliosPend.length === 0
+        ? "Este contrato de subrogación no tiene folios en devengo. Carga primero el Avance SMS / CD_SMS en «Cargar reportes» (o verifica que existan folios pendientes) antes de capturar la factura."
+        : "Selecciona al menos un folio de subrogados que ampara esta factura antes de guardar (abajo, en «Folios de subrogados que cobra esta factura»).");
+      setPaso(2); return;
+    }
     // Candado final anti-duplicados (por si algo cambió tras el paso 1).
     const dups = await buscarDuplicados();
     if (dups.folioDupFolio) { setFolioDup(dups.folioDupFolio); setMensaje(`El folio de proveedor "${folioProveedor.trim()}" ya fue capturado en la factura ${dups.folioDupFolio}. No se puede duplicar.`); setPaso(1); return; }

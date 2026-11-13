@@ -12,6 +12,7 @@ import {
   puedeEnviarOoad, generaPedidoRecepcion, periodoTxt, pasivosPrimero,
 } from "../../../lib/estatus";
 import { leerTodo } from "../../../lib/paginar";
+import { liberarFoliosDeFactura } from "../../../lib/subrogadosCarga";
 import ResumenServicios from "./ResumenServicios";
 
 // Estatus generales desde los que una factura puede salir a pago con oficio EP.
@@ -525,6 +526,10 @@ export default function FacturasListaPage() {
           });
         }
         if (!okFilas.length) continue;
+        // Devolución al proveedor: liberar los folios de subrogados de esas facturas (vuelven a devengo).
+        if (oficio.tipo === "devolucion") {
+          for (const f of okFilas) { try { await liberarFoliosDeFactura(f.id); } catch { /* no bloquea el oficio */ } }
+        }
         // 2) Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
         try {
           const totalDoc = okFilas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);

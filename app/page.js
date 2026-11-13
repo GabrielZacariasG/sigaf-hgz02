@@ -127,6 +127,7 @@ export default function Portal() {
     // ---- Presupuesto ----
     { grupo: 'Presupuesto', icon: '📑', titulo: 'Cédula de gasto', desc: 'Avance presupuestal por cuenta (presupuesto, gasto, pasivo, disponible) — la cédula que ya usan.', cifra: c.cuentas, etiqueta: 'cuenta(s) con datos', ruta: '/cedula' },
     { grupo: 'Presupuesto', icon: '📁', titulo: 'Contratos', desc: 'Cédula de contratos: gasto, pagos, pasivo y apoyos por contrato.', cifra: c.contratos, etiqueta: 'contratos', ruta: '/contratos' },
+    { grupo: 'Presupuesto', icon: '🩺', titulo: 'Folios de subrogados', desc: 'Resumen por contrato: folios facturados, en devengo y cancelados. Entra a un contrato para ver su detalle.', cifra: '🔎', etiqueta: 'devengo y facturados', ruta: '/subrogados' },
     { grupo: 'Presupuesto', icon: '🧾', titulo: 'Dictámenes', desc: 'Suficiencia FINAT (IMKK036) por contrato y mes.', cifra: '📋', etiqueta: 'suficiencia', ruta: '/dictamenes' },
     // ---- Catálogos y reportes ----
     { grupo: 'Catálogos y reportes', icon: '📚', titulo: 'Catálogos', desc: 'Contratos, precios, proveedores, cuentas y jefaturas — editable.', cifra: '✎', etiqueta: 'editar', ruta: '/catalogos' },

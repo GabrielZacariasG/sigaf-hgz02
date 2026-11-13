@@ -14,7 +14,7 @@ import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe } from "../../../../lib/avisos";
 import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
 import SelectorFolios from "../../../../lib/SelectorFolios";
-import { foliosDelContrato, ligarFolios, desligarFolios, estatusFolio } from "../../../../lib/subrogadosCarga";
+import { foliosDelContrato, ligarFolios, desligarFolios, estatusFolio, liberarFoliosDeFactura } from "../../../../lib/subrogadosCarga";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -360,6 +360,9 @@ export default function FacturaEstatusPage() {
       }).eq("id", factura.id);
       if (eUpd) throw eUpd;
 
+      // Liberar sus folios de subrogados: vuelven a devengo para que la NUEVA factura los ampare.
+      try { await liberarFoliosDeFactura(factura.id); } catch { /* no bloquea la re-factura */ }
+
       router.push(`/facturas/${nueva.id}/detalle`);
     } catch (err) { setMensaje("No se pudo crear la re-factura: " + err.message); setGuardando(null); }
   }
@@ -369,6 +372,8 @@ export default function FacturaEstatusPage() {
     if (!factura) return;
     if (!window.confirm(`¿Eliminar DEFINITIVAMENTE la factura ${factura.folio_ingreso} (folio ${factura.folio_proveedor})?\n\nEsta acción NO se puede deshacer.`)) return;
     setEliminando(true); setMensaje("");
+    // Liberar sus folios de subrogados antes de eliminar (vuelven a devengo).
+    try { await liberarFoliosDeFactura(factura.id); } catch { /* no bloquea la eliminación */ }
     const { error } = await supabase.rpc("fn_eliminar_factura", { p_factura_id: factura.id });
     if (error) { setMensaje("No se pudo eliminar: " + error.message); setEliminando(false); return; }
     router.push("/facturas");
@@ -523,12 +528,13 @@ export default function FacturaEstatusPage() {
         </div>
       )}
 
-      {/* Folios de subrogados que cobra esta factura */}
+      {/* Folios de subrogados que cobra esta factura. Al estar PAGADA quedan atrapados (solo lectura). */}
       {folios.lista.length > 0 && !factura.anulada && (
         <div>
           <SelectorFolios folios={folios.lista} seleccion={selFol} onCambio={setSelFol} importeFactura={factura.importe_factura}
+            bloqueado={factura.estatus_general === "gasto_reflejado"}
             titulo={`Folios de subrogados de esta factura (${folios.ligados.size} ligados)`} />
-          {(selFol.size !== folios.ligados.size || [...selFol].some((k) => !folios.ligados.has(k))) && (
+          {factura.estatus_general !== "gasto_reflejado" && (selFol.size !== folios.ligados.size || [...selFol].some((k) => !folios.ligados.has(k))) && (
             <button className="boton" onClick={guardarFolios} disabled={guardandoFol} style={{ marginBottom: 10 }}>{guardandoFol ? "Guardando…" : "Guardar folios"}</button>
           )}
         </div>
