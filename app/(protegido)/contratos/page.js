@@ -18,6 +18,7 @@ import { leerCrValidados, corteMasViejo } from "../../../lib/crValidados";
 import { dibujarCaptura, copiarCaptura } from "../../../lib/capturaContratos";
 import { cargarTraslados, clasificar, devengoPorContrato, CUENTAN } from "../../../lib/traslados";
 import AvanceTraslados from "../../../lib/AvanceTraslados";
+import { sinDuplicadosCDSMS } from "../../../lib/subrogadosComun";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -60,12 +61,13 @@ export default function ContratosPage() {
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, centro, cuenta, anio, mes, definitivo, pagos, disponible, disponible_acum").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
-      leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
+      leerTodo((d, h) => supabase.from("subrogados_folios").select("contrato_id, folio, origen, anio, mes, importe, cancelado, factura_id, factura_txt").not("contrato_id", "is", null).order("clave").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_apoyos").select("*").order("fecha").order("id").range(d, h)),
     ]);
-    // Devengo de folios de subrogados (migración 053): folios sin factura y no cancelados, por contrato y mes
+    // Devengo de folios de subrogados (migración 053): folios sin factura y no cancelados, por contrato y mes.
+    // Si el folio viene en el Avance SMS, su copia del CD_SMS no cuenta (no se duplica el devengo)
     const devFolios = {};
-    for (const f of rFo.error ? [] : rFo.data || []) {
+    for (const f of rFo.error ? [] : sinDuplicadosCDSMS(rFo.data || [])) {
       const dv = (devFolios[f.contrato_id] ||= Array(13).fill(0));
       if (!f.factura_id && !f.factura_txt && !f.cancelado && Number(f.anio) === ANIO && f.mes >= 1 && f.mes <= 12) dv[f.mes] += Number(f.importe) || 0;
     }

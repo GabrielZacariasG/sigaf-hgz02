@@ -12,6 +12,7 @@ import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
 import { marcarCancelado } from "../../../lib/subrogadosCarga";
+import { sinDuplicadosCDSMS } from "../../../lib/subrogadosComun";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const money0 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
@@ -59,7 +60,8 @@ export default function SubrogadosPage() {
       supabase.auth.getUser(),
     ]);
     if (rF.error) { setMsg("No se pudieron cargar los folios: " + rF.error.message + " (¿corriste la migración 053?)"); setCargando(false); return; }
-    setFolios(rF.data || []);
+    // Si el folio viene en el Avance SMS, su copia del CD_SMS no se muestra ni se suma (no se duplica)
+    setFolios(sinDuplicadosCDSMS(rF.data || []));
     setContratos(new Map((rC.data || []).map((c) => [c.id, { numero_interno: c.numero_interno, prov: c.proveedores?.razon_social || "—",
       servicio: c.adquisicion_servicio || c.partidas?.nombre || "—", vigIni: c.vigencia_inicio, vigFin: c.vigencia_fin }])));
     setFacturas(new Map((rFac.data || []).map((f) => [f.id, f])));
