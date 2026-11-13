@@ -51,13 +51,14 @@ export default function SubrogadosPage() {
       leerTodo((d, h) => supabase.from("subrogados_folios")
         .select("clave, folio, fecha, anio, mes, contrato_id, contrato_txt, paciente, medico, estudio, cantidad, importe, cancelado, factura_id, factura_txt, origen")
         .order("fecha", { ascending: true }).order("folio").range(d, h)),
-      leerTodo((d, h) => supabase.from("contratos").select("id, numero_interno, proveedores ( razon_social )").order("numero_interno").range(d, h)),
+      leerTodo((d, h) => supabase.from("contratos").select("id, numero_interno, adquisicion_servicio, vigencia_inicio, vigencia_fin, proveedores ( razon_social ), partidas ( nombre )").order("numero_interno").range(d, h)),
       leerTodo((d, h) => supabase.from("facturas").select("id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, anulada").eq("anulada", false).order("id").range(d, h)),
       supabase.auth.getUser(),
     ]);
     if (rF.error) { setMsg("No se pudieron cargar los folios: " + rF.error.message + " (¿corriste la migración 053?)"); setCargando(false); return; }
     setFolios(rF.data || []);
-    setContratos(new Map((rC.data || []).map((c) => [c.id, { numero_interno: c.numero_interno, prov: c.proveedores?.razon_social || "—" }])));
+    setContratos(new Map((rC.data || []).map((c) => [c.id, { numero_interno: c.numero_interno, prov: c.proveedores?.razon_social || "—",
+      servicio: c.adquisicion_servicio || c.partidas?.nombre || "—", vigIni: c.vigencia_inicio, vigFin: c.vigencia_fin }])));
     setFacturas(new Map((rFac.data || []).map((f) => [f.id, f])));
     const authId = rU?.data?.user?.id;
     if (authId) { const { data: p } = await supabase.from("usuarios").select("rol").eq("auth_id", authId).maybeSingle(); setRol(p?.rol || null); }
@@ -69,13 +70,18 @@ export default function SubrogadosPage() {
   const claveCto = (f) => (f.contrato_id ? f.contrato_id : `txt:${(f.contrato_txt || "sin contrato").trim()}`);
   const nombreCto = (f) => (f.contrato_id ? (contratos.get(f.contrato_id)?.numero_interno || "—") : (f.contrato_txt || "Sin contrato"));
   const provCto = (f) => (f.contrato_id ? (contratos.get(f.contrato_id)?.prov || "—") : "—");
+  const servCto = (f) => (f.contrato_id ? (contratos.get(f.contrato_id)?.servicio || "—") : "—");
+  const vigCto = (f) => {
+    const c = f.contrato_id ? contratos.get(f.contrato_id) : null;
+    return c && (c.vigIni || c.vigFin) ? `${fechaMX(c.vigIni)} → ${fechaMX(c.vigFin)}` : "—";
+  };
 
   // ----- Resumen por contrato -----
   const resumen = useMemo(() => {
     const g = new Map();
     for (const f of folios) {
       const k = claveCto(f);
-      const x = g.get(k) || { k, contrato: nombreCto(f), prov: provCto(f), folios: 0, nFac: 0, impFac: 0, nDev: 0, impDev: 0, nCanc: 0 };
+      const x = g.get(k) || { k, contrato: nombreCto(f), prov: provCto(f), servicio: servCto(f), vigencia: vigCto(f), folios: 0, nFac: 0, impFac: 0, nDev: 0, impDev: 0, nCanc: 0 };
       const e = estadoDe(f); const imp = Number(f.importe) || 0;
       x.folios++;
       if (e === "facturado") { x.nFac++; x.impFac = r2(x.impFac + imp); }
@@ -85,7 +91,7 @@ export default function SubrogadosPage() {
     }
     let rows = [...g.values()].sort((a, b) => b.impDev - a.impDev || b.impFac - a.impFac);
     const q = busca.trim().toUpperCase();
-    if (q) rows = rows.filter((r) => `${r.contrato} ${r.prov}`.toUpperCase().includes(q));
+    if (q) rows = rows.filter((r) => `${r.contrato} ${r.prov} ${r.servicio}`.toUpperCase().includes(q));
     return rows;
   }, [folios, contratos, busca]);
 
@@ -117,6 +123,7 @@ export default function SubrogadosPage() {
       .sort((a, b) => (a.factura?.folio_ingreso || a.txt || "").localeCompare(b.factura?.folio_ingreso || b.txt || ""));
     return {
       contrato: fs[0] ? nombreCto(fs[0]) : "—", prov: fs[0] ? provCto(fs[0]) : "—",
+      servicio: fs[0] ? servCto(fs[0]) : "—", vigencia: fs[0] ? vigCto(fs[0]) : "—",
       bloques, devengo, cancelados,
       impDev: r2(devengo.reduce((s, f) => s + (Number(f.importe) || 0), 0)),
       impFac: r2(bloques.reduce((s, b) => s + b.subtotal, 0)),
@@ -156,7 +163,8 @@ export default function SubrogadosPage() {
           <span style={{ color: "var(--texto-suave)" }}> · Inicio › Presupuesto › Folios de subrogados</span>
         </div>
         <h1 style={{ fontSize: 21, margin: "4px 0 0" }}>{det.contrato}</h1>
-        <div style={{ fontSize: 13, color: "var(--texto-suave)", marginBottom: 10 }}>{det.prov} · Facturado {money(det.impFac)} · Devengo <b style={{ color: "#7c3aed" }}>{money(det.impDev)}</b></div>
+        <div style={{ fontSize: 13, color: "var(--texto-suave)", marginBottom: 2 }}>{det.prov} · Facturado {money(det.impFac)} · Devengo <b style={{ color: "#7c3aed" }}>{money(det.impDev)}</b></div>
+        <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 10 }}>{det.servicio !== "—" ? det.servicio : "Sin servicio capturado"} · Vigencia {det.vigencia}</div>
         {msg && <div style={{ background: "#eef7f1", color: "#166534", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>{msg}</div>}
 
         {/* Bloques por factura (solo lectura) */}
@@ -255,12 +263,13 @@ export default function SubrogadosPage() {
       </div>
 
       <div style={{ ...card }}>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar contrato o proveedor…" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14, width: "100%", maxWidth: 360, boxSizing: "border-box", marginBottom: 10 }} />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar contrato, proveedor o servicio…" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--borde)", fontSize: 14, width: "100%", maxWidth: 360, boxSizing: "border-box", marginBottom: 10 }} />
         {msg && <div style={{ background: "var(--ambar-claro)", color: "var(--ambar)", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 8 }}>{msg}</div>}
         <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 10 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>
               <th style={th}>Contrato</th><th style={th}>Proveedor</th>
+              <th style={th}>Servicio / partidas</th><th style={th}>Vigencia</th>
               <th style={{ ...th, textAlign: "right" }}>Folios</th>
               <th style={{ ...th, textAlign: "right" }}>Facturados</th><th style={{ ...th, textAlign: "right" }}>$ Facturado</th>
               <th style={{ ...th, textAlign: "right" }}>Devengo</th><th style={{ ...th, textAlign: "right" }}>$ Devengo</th>
@@ -271,6 +280,8 @@ export default function SubrogadosPage() {
                 <tr key={r.k} style={{ cursor: "pointer" }} onClick={() => { setDetalle(r.k); setMsg(""); setSelDev(new Set()); setSelCanc(new Set()); }}>
                   <td style={{ ...td, fontWeight: 600 }}>{r.contrato}</td>
                   <td style={td}>{r.prov}</td>
+                  <td style={{ ...td, maxWidth: 260, fontSize: 12.5 }}>{r.servicio}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap", fontSize: 12.5 }}>{r.vigencia}</td>
                   <td style={{ ...td, textAlign: "right" }}>{r.folios}</td>
                   <td style={{ ...td, textAlign: "right" }}>{r.nFac}</td>
                   <td style={{ ...td, textAlign: "right" }}>{money(r.impFac)}</td>
@@ -280,10 +291,12 @@ export default function SubrogadosPage() {
                   <td style={{ ...td, textAlign: "right", color: "var(--verde)", whiteSpace: "nowrap" }}>Ver ›</td>
                 </tr>
               ))}
-              {resumen.length === 0 && <tr><td style={td} colSpan={9}>No hay folios de subrogados cargados. Súbelos en Cargar reportes (Avance SMS / CD_SMS).</td></tr>}
+              {resumen.length === 0 && <tr><td style={td} colSpan={11}>No hay folios de subrogados cargados. Súbelos en Cargar reportes (Avance SMS / CD_SMS).</td></tr>}
               {resumen.length > 0 && (
                 <tr>
                   <td style={{ ...td, fontWeight: 800, borderTop: "2px solid #333" }}>TOTAL ({resumen.length})</td>
+                  <td style={{ ...td, borderTop: "2px solid #333" }} />
+                  <td style={{ ...td, borderTop: "2px solid #333" }} />
                   <td style={{ ...td, borderTop: "2px solid #333" }} />
                   <td style={{ ...td, textAlign: "right", fontWeight: 800, borderTop: "2px solid #333" }}>{resumen.reduce((s, r) => s + r.folios, 0)}</td>
                   <td style={{ ...td, textAlign: "right", fontWeight: 800, borderTop: "2px solid #333" }}>{resumen.reduce((s, r) => s + r.nFac, 0)}</td>
