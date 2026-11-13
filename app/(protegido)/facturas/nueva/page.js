@@ -13,6 +13,11 @@ import { foliosDelContrato, ligarFolios, estatusFolio } from "../../../../lib/su
 const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
 const TOLERANCIA = 1.0; // $1.00 MXN
+// Candado Compra Emergente: la compra debe ser INFERIOR a 300 UMA, ANTES de IVA.
+// UMA diaria 2026 = $117.31 (INEGI, vigente 01-feb-2026). Actualiza UMA_DIARIA cada año.
+const UMA_DIARIA = 117.31;
+const LIMITE_UMAS_CE = 300;
+const TOPE_EMERGENTE = Math.round(UMA_DIARIA * LIMITE_UMAS_CE * 100) / 100; // $35,193.00
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
 // Prefijo de folio de ingreso por capítulo. Debe empatar con los usados en la
@@ -395,6 +400,14 @@ export default function NuevaFacturaPage() {
       const tasa = sub > 0 ? Math.round((ivaAmt / sub) * 10000) / 10000 : 0;
       const ok = Math.abs(total - importeNum) <= TOLERANCIA;
 
+      // 🔒 Candado Compra Emergente: debe ser INFERIOR a 300 UMA, antes de IVA.
+      if (esOC && sub >= TOPE_EMERGENTE) {
+        setMensaje(`Candado de Compra Emergente: la compra debe ser INFERIOR a 300 UMA antes de IVA (tope ${money(TOPE_EMERGENTE)} = 300 × ${money(UMA_DIARIA)}). El subtotal capturado es ${money(sub)}. No se puede registrar como compra emergente.`);
+        setCargando(false);
+        setPaso(1);
+        return;
+      }
+
       // En Compra Emergente no se pide periodo: se usa la fecha de la factura.
       const periIni = esOC ? fechaFactura : periodoInicio;
       const periFin = esOC ? fechaFactura : periodoFin;
@@ -726,6 +739,12 @@ export default function NuevaFacturaPage() {
                   onChange={(e) => setIva(e.target.value)} style={bigInput} />
               </div>
             </div>
+            {esOC && (parseFloat(subtotal) || 0) >= TOPE_EMERGENTE && (
+              <div style={{ marginTop: 10, background: "var(--rojo-claro, #fde8e8)", color: "var(--rojo, #b42318)", border: "1px solid var(--rojo, #b42318)", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 600 }}>
+                🔒 Esta compra NO puede registrarse como Compra Emergente: el subtotal (antes de IVA) es {money(parseFloat(subtotal) || 0)} y el tope es {money(TOPE_EMERGENTE)} (debe ser inferior a 300 UMA = 300 × {money(UMA_DIARIA)}).
+              </div>
+            )}
+
             {/* Botones rápidos para llenar el IVA */}
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               <button type="button" className="boton secundario" style={{ padding: "5px 10px", fontSize: 12 }}
