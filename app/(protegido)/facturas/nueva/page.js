@@ -86,7 +86,7 @@ export default function NuevaFacturaPage() {
     (async () => {
       const { data, error } = await supabase
         .from("contratos")
-        .select("id, numero_interno, adquisicion_servicio, proveedor_id, partida_id, proveedores ( id, razon_social ), partidas ( id, cuenta_finat, cuenta_prei, nombre, capitulo_id, capitulos ( id, nombre ) )")
+        .select("id, numero_interno, adquisicion_servicio, proveedor_id, partida_id, proveedores ( id, razon_social ), partidas ( id, cuenta_finat, cuenta_prei, centro_costo, nombre, capitulo_id, capitulos ( id, nombre ) )")
         .order("numero_interno", { ascending: true });
       if (!activo) return;
       if (error) { setMensaje("No se pudieron cargar los contratos: " + error.message); }
@@ -176,6 +176,8 @@ export default function NuevaFacturaPage() {
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
   const cuentaSel = contratoSel?.partidas?.cuenta_finat || contratoSel?.partidas?.cuenta_prei || "";
+  // Centro de costos (codificación): en Compra Emergente lo trae la clave; en el resto, la cuenta del contrato.
+  const ccSel = esOC ? (claveInfo?.centro_costo || "") : (contratoSel?.partidas?.centro_costo || "");
   const importeNum = parseFloat(importe) || 0;
 
   // Semáforo de dictamen: ¿hay dinero para esta factura? (se lee una vez por contrato y se recalcula con el importe)
@@ -437,7 +439,7 @@ export default function NuevaFacturaPage() {
           validacion_ok: ok,
           orden_compra: esOC ? ordenCompra.trim() : null,
           clave_cbi: esOC && clave.trim() ? clave.trim() : null,
-          centro_costo: esOC && claveInfo?.centro_costo ? claveInfo.centro_costo : null,
+          centro_costo: ccSel || null,
           estatus_general: "capturada",
           created_by: createdBy,
         }, prefijoDe(capituloSel?.nombre), anio);
@@ -671,6 +673,21 @@ export default function NuevaFacturaPage() {
             value={contratoSel ? [capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`, contratoSel?.partidas?.nombre].filter(Boolean).join(" · ") : ""}
             placeholder={esOC ? "Se completa al elegir la cuenta" : "Se completa al elegir el contrato"} />
 
+          {/* Codificación contable — cuenta + centro de costos (todas las facturas) */}
+          {!esOC && (
+            <>
+              <label style={etiqueta}>Centro de costos (de la cuenta)</label>
+              <input type="text" readOnly style={soloLectura}
+                value={ccSel || ""}
+                placeholder={contratoSel ? "Esta cuenta no tiene centro de costos — captúralo en Catálogos → Cuentas" : "Se completa al elegir el contrato"} />
+              {contratoSel && !ccSel && (
+                <div style={{ fontSize: 12, color: "var(--ambar)", marginTop: 4 }}>
+                  ⚠️ Esta cuenta aún no tiene centro de costos. Puedes capturar la factura, pero conviene darlo de alta en <strong>Catálogos → Cuentas</strong>.
+                </div>
+              )}
+            </>
+          )}
+
           {/* Folio proveedor */}
           <label style={etiqueta}>Folio de factura del proveedor</label>
           <input type="text" value={folioProveedor}
@@ -719,7 +736,7 @@ export default function NuevaFacturaPage() {
             {esOC && <div style={{ gridColumn: "1 / -1" }}><strong>Orden de Compra:</strong> {ordenCompra || "—"}</div>}
             {esOC && clave && <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}><strong>Clave:</strong> {clave}{claveInfo?.descripcion ? ` — ${claveInfo.descripcion}` : ""}{claveInfo?.centro_costo ? ` · CC ${claveInfo.centro_costo}` : ""}</div>}
             <div style={{ gridColumn: "1 / -1" }}><strong>{esOC ? "Compra emergente:" : "Contrato:"}</strong> {contratoSel?.numero_interno} — {contratoSel?.adquisicion_servicio}</div>
-            <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}>{[capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`].filter(Boolean).join(" · ")}</div>
+            <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "var(--texto-suave)" }}>{[capituloSel?.nombre, cuentaSel && `Cuenta ${cuentaSel}`, ccSel && `CC ${ccSel}`].filter(Boolean).join(" · ")}</div>
             <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)" }}>
               <strong>Total de la factura (capturado):</strong>{" "}
               <span style={{ fontSize: 18, fontWeight: 700 }}>{money(importeNum)}</span>{" "}

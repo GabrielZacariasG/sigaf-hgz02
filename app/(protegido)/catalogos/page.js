@@ -37,7 +37,7 @@ export default function CatalogosPage() {
       supabase.from("proveedores").select("id, razon_social, no_proveedor").order("razon_social"),
       supabase.from("jefes_servicio").select("id, nombre, jefatura, cargo, email, matricula, activo").order("nombre"),
       supabase.from("jefe_proveedor").select("proveedor_id, jefe_id"),
-      supabase.from("partidas").select("id, cuenta_finat, cuenta_prei, nombre, capitulo_id, capitulos ( nombre )"),
+      supabase.from("partidas").select("id, cuenta_finat, cuenta_prei, centro_costo, nombre, capitulo_id, capitulos ( nombre )"),
       supabase.from("capitulos").select("id, nombre").order("nombre"),
     ]);
     setContratos(rC.data || []);
@@ -769,13 +769,14 @@ function TabCuentas({ partidas, capitulos, esAdmin, flash, recargar }) {
       <div style={{ ...card, padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><th style={th}>Capítulo</th><th style={{ ...th, width: 130 }}>Cuenta</th><th style={th}>Nombre de la partida</th></tr></thead>
+            <thead><tr><th style={th}>Capítulo</th><th style={{ ...th, width: 130 }}>Cuenta</th><th style={th}>Nombre de la partida</th><th style={{ ...th, width: 120 }}>C. de costos</th></tr></thead>
             <tbody>
               {filtrados.map((p) => (
                 <tr key={p.id}>
                   <td style={{ ...td, fontSize: 12, color: "var(--texto-suave)" }}>{p.capitulos?.nombre || "—"}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{p.cuenta_finat || p.cuenta_prei || "—"}</td>
                   <td style={td}><input style={inp} defaultValue={p.nombre} disabled={!esAdmin} onBlur={(e) => esAdmin && e.target.value !== p.nombre && guardar(p, { nombre: e.target.value })} /></td>
+                  <td style={td}><input style={inp} defaultValue={p.centro_costo || ""} disabled={!esAdmin} placeholder="Ej. 200217" onBlur={(e) => esAdmin && e.target.value !== (p.centro_costo || "") && guardar(p, { centro_costo: e.target.value.trim() || null })} /></td>
                 </tr>
               ))}
             </tbody>
