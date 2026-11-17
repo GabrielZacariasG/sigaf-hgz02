@@ -249,7 +249,7 @@ export default function ContratosPage() {
       for (const { c, x, dic } of b.filas) aoa.push([c.concepto, c.dictamen_numero, c.dictamen_tipo, c.numero_interno, c.numero_alterno, b.cuenta, c.proveedores?.razon_social, `${fechaTxt(c.vigencia_inicio)} al ${fechaTxt(c.vigencia_fin)}`, c.administrador_contrato,
         x.maxC, x.maxU, x.amp, x.enlace, x.pagos, x.facturado, x.devengo, x.facDev, x.saldo, x.avance, x.promedio, x.proyeccion, x.sobrante, x.pasivo, ...x.mensual.slice(1).map((v, i) => v + x.devengoMes[i + 1]), x.mensual.reduce((s, v) => s + v, 0) + x.devengo,
         ...(dic ? [dic.asignado, dic.pagado, dic.viejo ? "Falta IMKK036 del mes" : dic.disponible, dic.pendiente, Math.max(0, dic.faltante), fechaTxt(dic.corte)] : ["", "", "", "", "", ""]),
-        x.cobertura == null ? "" : Math.round(x.cobertura * 10) / 10, x.mesesRestantes, x.maxU ? x.ampDisponible : "", (datos.comentarios[c.id] || [])[0]?.texto || ""]);
+        x.cobertura == null ? "" : Math.round(x.cobertura * 10) / 10, x.mesesRestantes, x.maxU && !x.yaAmpliado ? x.ampDisponible : x.yaAmpliado ? "Ya ampliado" : "", (datos.comentarios[c.id] || [])[0]?.texto || ""]);
       for (const r of b.reservas) aoa.push([r.concepto, r.estatus, "", "", "", b.cuenta, r.estatus.toUpperCase(), "", "", "", r.importe]);
       const t = sumar(b.filas.map((f) => f.x)); const res = b.reservas.reduce((s, r) => s + (Number(r.importe) || 0), 0); const pre = datos.presupuesto[b.cuenta] || 0;
       aoa.push(["", "", "", "", "", "", "", "", "TOTAL", t.maxC, t.maxU + res, t.amp, t.enlace + res, t.pagos, t.facturado, t.devengo, t.facDev, t.saldo, t.avance, t.proyeccion, t.sobrante, t.pasivo]);
@@ -317,7 +317,7 @@ export default function ContratosPage() {
             title={x.cobertura == null ? "Sin gasto mensual para calcular" : `El saldo alcanza ${x.cobertura.toFixed(1)} meses al ritmo de ${money(x.ritmo)} al mes; faltan ${x.mesesRestantes} meses de vigencia`}>
             {x.cobertura == null ? "" : `${x.cobertura.toFixed(1)} de ${x.mesesRestantes}`}
           </td>
-          <td style={tdN} title={`Tope ${c.tope_ampliacion_pct ?? 20}%: ${money(x.tope)} · ampliado por convenio: ${money(x.ampConvenio)}`}>{x.maxU ? money(x.ampDisponible) : ""}</td>
+          <td style={tdN} title={`Tope ${c.tope_ampliacion_pct ?? 20}%: ${money(x.tope)} · ampliado por convenio: ${money(x.ampConvenio)}`}>{x.maxU && !x.yaAmpliado ? money(x.ampDisponible) : x.yaAmpliado ? "Ya ampliado" : ""}</td>
           <td style={{ ...td, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", fontSize: 12 }} title={(datos.comentarios[c.id] || [])[0]?.texto || ""}>{(datos.comentarios[c.id] || [])[0]?.texto || ""}</td>
         </tr>
         {sel && (
@@ -326,7 +326,9 @@ export default function ContratosPage() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                 <strong>{c.numero_interno}</strong><span>{c.proveedores?.razon_social}</span>
                 {x.avisos.map((a, i) => <span key={i} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 99, background: a.nivel === "rojo" ? "#fee2e2" : "#fef3c7", color: a.nivel === "rojo" ? "#b91c1c" : "#92400e" }}>{a.t}</span>)}
-                <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Tope de ampliación ({c.tope_ampliacion_pct ?? 20}%): {money(x.tope)}</span>
+                {x.yaAmpliado
+                  ? <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Ya ampliado: {money(x.ampConvenio)}</span>
+                  : <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>Tope de ampliación ({c.tope_ampliacion_pct ?? 20}%): {money(x.tope)}</span>}
               </div>
               {dic && (
                 <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
@@ -351,7 +353,7 @@ export default function ContratosPage() {
                   <span>Gasto promedio mensual: <strong>{money(x.promedio)}</strong></span>
                   {trasIds.has(c.id) && trasMeses && <button className="boton" style={{ fontSize: 12, padding: "3px 10px" }} onClick={(e) => { e.stopPropagation(); setAvanceDe({ c, x }); }} title="Tabla del avance semanal del contrato de traslados (vigencia, devengo, saldo, promedio, proyección y economía) para pegar en el correo">✉ Avance para correo</button>}
                   <span>El saldo alcanza: <strong>{x.cobertura == null ? "—" : `${x.cobertura.toFixed(1)} meses`}</strong> · faltan {x.mesesRestantes} meses de vigencia</span>
-                  {x.maxU > 0 && <span>Ampliación todavía posible (hasta {c.tope_ampliacion_pct ?? 20}%): <strong>{money(x.ampDisponible)}</strong></span>}
+                  {x.maxU > 0 && !x.yaAmpliado && <span>Ampliación todavía posible (hasta {c.tope_ampliacion_pct ?? 20}%): <strong>{money(x.ampDisponible)}</strong></span>}
                 </div>
                 <strong>Comentarios</strong>
                 {(datos.comentarios[c.id] || []).map((k) => (
