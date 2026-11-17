@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { cargarAvisos } from "../../../lib/avisos";
 import ArmarOficio from "../../../lib/ArmarOficio";
+import { abrirPdfAvisos } from "../../../lib/pdfAvisos";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO, generaPedidoRecepcion, puedeEnviarOoad, periodoTxt, pasivosPrimero } from "../../../lib/estatus";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -85,6 +86,7 @@ export default function AvisosPage() {
   const CUADROS = [
     ["#p-presupuesto", "var(--verde)", P.presupuesto, "Tienen presupuesto", "se pueden trabajar"],
     ["#p-oficio", "#d69e2e", P.oficio, "Con oficio de apoyo", "mandar la propuesta"],
+    ["#p-convenio", "#7c3aed", P.convenio, "En espera de convenio", "hay dictamen; el contrato en FINAT no"],
     ["#p-gestion", "var(--rojo)", P.gestion, "No van a pasar", "requieren otra gestión"],
     ["#p-aclarar", "#718096", P.aclarar, "Por aclarar", "FINAT trae pagos de más"],
     [null, "#2b6cb0", P.validada, "Ya validadas en FINAT", "no requieren nada"],
@@ -93,7 +95,11 @@ export default function AvisosPage() {
   return (
     <div>
       <div style={{ fontSize: 13, marginBottom: 6 }}><Link href="/" style={{ color: "var(--verde)" }}>← Panel</Link></div>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Bandeja de avisos</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <h1 style={{ fontSize: 22, margin: 0 }}>Bandeja de avisos</h1>
+        <button className="boton" style={{ fontSize: 13 }} title="Resumen para la jefa: qué facturas pasan, cuáles con oficio de apoyo, cuáles no y qué hay que empujar"
+          onClick={() => { try { abrirPdfAvisos(a, pendienteDe); } catch (e) { setError(e.message); } }}>⬇ Descargar resumen en PDF</button>
+      </div>
       <p style={{ fontSize: 13, color: "var(--texto-suave)", maxWidth: 950, margin: "4px 0 0" }}>
         Qué hacer hoy con lo que ya sabe SIGAF: facturas listas para OOAD, pedido-recepción recibido, y si el dictamen del contrato alcanza
         (con los saldos del IMKK036 cargados en <Link href="/dictamenes" style={{ color: "var(--verde)" }}>Dictámenes</Link> y los CR del 1043 en <Link href="/comprobantes" style={{ color: "var(--verde)" }}>Comprobantes</Link>).
@@ -136,6 +142,22 @@ export default function AvisosPage() {
           <ArmarOficio key={r.contrato.id + "|" + r.dictamen} r={r} ppto={(f) => (f.cr_contrarecibo && a.ppto[f.cr_contrarecibo]) || null} dondeVa={pendienteDe} />
         )) : <p style={{ fontSize: 13, margin: 0 }}>Ninguna factura necesita oficio de apoyo.</p>}
       </div>
+
+      {P.convenio.length > 0 && (
+        <div style={card}>
+          <Titulo id="p-convenio" color="#7c3aed" n={P.convenio.length} t="En espera de convenio modificatorio" sub={money(suma(P.convenio))} />
+          <p style={{ fontSize: 12.5, color: "var(--texto-suave)", margin: "0 0 6px" }}>
+            El dictamen ya tiene el dinero, pero FINAT valida contra el <strong>contrato</strong> y el contrato todavía no trae la ampliación
+            (IMKK036, página 3: "Saldo comprometido sin contrato"). No pasan, aunque se revaliden, hasta que se formalice y se registre el convenio modificatorio en FINAT: eso es lo que hay que empujar con CAOA o Contratos.
+          </p>
+          {agrupar(P.convenio, (x) => `${x.s.contrato?.numero_interno}|${x.s.dictamen}`).map(([k, items]) => (
+            <Grupo key={k} abierto titulo={`${items[0].s.contrato?.numero_interno} · ${items[0].s.contrato?.proveedores?.razon_social || ""}`}
+              sub={`dictamen ${items[0].s.dictamen} · saldo del contrato en FINAT ${money(items[0].s.saldoContrato)} · sin contrato ${money(items[0].s.sinContrato)} · ${items.length} factura(s) · ${money(suma(items))}`}>
+              <TablaFacturas items={items} tituloExtra="Qué falta" extra={({ s }) => s.t} />
+            </Grupo>
+          ))}
+        </div>
+      )}
 
       <div style={card}>
         <Titulo id="p-gestion" color="var(--rojo)" n={P.gestion.length} t="No van a pasar: requieren otra gestión" sub={money(suma(P.gestion))} />
@@ -202,9 +224,10 @@ export default function AvisosPage() {
                 <td style={td}>{r.dictamen}{r.esPasivo && <div style={{ fontSize: 12, color: "var(--texto-suave)" }}>dictamen de pasivo</div>}</td>
                 <td style={tdN}>{r.disponible == null ? "—" : money(r.disponible)}</td>
                 <td style={{ ...tdN, color: "var(--rojo)", fontWeight: 700 }}>{r.faltante ? money(r.faltante) : ""}</td>
-                <td style={{ ...td, fontWeight: 600, color: r.accion === "oficio" ? "#92400e" : "var(--rojo)" }}>
+                <td style={{ ...td, fontWeight: 600, color: r.accion === "oficio" ? "#92400e" : r.accion === "convenio" ? "#7c3aed" : "var(--rojo)" }}>
                   {r.accion === "actualizar" ? `Bajar el IMKK036 de ${r.mes} para saber si ya hay dinero`
                     : r.accion === "oficio" ? `Mandar con oficio de apoyo (${r.otras.map(([ui, v]) => `UI ${ui} tiene ${money(v)}`).join(", ")})`
+                    : r.accion === "convenio" ? `En espera del convenio modificatorio: el dictamen tiene saldo, pero en FINAT el contrato solo tiene ${money(r.saldoContrato)} y ${money(r.sinContrato)} del dictamen están sin contrato`
                     : r.accion === "ampliacion" ? `Ampliación de dictamen${r.otrasDisp ? ` (otras unidades solo alcanzan para parte: tienen ${money(r.otrasDisp)})` : ""}`
                     : "Pedir revalidación de los CR en error"}
                   {(() => {

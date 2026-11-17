@@ -57,7 +57,7 @@ export default function ContratosPage() {
     }
     // Saldos de dictamen (IMKK036, migración 049). Si aún no existe la tabla, la pantalla sigue sin ellos.
     const [rDi, rDs, rLi, rCm, rFo, rAp] = await Promise.all([
-      supabase.from("dictamenes").select("numero, origen, corte"),
+      supabase.from("dictamenes").select("*"),
       leerTodo((d, h) => supabase.from("dictamen_saldos").select("dictamen, ui, centro, cuenta, anio, mes, definitivo, pagos, disponible, disponible_acum").order("dictamen").order("ui").order("anio").order("mes").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_dictamenes").select("contrato_id, dictamen, tipo").order("contrato_id").range(d, h)),
       leerTodo((d, h) => supabase.from("contrato_comentarios").select("id, contrato_id, texto, origen, created_at").order("created_at", { ascending: false }).range(d, h)),
@@ -165,6 +165,14 @@ export default function ContratosPage() {
         const fDic = (fPor[c.id] || []).filter((f) => dictamenDe(c, f, datos.links) === dv);
         const dic = dv ? calcularDictamen({ ...c, dictamen_numero: dv, _pasivo: dv !== c.dictamen_numero, _apoyos: apDic[dv] || [], _dia: diaDe(dv) }, datos.saldosDic[dv] || [], fDic, x, datos.dictamenes[dv], datos.ppto) : null;
         if (dic) x.avisos = [...x.avisos, ...dic.avisos];
+        // Dinero del dictamen que el contrato en FINAT todavía no trae (IMKK036 pág. 3, migración 061): con saldo en el
+        // dictamen NO basta, FINAT valida contra el contrato; esas facturas esperan el convenio modificatorio (17/11/2026)
+        const dd = dv ? datos.dictamenes[dv] : null;
+        if (dic && dd?.saldo_sin_contrato > 0.5 && dd.importe_contratos != null) {
+          dic.saldoContratoFinat = Math.max(0, Number(dd.importe_contratos) - Number(dd.total_pagos || 0));
+          dic.sinContrato = Number(dd.saldo_sin_contrato);
+          x.avisos = [...x.avisos, { nivel: "ambar", t: `En FINAT el contrato no trae la ampliación: saldo del contrato ${money(dic.saldoContratoFinat)}, ${money(dic.sinContrato)} del dictamen sin contrato. Las facturas esperan el convenio modificatorio aunque haya saldo en el dictamen` }];
+        }
         return { c, x, dic, facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [] };
       })
       .filter(({ c, x }) => con2025 || (c.vigencia_fin || "9999") >= `${ANIO}-01-01` || x.pasivo > 0)
@@ -340,6 +348,12 @@ export default function ContratosPage() {
                     <span title={`Sin pagar en SIGAF ${money(dic.sinPagarSigaf)} − ya pagado en FINAT y no marcado en SIGAF ${money(dic.adelantoFinat)}${dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}`}>Pendiente por pagar{dic.pendiente > dic.pendFact + 0.5 ? " + devengo" : ""}: <strong>{money(dic.pendiente)}</strong>{dic.adelantoFinat > 0.5 ? ` (FINAT ya pagó ${money(dic.adelantoFinat)} que SIGAF no marca)` : ""}</span>
                     <span style={{ color: dic.viejo ? "#b7791f" : dic.faltante > 0.5 ? "var(--rojo)" : "var(--verde)", fontWeight: 700 }}>{dic.viejo ? "Sin dato actual" : dic.faltante > 0.5 ? `Faltan ${money(dic.faltante)}` : `Alcanza · sobran ${money(-dic.faltante)}`}</span>
                   </div>
+                  {dic.sinContrato > 0.5 && (
+                    <div style={{ marginTop: 6, padding: "6px 10px", background: "#f1ebfd", borderRadius: 6, color: "#5b21b6" }}>
+                      <strong>En espera de convenio modificatorio.</strong> El dictamen tiene saldo, pero en FINAT el contrato solo tiene <strong>{money(dic.saldoContratoFinat)}</strong> (máximo de los contratos asociados − gastos) y <strong>{money(dic.sinContrato)}</strong> del dictamen están "sin contrato" (IMKK036, página 3).
+                      FINAT valida contra el contrato: estas facturas no pasan, aunque se revaliden, hasta que se formalice y se registre el convenio. El saldo del contrato lo comparten las tres unidades.
+                    </div>
+                  )}
                   {(dic.validadas.length > 0 || dic.enError.length > 0) && <div style={{ marginTop: 4 }}>
                     {dic.validadas.length > 0 && <span style={{ color: "var(--verde)", marginRight: 14 }}>Ya validadas en FINAT (pasaron): {dic.validadas.length} · {money(dic.impValidadas)}</span>}
                     {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}

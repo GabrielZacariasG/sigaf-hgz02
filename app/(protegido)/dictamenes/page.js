@@ -197,7 +197,12 @@ export default function DictamenesPage() {
                     </tr>
                     {sel && (
                       <tr><td colSpan={11} style={{ ...td, background: "#f7f8f7" }}>
-                        <div style={{ fontSize: 12.5, marginBottom: 4 }}>Fecha del dictamen {fechaTxt(x.d.fecha_dictamen)} · archivo {x.d.archivo} · total del dictamen {money(x.d.total_definitivo)}, pagado {money(x.d.total_pagos)}, disponible {money(x.d.total_disponible)}</div>
+                        <div style={{ fontSize: 12.5, marginBottom: 4 }}>Fecha del dictamen {fechaTxt(x.d.fecha_dictamen)} · archivo {x.d.archivo} · total del dictamen {money(x.d.total_definitivo)}, pagado {money(x.d.total_pagos)}, disponible {money(x.d.total_disponible)}{x.d.importe_contratos != null ? ` · máximo de los contratos en FINAT ${money(x.d.importe_contratos)}, saldo del contrato ${money(Number(x.d.importe_contratos) - Number(x.d.total_pagos || 0))}` : ""}</div>
+                        {Number(x.d.saldo_sin_contrato) > 0.5 && (
+                          <div style={{ fontSize: 12.5, margin: "0 0 6px", padding: "6px 10px", background: "#f1ebfd", borderRadius: 6, color: "#5b21b6" }}>
+                            <strong>{money(x.d.saldo_sin_contrato)} del dictamen están sin contrato</strong> (IMKK036, página 3). FINAT valida contra el contrato, que solo tiene {money(Number(x.d.importe_contratos) - Number(x.d.total_pagos || 0))}: las facturas esperan el convenio modificatorio aunque el dictamen tenga saldo.
+                          </div>
+                        )}
                         {x.apoyosDesc > 0 && <div style={{ fontSize: 12.5 }}>El saldo ya descuenta {money(x.apoyosDesc)} de apoyos que dimos a otras unidades.</div>}
                         {!x.viejo && x.otras.length > 0 && <div style={{ fontSize: 12.5 }}>Disponible acumulado por unidad (oficio de apoyo): {x.otras.map(([ui, v]) => `UI ${ui} ${money(v)}`).join(" · ")}</div>}
                         {v && (
