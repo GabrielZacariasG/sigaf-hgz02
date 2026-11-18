@@ -1,6 +1,6 @@
 "use client";
 // Pliegos: por llegar (lo que manda Servicios Generales), captura con filtros y lista de capturados.
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { DESTINOS, GRUPOS, TIPOS_CONTRATACION, esTransportes, revisarPliego, tablaDe } from "../../../lib/pliegos";
@@ -29,6 +29,16 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
   const persona = comisionados.find((c) => c.matricula === p.matricula);
   const destino = DESTINOS.find((x) => x.nombre === p.destino);
   const r = useMemo(() => revisarPliego(p, persona, destino, capturados, hoyLocal()), [p, persona, destino, capturados]);
+  // El importe a pagar se autollena con la cuota calculada; si el usuario lo cambia a mano, se respeta.
+  const importeAuto = useRef("");
+  useEffect(() => {
+    if (r.cuota == null) return;
+    const s = String(r.cuota);
+    setP((x) => {
+      if (x.importe === "" || x.importe === importeAuto.current) { importeAuto.current = s; return x.importe === s ? x : { ...x, importe: s }; }
+      return x;
+    });
+  }, [r.cuota]);
   const bloqueos = r.avisos.filter((a) => a.nivel === "bloquea"), avisos = r.avisos.filter((a) => a.nivel === "avisa");
   const contraRelacion = useMemo(() => compararConPrecarga(item && { ...item, importe: item.importe == null ? null : Number(item.importe), casetas: Number(item.casetas) }, p), [item, p]);
   const porLlegar = precarga.filter((x) => !x.gasto_id);
@@ -43,12 +53,12 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
   // El pliego físico manda: esto solo sugiere tipo de contratación, grupo y calidad al elegir a la persona.
   const sugerir = (matricula) => { const c = comisionados.find((x) => x.matricula === matricula); return c ? { tc: c.tc || "02", gj: c.gj || "", calidad: esTransportes(c.categoria) ? "CHOFER" : "ACOMPANANTE" } : {}; };
   const llego = (it) => {
-    setMsg(null); setItem(it); setEnEdicion(null); setVista("captura");
+    setMsg(null); setItem(it); setEnEdicion(null); setVista("captura"); importeAuto.current = "";
     setP({ ...VACIO, ...sugerir(it.matricula), matricula: it.matricula || "", folio: it.folio, fecha: it.fecha || "", destino: it.destino || "", unidad: it.unidad || "", importe: it.importe == null ? "" : String(it.importe), casetas: Number(it.casetas) ? String(it.casetas) : "", recibido: hoyLocal() });
   };
-  const nueva = () => { setMsg(null); setItem(null); setEnEdicion(null); setP({ ...VACIO, recibido: hoyLocal() }); setVista("captura"); };
+  const nueva = () => { setMsg(null); setItem(null); setEnEdicion(null); setP({ ...VACIO, recibido: hoyLocal() }); setVista("captura"); importeAuto.current = ""; };
   const editar = (g) => {
-    setMsg(null); setItem(null); setEnEdicion(g.id); setVista("captura");
+    setMsg(null); setItem(null); setEnEdicion(g.id); setVista("captura"); importeAuto.current = "";
     setP({ ...VACIO, folio: g.folio, fecha: g.fecha || "", matricula: g.matricula || "", tc: g.tc || sugerir(g.matricula).tc || "", gj: g.gj || "", calidad: g.calidad || sugerir(g.matricula).calidad || "", folioChofer: g.folio_chofer || "", destino: g.destino || "", unidad: g.unidad || "", salida: g.salida || "", llegada: g.llegada || "", salidaDestino: g.salida_destino || "", regreso: g.regreso || "", importe: String(g.importe ?? ""), casetas: Number(g.casetas) ? String(g.casetas) : "", boletos: Number(g.boletos) ? String(g.boletos) : "", motivo: g.motivo || "", infarto: g.infarto || "NO", paciente: g.paciente || "", tp01: g.tp01 || "", recibido: g.recibido || "", pago: g.fecha_pago || "" });
   };
   const guardar = async () => {
@@ -68,7 +78,7 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
       if (e2) { setOcupado(false); setMsg({ error: true, t: `Se guardó el pliego, pero no se marcó su llegada: ${e2.message}` }); return; }
     }
     await recargar();
-    setOcupado(false); setMsg({ t: `Folio ${fila.folio} guardado.` }); setP({ ...VACIO, recibido: hoyLocal() }); setEnEdicion(null);
+    setOcupado(false); setMsg({ t: `Folio ${fila.folio} guardado.` }); setP({ ...VACIO, recibido: hoyLocal() }); setEnEdicion(null); importeAuto.current = "";
     if (item) { setItem(null); setVista("porLlegar"); }
   };
   const anular = async (g) => {
