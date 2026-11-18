@@ -6,6 +6,7 @@ import { TIPOS_GASTO, armarReembolso } from "../../../lib/reembolsos";
 import { gastoParaReembolso, hoyLocal, money } from "../../../lib/fondoFijo";
 import { Avisos, Mensaje, et, fCorta, inp, rejilla, tarjeta, td, th, titulo, dos } from "./comun";
 import Formatos from "./Formatos";
+import DetalleGasto from "./DetalleGasto";
 
 const detalle = (g) => (g.tipo === "PLIEGO" ? `${g.persona} · ${g.destino}` : g.tipo === "OTRA" ? g.proveedor : g.tipo === "PASAJE" ? `${g.persona || ""} · ${g.dias || 0} días` : g.paciente);
 export const folioOficio = (numero, anio) => `SIGAF-RG-${String(numero).padStart(4, "0")}/${anio}`;
@@ -25,6 +26,7 @@ export default function Reembolsos({ gastos, reembolsos, recargar }) {
   const [msg, setMsg] = useState(null);
   const [ocupado, setOcupado] = useState(false);
   const [filtro, setFiltro] = useState("V");
+  const [verDetalle, setVerDetalle] = useState(null);
   useEffect(() => { setNumero(String(sigue)); setAcumulado(String(Math.round(acumuladoBase * 100) / 100)); }, [sigue, acumuladoBase]);
   const pendientes = useMemo(() => gastos.filter((g) => !g.reembolso_id && !g.anulado).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))), [gastos]);
   const visibles = pendientes.filter((g) => TIPOS_GASTO[g.tipo].prefijo === filtro);
@@ -55,7 +57,7 @@ export default function Reembolsos({ gastos, reembolsos, recargar }) {
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>{["", "Tipo", "Folio", "Fecha", "Detalle", "Importe"].map((t) => <th key={t} style={th}>{t}</th>)}</tr></thead>
-          <tbody>{visibles.map((g) => <tr key={g.id}><td style={td}><input type="checkbox" aria-label={`Elegir ${g.folio}`} checked={!!sel[g.id]} onChange={() => { setMsg(null); setSel((s) => ({ ...s, [g.id]: !s[g.id] })); }} /></td><td style={td}>{TIPOS_GASTO[g.tipo].nombre}</td><td style={{ ...td, fontWeight: 600 }}>{g.folio}</td><td style={td}>{fCorta(g.fecha)}</td><td style={td}>{detalle(g)}</td><td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(g.total)}</td></tr>)}
+          <tbody>{visibles.map((g) => <tr key={g.id}><td style={td}><input type="checkbox" aria-label={`Elegir ${g.folio}`} checked={!!sel[g.id]} onChange={() => { setMsg(null); setSel((s) => ({ ...s, [g.id]: !s[g.id] })); }} /></td><td style={td}>{TIPOS_GASTO[g.tipo].nombre}</td><td style={{ ...td, fontWeight: 600 }}><button onClick={() => setVerDetalle(g)} style={{ background: "none", border: "none", padding: 0, color: "var(--verde-oscuro)", fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontSize: 13 }}>{g.folio}</button></td><td style={td}>{fCorta(g.fecha)}</td><td style={td}>{detalle(g)}</td><td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(g.total)}</td></tr>)}
             {!visibles.length && <tr><td colSpan={6} style={td}>No hay comprobantes por reembolsar de este tipo.</td></tr>}</tbody>
         </table>
       </div>
@@ -71,6 +73,7 @@ export default function Reembolsos({ gastos, reembolsos, recargar }) {
         <button className="boton" style={{ width: "100%", opacity: r.puedeGenerar ? 1 : 0.5 }} disabled={!r.puedeGenerar} onClick={() => setVer(true)}>Ver oficio y Relación de Gastos</button>
         <Mensaje msg={msg} />
       </div>
+      {verDetalle && <DetalleGasto gasto={verDetalle} onClose={() => setVerDetalle(null)} />}
     </div>
   );
 }

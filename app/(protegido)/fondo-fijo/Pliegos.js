@@ -8,6 +8,7 @@ import { compararConPrecarga, folioNorm, leerControl, leerInforme, unirPrecarga 
 import { TIPOS_GASTO } from "../../../lib/reembolsos";
 import { claveGasto, deducirImportes, hoyLocal, mesDeFecha, money, pliegoParaFiltro } from "../../../lib/fondoFijo";
 import { Mensaje, chico, dos, et, fCorta, inp, pestana, rejilla, tarjeta, td, th, titulo } from "./comun";
+import DetalleGasto from "./DetalleGasto";
 
 const VACIO = { folio: "", fecha: "", matricula: "", tc: "", gj: "", calidad: "", folioChofer: "", destino: "", unidad: "", salida: "", llegada: "", salidaDestino: "", regreso: "", importe: "", casetas: "", boletos: "", motivo: "", infarto: "NO", paciente: "", tp01: "", recibido: "", pago: "" };
 const NOMBRE_TABLA = { BASE: "personal de base", OPER: "operativo y Estatuto A", PK: "grupo P/K", JG: "grupo J-G" };
@@ -21,6 +22,7 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
   const [msg, setMsg] = useState(null);
   const [busca, setBusca] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [verDetalle, setVerDetalle] = useState(null);
   const archivo = useRef(null);
   const pliegos = useMemo(() => gastos.filter((g) => g.tipo === "PLIEGO" && !g.anulado), [gastos]);
   const capturados = useMemo(() => pliegos.filter((g) => g.id !== enEdicion).map(pliegoParaFiltro), [pliegos, enEdicion]);
@@ -126,7 +128,7 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
           <input style={{ ...inp, maxWidth: 340, marginBottom: 8 }} placeholder="Buscar folio, persona o destino" value={busca} onChange={(e) => setBusca(e.target.value)} />
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Folio", "Viaje", "Comisionado", "Destino", "Total", "Reembolso", ""].map((t) => <th key={t} style={th}>{t}</th>)}</tr></thead>
-            <tbody>{lista.map((g) => <tr key={g.id}><td style={{ ...td, fontWeight: 600 }}>{g.folio}</td><td style={td}>{fCorta(g.fecha)}</td><td style={td}>{g.persona}</td><td style={td}>{g.destino}</td><td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(g.total)}</td><td style={td}>{g.reembolso_id ? "Sí" : "Pendiente"}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{!g.reembolso_id && <><button className="boton secundario" style={chico} onClick={() => editar(g)}>Editar</button> <button className="boton secundario" style={chico} onClick={() => anular(g)}>Anular</button></>}</td></tr>)}</tbody>
+            <tbody>{lista.map((g) => <tr key={g.id}><td style={{ ...td, fontWeight: 600 }}><button onClick={() => setVerDetalle(g)} style={{ background: "none", border: "none", padding: 0, color: "var(--verde-oscuro)", fontWeight: 600, cursor: "pointer", textDecoration: "underline", fontSize: 13 }}>{g.folio}</button></td><td style={td}>{fCorta(g.fecha)}</td><td style={td}>{g.persona}</td><td style={td}>{g.destino}</td><td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(g.total)}</td><td style={td}>{g.reembolso_id ? "Sí" : "Pendiente"}</td><td style={{ ...td, whiteSpace: "nowrap" }}><button className="boton secundario" style={chico} onClick={() => setVerDetalle(g)}>Ver</button>{!g.reembolso_id && <> <button className="boton secundario" style={chico} onClick={() => editar(g)}>Editar</button> <button className="boton secundario" style={chico} onClick={() => anular(g)}>Anular</button></>}</td></tr>)}</tbody>
           </table>
           {pliegos.length > lista.length && <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>Se muestran {lista.length}; usa la búsqueda para ver los demás.</div>}
         </div>
@@ -188,6 +190,7 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
           </div>
         </div>
       )}
+      {verDetalle && <DetalleGasto gasto={verDetalle} onClose={() => setVerDetalle(null)} onEditar={() => { const g = verDetalle; setVerDetalle(null); setVista("lista"); editar(g); }} />}
     </div>
   );
 }
