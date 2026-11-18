@@ -78,7 +78,12 @@ export default function Enviados({ gastos, reembolsos, recargar }) {
               {expandida && (
                 <tr>
                   <td colSpan={8} style={{ ...td, background: "var(--gris-claro, #f7f7f7)" }}>
-                    <div style={{ fontSize: 12, color: "var(--texto-suave)", marginBottom: 6 }}>Pliegos/comprobantes de <strong>{r.solicitud}</strong>:</div>
+                    <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 6, display: "flex", gap: 14, flexWrap: "wrap" }}>
+                      <span>Pliegos/comprobantes de <strong style={{ color: "var(--texto)" }}>{r.solicitud}</strong></span>
+                      {r.cr && <span>CR <strong style={{ color: "var(--texto)" }}>{r.cr}</strong></span>}
+                      {r.ref_bancaria && <span>Ref. de pago <strong style={{ color: "var(--texto)" }}>{r.ref_bancaria}</strong></span>}
+                      {r.fecha_prob_pago && <span>Pago prob. <strong style={{ color: "var(--texto)" }}>{fCorta(r.fecha_prob_pago)}</strong></span>}
+                    </div>
                     {compsDe(r).length === 0 ? <div style={{ fontSize: 13 }}>No hay comprobantes ligados a esta relación.</div> : (
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead><tr>{["Folio", "Tipo", "Comisionado / proveedor", "Fecha", "Importe"].map((t) => <th key={t} style={{ ...th, fontSize: 11 }}>{t}</th>)}</tr></thead>
