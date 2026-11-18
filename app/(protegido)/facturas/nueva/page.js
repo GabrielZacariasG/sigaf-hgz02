@@ -86,7 +86,7 @@ export default function NuevaFacturaPage() {
     (async () => {
       const { data, error } = await supabase
         .from("contratos")
-        .select("id, numero_interno, adquisicion_servicio, proveedor_id, partida_id, proveedores ( id, razon_social ), partidas ( id, cuenta_finat, cuenta_prei, centro_costo, nombre, capitulo_id, capitulos ( id, nombre ) )")
+        .select("id, numero_interno, adquisicion_servicio, proveedor_id, partida_id, sin_folios_subrogacion, proveedores ( id, razon_social ), partidas ( id, cuenta_finat, cuenta_prei, centro_costo, nombre, capitulo_id, capitulos ( id, nombre ) )")
         .order("numero_interno", { ascending: true });
       if (!activo) return;
       if (error) { setMensaje("No se pudieron cargar los contratos: " + error.message); }
@@ -178,6 +178,8 @@ export default function NuevaFacturaPage() {
   const cuentaSel = contratoSel?.partidas?.cuenta_finat || contratoSel?.partidas?.cuenta_prei || "";
   // Centro de costos (codificación): en Compra Emergente lo trae la clave; en el resto, la cuenta del contrato.
   const ccSel = esOC ? (claveInfo?.centro_costo || "") : (contratoSel?.partidas?.centro_costo || "");
+  // Contrato de Subrogados que NO genera folios SMS (convenio/intercambio, p. ej. ISSEA): no aplica el candado de folios.
+  const sinFoliosSub = !!contratoSel?.sin_folios_subrogacion;
   const importeNum = parseFloat(importe) || 0;
 
   // Semáforo de dictamen: ¿hay dinero para esta factura? (se lee una vez por contrato y se recalcula con el importe)
@@ -365,7 +367,7 @@ export default function NuevaFacturaPage() {
     if (!calc.ok) { setMensaje("El subtotal + IVA aún no coincide con el total de la factura. Ajústalo antes de guardar."); return; }
     if (requiereDesglose && !desgloseListo) { setMensaje("Captura el desglose por servicio: es obligatorio en este contrato."); return; }
     // 🔒 Candado de subrogación: una factura de contrato de Subrogados debe amparar al menos un folio (devengo).
-    if (/subrog/i.test(capituloSel?.nombre || "") && selFolios.size === 0) {
+    if (/subrog/i.test(capituloSel?.nombre || "") && !sinFoliosSub && selFolios.size === 0) {
       setMensaje(foliosPend.length === 0
         ? "Este contrato de subrogación no tiene folios en devengo. Carga primero el Avance SMS / CD_SMS en «Cargar reportes» (o verifica que existan folios pendientes) antes de capturar la factura."
         : "Selecciona al menos un folio de subrogados que ampara esta factura antes de guardar (abajo, en «Folios de subrogados que cobra esta factura»).");
