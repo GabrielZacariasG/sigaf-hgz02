@@ -195,7 +195,12 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
               <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.2 }}>{r.cuota != null ? money(r.cuota) : "—"}</div>
               <div style={{ fontSize: 13, color: "var(--texto-suave)", minHeight: 18 }}>{r.detalle || "Se calcula al elegir comisionado y destino, y capturar el regreso."}</div>
               {r.cuota != null && Number(p.importe) !== r.cuota && <button className="boton secundario" style={{ marginTop: 8, fontSize: 13 }} onClick={() => setP((x) => ({ ...x, importe: String(r.cuota), motivo: "" }))}>Usar esta cuota</button>}
-              <div style={{ fontSize: 13, marginTop: 10 }}>Total del pliego: <strong>{money(r.total)}</strong></div>
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--borde)", paddingTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}><span style={{ color: "var(--texto-suave)" }}>Importe a pagar</span><strong>{money(Number(p.importe) || 0)}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}><span style={{ color: "var(--texto-suave)" }}>+ Casetas (peaje)</span><strong>{money(Number(p.casetas) || 0)}</strong></div>
+                {Number(p.boletos) > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}><span style={{ color: "var(--texto-suave)" }}>+ Boletos de autobús</span><strong>{money(Number(p.boletos) || 0)}</strong></div>}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, padding: "6px 0 0", marginTop: 4, borderTop: "1px solid var(--borde)" }}><span style={{ fontWeight: 700 }}>Total del pliego</span><strong style={{ fontSize: 17 }}>{money(r.total)}</strong></div>
+              </div>
             </div>
             <div style={tarjeta}>
               <div style={titulo}>FILTROS</div>
