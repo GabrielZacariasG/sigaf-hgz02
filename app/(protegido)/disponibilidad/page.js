@@ -46,14 +46,25 @@ export default function DisponibilidadIndexPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { setError("Sesión no iniciada."); setCargando(false); return; }
 
-        const [facturas, rD, rC] = await Promise.all([
+        const [facturas, rD, rC, rDev] = await Promise.all([
           leerTodasLasFacturas(),
-          supabase.from("disponibilidad_presupuestal").select("cuenta_prei, presupuesto, disponible, periodo"),
+          supabase.from("disponibilidad_presupuestal").select("cuenta_prei, presupuesto, disponible, gasto, periodo"),
           supabase.from("contratos").select("partida_id, monto_maximo"),
+          supabase.from("ajustes_devengo").select("importe, contratos!inner(partida_id)"),
         ]);
+
+        // Devengo por partida (igual que en el detalle de la cuenta: el gasto se compara con FINAT incluyendo devengo)
+        const devByPartida = {};
+        (rDev.data || []).forEach((d) => {
+          const pid = d.contratos?.partida_id;
+          if (pid != null) devByPartida[pid] = (devByPartida[pid] || 0) + Number(d.importe || 0);
+        });
 
         const dispByCuenta = {};
         (rD.data || []).forEach((d) => { dispByCuenta[d.cuenta_prei] = d; });
+        // Gasto FINAT del ejercicio 2026, igual que el detalle de la cuenta (que filtra periodo "2026")
+        const finatByCuenta = {};
+        (rD.data || []).forEach((d) => { if (String(d.periodo) === "2026" && d.gasto != null) finatByCuenta[d.cuenta_prei] = Number(d.gasto); });
 
         // Techo por partida = suma de montos máximos de sus contratos (comprometido)
         const techoByPartida = {};
@@ -84,14 +95,23 @@ export default function DisponibilidadIndexPage() {
           const cuentas = Object.values(cap.cuentasMap).map((c) => {
             const d = c.cuenta ? dispByCuenta[c.cuenta] : null;
             const techo = techoByPartida[c.id] || 0;
-            return { ...c, presupuesto: d ? Number(d.presupuesto) : null, disponible: d ? Number(d.disponible) : null, techo, saldo: techo - c.gasto };
+            // Lo que falta en FINAT sale del gasto del reporte dispo (el estatus de cada factura se actualiza tarde).
+            // Sin dispo de la cuenta, se usa el estatus como antes.
+            const conDev = c.gasto + (devByPartida[c.id] || 0);
+            const finat = c.cuenta && finatByCuenta[c.cuenta] != null ? finatByCuenta[c.cuenta] : null;
+            const dif = finat != null ? conDev - finat : conDev - c.reflejado;
+            const difR = Math.abs(dif) < 0.5 ? 0 : dif;
+            return { ...c, gastoConDev: conDev, finat, dif: difR, presupuesto: d ? Number(d.presupuesto) : null, disponible: d ? Number(d.disponible) : null, techo, saldo: techo - c.gasto };
           }).sort((a, b) => b.gasto - a.gasto);
           const t = cuentas.reduce((a, c) => ({
             n: a.n + c.n, gasto: a.gasto + c.gasto, pasivo: a.pasivo + c.pasivo,
             reflejado: a.reflejado + c.reflejado, presupuesto: a.presupuesto + (c.presupuesto || 0),
             disponible: a.disponible + (c.disponible || 0), nEnTramite: a.nEnTramite + (c.nEnTramite || 0),
             techo: a.techo + (c.techo || 0), saldo: a.saldo + (c.saldo || 0),
-          }), { n: 0, gasto: 0, pasivo: 0, reflejado: 0, presupuesto: 0, disponible: 0, nEnTramite: 0, techo: 0, saldo: 0 });
+            finat: a.finat + (c.finat || 0), dif: a.dif + c.dif,
+            faltaFinat: a.faltaFinat + Math.max(c.dif, 0), sobraFinat: a.sobraFinat + Math.max(-c.dif, 0),
+            nFalta: a.nFalta + (c.dif > 0 ? 1 : 0), nSobra: a.nSobra + (c.dif < 0 ? 1 : 0),
+          }), { n: 0, gasto: 0, pasivo: 0, reflejado: 0, presupuesto: 0, disponible: 0, nEnTramite: 0, techo: 0, saldo: 0, finat: 0, dif: 0, faltaFinat: 0, sobraFinat: 0, nFalta: 0, nSobra: 0 });
           return { nombre: cap.nombre, cuentas, tot: t };
         }).sort((a, b) => (orden[a.nombre] ?? 9) - (orden[b.nombre] ?? 9) || a.nombre.localeCompare(b.nombre));
 
@@ -115,8 +135,11 @@ export default function DisponibilidadIndexPage() {
     reflejado: a.reflejado + cap.tot.reflejado, presupuesto: a.presupuesto + cap.tot.presupuesto,
     disponible: a.disponible + cap.tot.disponible, nEnTramite: a.nEnTramite + cap.tot.nEnTramite,
     cuentas: a.cuentas + cap.cuentas.length,
-  }), { n: 0, gasto: 0, pasivo: 0, reflejado: 0, presupuesto: 0, disponible: 0, nEnTramite: 0, cuentas: 0 });
-  const totEnTramite = G.gasto - G.reflejado;
+    faltaFinat: a.faltaFinat + cap.tot.faltaFinat, sobraFinat: a.sobraFinat + cap.tot.sobraFinat,
+    nFalta: a.nFalta + cap.tot.nFalta, nSobra: a.nSobra + cap.tot.nSobra,
+  }), { n: 0, gasto: 0, pasivo: 0, reflejado: 0, presupuesto: 0, disponible: 0, nEnTramite: 0, cuentas: 0, faltaFinat: 0, sobraFinat: 0, nFalta: 0, nSobra: 0 });
+  const totEnTramite = G.faltaFinat;
+  const colorDif = (v) => (v > 0 ? "var(--rojo)" : v < 0 ? "#B45309" : "var(--verde)");
   const pctEjercido = G.presupuesto > 0 ? Math.round((G.gasto / G.presupuesto) * 1000) / 10 : null;
 
   const kpi = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 10, padding: "14px 16px" };
@@ -143,7 +166,7 @@ export default function DisponibilidadIndexPage() {
           <div style={kpi}><div style={kLbl}>Gasto total</div><div style={kNum}>{money(G.gasto)}</div>{pctEjercido != null && <div style={{ ...kLbl, marginTop: 3 }}>{pctEjercido}% ejercido</div>}</div>
           <div style={kpi}><div style={kLbl}>Pasivo (periodo anterior)</div><div style={{ ...kNum, color: "#B45309" }}>{money(G.pasivo)}</div></div>
           <div style={kpi}><div style={kLbl}>Disponible</div><div style={{ ...kNum, color: "var(--verde)" }}>{money(G.disponible)}</div></div>
-          <div style={kpi}><div style={kLbl}>En trámite (aún no en FINAT)</div><div style={{ ...kNum, color: totEnTramite > 0 ? "var(--rojo)" : "inherit" }}>{money(totEnTramite)}</div><div style={{ ...kLbl, marginTop: 3 }}>{G.nEnTramite} factura(s)</div></div>
+          <div style={kpi}><div style={kLbl}>En trámite (aún no en FINAT)</div><div style={{ ...kNum, color: totEnTramite > 0 ? "var(--rojo)" : "inherit" }}>{money(totEnTramite)}</div><div style={{ ...kLbl, marginTop: 3 }}>{G.nFalta} cuenta(s) · gasto SIGAF − FINAT</div>{G.nSobra > 0 && <div style={{ ...kLbl, marginTop: 2, color: "#B45309" }}>FINAT tiene {money(G.sobraFinat)} más en {G.nSobra} cuenta(s)</div>}</div>
         </div>
       )}
 
@@ -171,7 +194,8 @@ export default function DisponibilidadIndexPage() {
                       <th style={{ ...th, textAlign: "right" }}>{esInt ? "Presupuesto" : "Techo contrato"}</th>
                       <th style={{ ...th, textAlign: "right" }}>Gasto</th>
                       <th style={{ ...th, textAlign: "right" }}>{esInt ? "Pasivo" : "Saldo"}</th>
-                      <th style={{ ...th, textAlign: "right" }}>Reflejado (FINAT)</th>
+                      <th style={{ ...th, textAlign: "right" }}>Gasto FINAT (dispo)</th>
+                      <th style={{ ...th, textAlign: "right" }}>Diferencia</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -193,7 +217,8 @@ export default function DisponibilidadIndexPage() {
                         ) : (
                           <td style={{ ...td, textAlign: "right", color: c.techo > 0 ? (c.saldo < 0 ? "var(--rojo)" : "var(--verde)") : "inherit" }}>{c.techo > 0 ? money(c.saldo) : "—"}</td>
                         )}
-                        <td style={{ ...td, textAlign: "right" }}>{money(c.reflejado)}</td>
+                        <td style={{ ...td, textAlign: "right" }}>{c.finat != null ? money(c.finat) : <span style={{ color: "var(--texto-suave)" }} title="Sin reporte dispo de esta cuenta">—</span>}</td>
+                        <td style={{ ...td, textAlign: "right", color: colorDif(c.dif) }} title={c.finat == null ? "Sin dispo: según el estatus de las facturas" : "Gasto SIGAF (con devengo) − gasto FINAT"}>{c.dif === 0 ? "cuadra" : money(c.dif)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -203,7 +228,8 @@ export default function DisponibilidadIndexPage() {
                       <td style={{ ...td, textAlign: "right" }}>{esInt ? (cap.tot.presupuesto > 0 ? money(cap.tot.presupuesto) : "—") : (cap.tot.techo > 0 ? money(cap.tot.techo) : "—")}</td>
                       <td style={{ ...td, textAlign: "right" }}>{money(cap.tot.gasto)}</td>
                       <td style={{ ...td, textAlign: "right", color: esInt ? "#B45309" : (cap.tot.saldo < 0 ? "var(--rojo)" : "var(--verde)") }}>{esInt ? money(cap.tot.pasivo) : (cap.tot.techo > 0 ? money(cap.tot.saldo) : "—")}</td>
-                      <td style={{ ...td, textAlign: "right" }}>{money(cap.tot.reflejado)}</td>
+                      <td style={{ ...td, textAlign: "right" }}>{cap.tot.finat > 0 ? money(cap.tot.finat) : "—"}</td>
+                      <td style={{ ...td, textAlign: "right", color: colorDif(Math.abs(cap.tot.dif) < 0.5 ? 0 : cap.tot.dif) }}>{Math.abs(cap.tot.dif) < 0.5 ? "cuadra" : money(cap.tot.dif)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -215,7 +241,8 @@ export default function DisponibilidadIndexPage() {
       )}
 
       <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 16 }}>
-        Cada cuenta enlaza a su detalle: gasto vs FINAT, partición pasivo/corriente y las facturas. El <strong>pasivo</strong> es
+        <strong>Diferencia</strong> = gasto de SIGAF (con devengo) − gasto de FINAT del reporte dispo: en rojo, gasto que FINAT todavía
+        no tiene; en naranja, FINAT tiene más gasto que SIGAF. Cada cuenta enlaza a su detalle: gasto vs FINAT, partición pasivo/corriente y las facturas. El <strong>pasivo</strong> es
         gasto de periodos anteriores cubierto con presupuesto 2026. El presupuesto viene del reporte <code>dispo</code>; súbelo con
         el botón de arriba para actualizar todas las cuentas de una vez.
       </p>

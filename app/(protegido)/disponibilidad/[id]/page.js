@@ -84,8 +84,17 @@ export default function DetalleCuentaPage() {
     c.n++; c.gasto += Number(f.importe_factura || 0);
     if (esReflejada(f)) c.reflejado += Number(f.importe_factura || 0);
   }
-  const contratos = Object.values(porContrato).sort((a, b) => b.gasto - a.gasto);
   const sinReflejar = facturas.filter((f) => !esReflejada(f));
+  const sumaSinReflejar = sinReflejar.reduce((a, f) => a + Number(f.importe_factura || 0), 0);
+
+  // La verdad sobre qué está en FINAT es el gasto del reporte dispo, no el estatus de cada factura
+  // (el estatus se actualiza tarde). Revisión 18/11/2026: con el estatus, 27 de 33 cuentas marcaban
+  // "en trámite" facturas que FINAT ya tenía. Si el gasto de SIGAF y el de FINAT cuadran, todo está reflejado.
+  const diferencia = finat != null ? gastoTotal - finat : enTramite;
+  const cuadra = finat != null && Math.abs(diferencia) < 0.5;
+  if (cuadra) for (const c of Object.values(porContrato)) c.reflejado = c.gasto;
+  const contratos = Object.values(porContrato).sort((a, b) => b.gasto - a.gasto);
+  const marcarRojo = (f) => !cuadra && !esReflejada(f);
 
   // Techo por contrato (comprometido) = suma de montos máximos; saldo = techo − gasto.
   const comprometido = contratos.reduce((a, c) => a + (c.maximo || 0), 0);
@@ -159,12 +168,41 @@ export default function DetalleCuentaPage() {
       <div style={{ ...card, maxWidth: 580 }}>
         <Row k="Gasto según SIGAF (con devengo)" v={money(gastoTotal)} />
         <Row k="Gasto según FINAT (dispo)" v={finat != null ? money(finat) : "—"} />
-        <Row k="Diferencia (en trámite)" v={money(finat != null ? gastoTotal - finat : enTramite)} bold col="var(--rojo)" />
-        <div style={{ marginTop: 10, fontSize: 12, color: "var(--texto-suave)" }}>Explicación de la diferencia:</div>
-        <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12 }}>
-          {sinReflejar.map((f) => (<li key={f.id}>Factura {f.folio_proveedor} aún no reflejada en FINAT: {money(f.importe_factura)}</li>))}
-          {devengo > 0 && <li>Devengo (no es factura): {money(devengo)}</li>}
-        </ul>
+        <Row k={finat != null ? "Diferencia (SIGAF − FINAT)" : "En trámite (según estatus de las facturas)"}
+             v={cuadra ? "$0.00 · cuadra" : money(diferencia)} bold
+             col={cuadra ? "var(--verde)" : diferencia > 0 ? "var(--rojo)" : "#B45309"} />
+        {cuadra ? (
+          <div style={{ marginTop: 10, fontSize: 12 }}>
+            Todo el gasto de SIGAF ya está en FINAT.
+            {sinReflejar.length > 0 && (
+              <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>
+                {sinReflejar.length} factura(s) siguen con estatus de trámite en SIGAF aunque FINAT ya las tiene; falta actualizarles el estatus:
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                  {sinReflejar.map((f) => (<li key={f.id}>{f.folio_proveedor}: {money(f.importe_factura)} ({LABEL_GENERAL[f.estatus_general] || f.estatus_general})</li>))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--texto-suave)" }}>
+              {finat == null
+                ? "No hay reporte dispo de esta cuenta; se usa el estatus de cada factura:"
+                : diferencia > 0
+                  ? `SIGAF tiene ${money(diferencia)} más de gasto que FINAT. Facturas que SIGAF todavía no marca como reflejadas (suman ${money(sumaSinReflejar)}):`
+                  : `FINAT tiene ${money(-diferencia)} más de gasto que SIGAF: puede haber comprobantes en FINAT que no están capturados en SIGAF.${sinReflejar.length ? " Facturas que SIGAF no marca como reflejadas:" : ""}`}
+            </div>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12 }}>
+              {sinReflejar.map((f) => (<li key={f.id}>Factura {f.folio_proveedor}: {money(f.importe_factura)} ({LABEL_GENERAL[f.estatus_general] || f.estatus_general})</li>))}
+              {devengo > 0 && <li>Devengo (no es factura): {money(devengo)}</li>}
+            </ul>
+            {finat != null && diferencia > 0 && Math.abs(sumaSinReflejar + devengo - diferencia) >= 0.5 && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#B45309" }}>
+                Ojo: la lista no suma lo mismo que la diferencia; algunas de estas facturas ya podrían estar en FINAT con el estatus atrasado.
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <h2 style={{ fontSize: 16, marginTop: 26, marginBottom: 8 }}>Detalle de facturas ({facturas.length})</h2>
@@ -181,7 +219,7 @@ export default function DetalleCuentaPage() {
             </tr></thead>
             <tbody>
               {facturas.slice().sort((a, b) => (a.periodo_fin || "").localeCompare(b.periodo_fin || "")).map((f) => (
-                <tr key={f.id} style={f.estatus_general !== "gasto_reflejado" ? { background: "#fef2f2" } : {}}>
+                <tr key={f.id} style={marcarRojo(f) ? { background: "#fef2f2" } : {}}>
                   <td style={td}>{f.folio_proveedor}</td>
                   <td style={{ ...td, textAlign: "right" }}>{money(f.importe_factura)}</td>
                   {esIntegrales && <td style={td}>{f.tipo_entrega === "FARMACIA" ? badge("Farmacia", "#eef2ff", "#3730a3") : (f.tipo_entrega || "—")}</td>}
@@ -201,9 +239,10 @@ export default function DetalleCuentaPage() {
       </div>
 
       <p style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 12 }}>
+        {cuadra ? "El gasto de SIGAF cuadra con FINAT: no hay facturas pendientes de reflejar. " : "Renglones en rojo: facturas que SIGAF todavía no marca como reflejadas en FINAT. "}
         {esIntegrales
-          ? "Renglones en rojo: facturas aún no reflejadas en FINAT. El techo es el presupuesto de la cuenta (reporte dispo)."
-          : "Renglones en rojo: facturas aún no reflejadas en FINAT. El techo es el saldo del contrato (monto máximo − gasto); estos capítulos no llevan pedido/recepción ni contra-recibo."}
+          ? "El techo es el presupuesto de la cuenta (reporte dispo)."
+          : "El techo es el saldo del contrato (monto máximo − gasto); estos capítulos no llevan pedido/recepción ni contra-recibo."}
       </p>
     </div>
   );
