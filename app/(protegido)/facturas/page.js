@@ -157,7 +157,7 @@ export default function FacturasListaPage() {
       // Todo por páginas: Supabase corta en 1,000 filas y el historial (3 ejes) ya pasa de eso.
       const [rFac, a, h] = await Promise.all([
         leerTodo((d, hst) => supabase.from("facturas").select(
-          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, estatus_general, estatus_firmas, estatus_pedido_recepcion, ce_destino, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
+          "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, cr_contrarecibo, orden_compra, estatus_general, estatus_firmas, estatus_pedido_recepcion, ce_destino, dev_solicitada, dev_solicitada_motivo, dev_solicitada_jefe_id, es_pasivo, periodo_inicio, periodo_fin, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_prei, cuenta_finat )"
         ).eq("anulada", false).order("id").range(d, hst)),
         leerTodo((d, hst) => supabase.from("alertas_config").select("circuito, estatus, dias_umbral").range(d, hst)),
         leerTodo((d, hst) => supabase.from("factura_estatus_historial").select("factura_id, circuito, estatus, fecha").order("id").range(d, hst)),
@@ -242,7 +242,7 @@ export default function FacturasListaPage() {
       if (pv && !f.prov.toLowerCase().includes(pv)) return false;
       if (ct && !f.contrato.toLowerCase().includes(ct)) return false;
       if (q) {
-        const blob = `${f.folio_ingreso} ${f.folio_proveedor} ${f.prov} ${f.contrato} ${f.cr_contrarecibo ?? ""} ${f.importe_factura}`.toLowerCase();
+        const blob = `${f.folio_ingreso} ${f.folio_proveedor} ${f.prov} ${f.contrato} ${f.cr_contrarecibo ?? ""} ${f.orden_compra ?? ""} ${f.importe_factura}`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
@@ -965,7 +965,7 @@ export default function FacturasListaPage() {
 
       {/* BUSCADOR (siempre visible) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
-        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar folio, CR, importe…" style={{ ...inp, flex: 2, minWidth: 200 }} />
+        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar folio, CR, orden de compra, importe…" style={{ ...inp, flex: 2, minWidth: 200 }} />
         <input value={fProv} onChange={(e) => setFProv(e.target.value)} placeholder="Proveedor…" list="lst-prov" style={{ ...inp, flex: 1, minWidth: 160 }} />
         <datalist id="lst-prov">{proveedores.map((p) => <option key={p} value={p} />)}</datalist>
         <input value={fContrato} onChange={(e) => setFContrato(e.target.value)} placeholder="Contrato…" list="lst-cont" style={{ ...inp, flex: 1, minWidth: 150 }} />
