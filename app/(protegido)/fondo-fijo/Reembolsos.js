@@ -73,7 +73,7 @@ export default function Reembolsos({ gastos, reembolsos, recargar }) {
         <button className="boton" style={{ width: "100%", opacity: r.puedeGenerar ? 1 : 0.5 }} disabled={!r.puedeGenerar} onClick={() => setVer(true)}>Ver oficio y Relación de Gastos</button>
         <Mensaje msg={msg} />
       </div>
-      {verDetalle && <DetalleGasto gasto={verDetalle} onClose={() => setVerDetalle(null)} />}
+      {verDetalle && <DetalleGasto gasto={verDetalle} reembolso={reembolsos.find((r) => r.id === verDetalle.reembolso_id)} onClose={() => setVerDetalle(null)} />}
     </div>
   );
 }

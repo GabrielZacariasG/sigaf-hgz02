@@ -14,7 +14,7 @@ const VACIO = { folio: "", fecha: "", matricula: "", tc: "", gj: "", calidad: ""
 const NOMBRE_TABLA = { BASE: "personal de base", OPER: "operativo y Estatuto A", PK: "grupo P/K", JG: "grupo J-G" };
 const num = (v) => Number(v) || 0;
 
-export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
+export default function Pliegos({ gastos, precarga, comisionados, reembolsos = [], recargar }) {
   const [vista, setVista] = useState("porLlegar");
   const [p, setP] = useState(VACIO);
   const [enEdicion, setEnEdicion] = useState(null);
@@ -213,7 +213,7 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
           </div>
         </div>
       )}
-      {verDetalle && <DetalleGasto gasto={verDetalle} onClose={() => setVerDetalle(null)} onEditar={() => { const g = verDetalle; setVerDetalle(null); setVista("lista"); editar(g); }} />}
+      {verDetalle && <DetalleGasto gasto={verDetalle} reembolso={reembolsos.find((r) => r.id === verDetalle.reembolso_id)} onClose={() => setVerDetalle(null)} onEditar={() => { const g = verDetalle; setVerDetalle(null); setVista("lista"); editar(g); }} />}
     </div>
   );
 }

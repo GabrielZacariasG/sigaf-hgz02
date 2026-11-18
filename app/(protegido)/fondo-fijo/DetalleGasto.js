@@ -27,7 +27,7 @@ function Seccion({ titulo: t, children }) {
   );
 }
 
-export default function DetalleGasto({ gasto: g, onClose, onEditar }) {
+export default function DetalleGasto({ gasto: g, reembolso, onClose, onEditar }) {
   if (!g) return null;
   const esPliego = g.tipo === "PLIEGO";
   const acompanante = g.calidad === "ACOMPANANTE";
@@ -112,7 +112,23 @@ export default function DetalleGasto({ gasto: g, onClose, onEditar }) {
           <Fila k="Centro de costos" v={txt(g.cc)} />
           <Fila k="Recibido en Finanzas" v={g.recibido ? fCorta(g.recibido) : "—"} />
           <Fila k="Fecha de pago" v={g.fecha_pago ? fCorta(g.fecha_pago) : "—"} />
-          <Fila k="Reembolso" v={g.reembolso_id ? "Ya en un reembolso" : "Pendiente"} />
+        </Seccion>
+
+        {/* Relación de pago: en qué reembolso entró, su CR, referencia y fechas. */}
+        <Seccion titulo="RELACIÓN DE PAGO">
+          {reembolso ? (
+            <>
+              <Fila k="Relación (solicitud)" v={txt(reembolso.solicitud)} fuerte />
+              {reembolso.folio_oficio && <Fila k="Oficio" v={txt(reembolso.folio_oficio)} />}
+              <Fila k="Contra-recibo (CR)" v={reembolso.cr ? reembolso.cr : "Aún sin CR"} />
+              {reembolso.ref_bancaria && <Fila k="Referencia de pago" v={txt(reembolso.ref_bancaria)} />}
+              {reembolso.fecha_ingreso && <Fila k="Ingreso a OOAD" v={fCorta(reembolso.fecha_ingreso)} />}
+              {reembolso.fecha_prob_pago && <Fila k="Pago probable" v={fCorta(reembolso.fecha_prob_pago)} />}
+              <Fila k="Estatus" v={reembolso.estatus === "cancelado" ? "Relación cancelada" : reembolso.cr ? "Pagado (con CR)" : "Enviado a OOAD, en espera de CR"} />
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: "var(--texto-suave)", padding: "6px 0" }}>Todavía no está en ninguna relación de reembolso (pendiente por reembolsar).</div>
+          )}
         </Seccion>
 
         {extras.length > 0 && (
