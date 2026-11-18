@@ -192,7 +192,7 @@ export default function FacturaEstatusPage() {
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet, rOfi] = await Promise.all([
       supabase.from("facturas").select(
-        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, fecha_factura, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei )"
+        "id, folio_ingreso, folio_proveedor, importe_factura, validacion_ok, diferencia_importe, fecha_factura, periodo_inicio, periodo_fin, vigencia_alerta, estatus_general, estatus_firmas, estatus_pedido_recepcion, cr_contrarecibo, fecha_pago, clave_cbi, centro_costo, numero_pedido, numero_recepcion, capitulo_id, partida_id, contrato_id, proveedor_id, orden_compra, motivo_devolucion, fecha_devolucion, reingresos, anulada, sustituida_por_id, sustituye_a_id, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre ), partidas ( cuenta_finat, cuenta_prei, centro_costo, nombre )"
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
@@ -411,6 +411,8 @@ export default function FacturaEstatusPage() {
 
   // Genera pedido-recepción: Integrales + cuentas de Área Médica 51251019/06/18.
   const cuentaFactura = factura.partidas?.cuenta_finat || factura.partidas?.cuenta_prei;
+  // Codificación: centro de costos de la factura (o, si no se guardó, el de la cuenta).
+  const ccFactura = String(factura.centro_costo || factura.partidas?.centro_costo || "").trim();
   const generaPR = generaPedidoRecepcion(factura.capitulos?.nombre, cuentaFactura);
   // Candado cruzado: solo se puede AVANZAR general a "enviada_ooad" si firmas (y pedido en Integrales) están completos.
   const idxGen = FLUJO_GENERAL.indexOf(factura.estatus_general);
@@ -525,6 +527,21 @@ export default function FacturaEstatusPage() {
             {claveInfo.centro_costo && <span>Centro de costos <strong>{claveInfo.centro_costo}</strong></span>}
             {claveInfo.precio != null && <span>Precio ref. <strong>{money(claveInfo.precio)}</strong></span>}
           </div>
+        </div>
+      )}
+
+      {/* Codificación (cuenta contable + centro de costos) — para toda factura con contrato */}
+      {!claveInfo && cuentaFactura && (
+        <div style={{ background: "var(--verde-claro)", border: "1px solid var(--verde-oscuro)", borderRadius: 10, padding: "12px 16px", margin: "12px 0", color: "var(--verde-oscuro)" }}>
+          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.8, marginBottom: 6 }}>Codificación</div>
+          <div style={{ fontSize: 13.5, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "baseline" }}>
+            {factura.capitulos?.nombre && <span>Capítulo <strong>{factura.capitulos.nombre}</strong></span>}
+            <span>Cuenta <strong>{cuentaFactura}</strong></span>
+            {ccFactura
+              ? <span>Centro de costos <strong>{ccFactura}</strong></span>
+              : <span style={{ color: "var(--ambar)", fontWeight: 600 }}>Centro de costos sin asignar</span>}
+          </div>
+          {factura.partidas?.nombre && <div style={{ fontSize: 13, marginTop: 4, opacity: 0.9 }}>{factura.partidas.nombre}</div>}
         </div>
       )}
 
