@@ -33,6 +33,13 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
   const contraRelacion = useMemo(() => compararConPrecarga(item && { ...item, importe: item.importe == null ? null : Number(item.importe), casetas: Number(item.casetas) }, p), [item, p]);
   const porLlegar = precarga.filter((x) => !x.gasto_id);
   const pon = (c) => (e) => { setMsg(null); setP((x) => ({ ...x, [c]: e.target.value })); };
+  // Horas: teclea solo números y el ":" se pone solo. Los 2 últimos dígitos son los minutos
+  // (1355 -> 13:55, 700 -> 7:00), así funciona igual con horas de 1 o 2 dígitos.
+  const ponHora = (c) => (e) => {
+    const d = e.target.value.replace(/\D/g, "").slice(0, 4);
+    const v = d.length <= 2 ? d : `${d.slice(0, d.length - 2)}:${d.slice(-2)}`;
+    setMsg(null); setP((x) => ({ ...x, [c]: v }));
+  };
   // El pliego físico manda: esto solo sugiere tipo de contratación, grupo y calidad al elegir a la persona.
   const sugerir = (matricula) => { const c = comisionados.find((x) => x.matricula === matricula); return c ? { tc: c.tc || "02", gj: c.gj || "", calidad: esTransportes(c.categoria) ? "CHOFER" : "ACOMPANANTE" } : {}; };
   const llego = (it) => {
@@ -154,7 +161,8 @@ export default function Pliegos({ gastos, precarga, comisionados, recargar }) {
             </div>
             {p.tc && <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: -6 }}>Tabla que se usará: {NOMBRE_TABLA[tablaDe(p.tc, p.gj)] || "falta el grupo jerárquico"}</div>}
             <label><span style={et}>Destino</span><select style={inp} value={p.destino} onChange={pon("destino")}><option value="">Elige…</option>{DESTINOS.map((x) => <option key={x.nombre} value={x.nombre}>{x.nombre}</option>)}</select></label>
-            <div style={rejilla(105)}>{[["salida", "Salida"], ["llegada", "Llegada destino"], ["salidaDestino", "Salida destino"], ["regreso", "Regreso"]].map(([c, t]) => <label key={c}><span style={et}>{t}</span><input style={inp} value={p[c]} onChange={pon(c)} placeholder="hh:mm" /></label>)}</div>
+            <div style={rejilla(105)}>{[["salida", "Salida"], ["llegada", "Llegada destino"], ["salidaDestino", "Salida destino"], ["regreso", "Regreso"]].map(([c, t]) => <label key={c}><span style={et}>{t}</span><input style={inp} value={p[c]} onChange={ponHora(c)} inputMode="numeric" placeholder="hh:mm" /></label>)}</div>
+            <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: -6 }}>Teclea solo números: <strong>1355</strong> se vuelve <strong>13:55</strong> (los 2 últimos son minutos).</div>
             <div style={rejilla(120)}>
               <label><span style={et}>Importe a pagar</span><input style={inp} inputMode="decimal" value={p.importe} onChange={pon("importe")} /></label>
               <label><span style={et}>Casetas</span><input style={inp} inputMode="decimal" value={p.casetas} onChange={pon("casetas")} /></label>
