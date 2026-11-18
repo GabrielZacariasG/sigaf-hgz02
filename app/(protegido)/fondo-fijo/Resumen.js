@@ -13,6 +13,9 @@ export default function Resumen({ gastos, reembolsos }) {
   useEffect(() => { leerTodo(() => supabase.from("dispo_detalle_actual").select("cuenta_finat, centro_costo, periodo, presupuesto, gasto, disponible").in("cuenta_finat", [...new Set(gastos.map((g) => g.cuenta).filter((c) => /^\d{8}$/.test(c || ""))), "52411024", "51371004", "51371007", "51371005", "51391001"]).order("cuenta_finat").order("periodo").order("centro_costo").order("proyecto")).then(setDispo).catch((e) => setMsg({ error: true, t: e.message })); }, [gastos]);
   const filas = useMemo(() => resumenMensual(gastos, dispo), [gastos, dispo]);
   const cf = useMemo(() => controlFondo(gastos, reembolsos), [gastos, reembolsos]);
+  // Disponible presupuestal (FINAT) de las cuentas que usa el fondo: presupuesto − gasto del sistema.
+  const ffCuentas = useMemo(() => filas.filter((f) => f.presupuesto).map((f) => ({ ...f, dispoFinat: Math.round((f.presupuesto - f.gastoSistema) * 100) / 100 })), [filas]);
+  const totalDispoFinat = useMemo(() => ffCuentas.reduce((s, f) => s + f.dispoFinat, 0), [ffCuentas]);
   const dato = (etq, valor, color) => (
     <div style={{ background: "var(--gris-claro, #f7f7f7)", borderRadius: 10, padding: "10px 14px", minWidth: 150 }}>
       <div style={{ fontSize: 11.5, color: "var(--texto-suave)", textTransform: "uppercase", letterSpacing: 0.4 }}>{etq}</div>
@@ -31,10 +34,29 @@ export default function Resumen({ gastos, reembolsos }) {
           {dato("Disponible", money(cf.disponible), cf.disponible < cf.fondo * 0.15 ? "var(--rojo)" : "var(--verde-oscuro)")}
           {dato("Revolvencia prom.", cf.promedioIr.toLocaleString("es-MX"))}
           {dato("Reembolsos del mes", `${cf.reembolsosMes} / 8`, cf.reembolsosMes >= 8 ? "var(--rojo)" : "var(--texto)")}
+          {dato("Disponible en cuentas (FINAT)", money(totalDispoFinat), totalDispoFinat < 0 ? "var(--rojo)" : "var(--verde-oscuro)")}
         </div>
         <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
-          Disponible = fondo − lo que ya salió y aún no regresa (por reembolsar + enviado sin CR). Índice de revolvencia (Anexo 12): reembolsos del mes ÷ fondo.
+          Disponible del fondo = fondo − lo que ya salió y aún no regresa (por reembolsar + enviado sin CR). <strong>Disponible en cuentas</strong> = presupuesto FINAT − gasto del sistema, de las cuentas que usa el fondo (el tope real de lo que se puede gastar). Índice de revolvencia (Anexo 12): reembolsos del mes ÷ fondo.
         </div>
+        {ffCuentas.length > 0 && (
+          <div style={{ marginTop: 10, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Cuenta que usa el fondo", "Presupuesto", "Gasto sistema", "Disponible FINAT"].map((t, i) => <th key={t} style={{ ...th, textAlign: i ? "right" : "left" }}>{t}</th>)}</tr></thead>
+              <tbody>
+                {ffCuentas.map((f) => (
+                  <tr key={`${f.cuenta}${f.cc}`}>
+                    <td style={{ ...td, fontWeight: 600 }}>{f.cuenta} · {f.cc}<div style={{ fontSize: 11, fontWeight: 400, color: "var(--texto-suave)" }}>{f.nombre}</div></td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(f.presupuesto)}</td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", color: "var(--texto-suave)" }}>{money(f.gastoSistema)}</td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", fontWeight: 700, color: f.dispoFinat < 0 ? "var(--rojo)" : "var(--verde-oscuro)" }}>{money(f.dispoFinat)}</td>
+                  </tr>
+                ))}
+                <tr><td style={{ ...td, fontWeight: 700 }}>Total</td><td style={td}></td><td style={td}></td><td style={{ ...td, textAlign: "right", fontWeight: 800, whiteSpace: "nowrap", color: totalDispoFinat < 0 ? "var(--rojo)" : "var(--verde-oscuro)" }}>{money(totalDispoFinat)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        )}
         {cf.alertas.length > 0 && (
           <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
             {cf.alertas.map((a, i) => (
