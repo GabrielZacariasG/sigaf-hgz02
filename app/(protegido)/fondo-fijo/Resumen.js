@@ -2,7 +2,7 @@
 // Resumen mensual por cuenta, contra la disponibilidad, y proyección al cierre.
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
-import { COLUMNAS_MES, leerTodo, money, proyeccion, resumenMensual } from "../../../lib/fondoFijo";
+import { COLUMNAS_MES, controlFondo, leerTodo, money, proyeccion, resumenMensual } from "../../../lib/fondoFijo";
 import { Mensaje, tarjeta, td, th, titulo } from "./comun";
 
 const n0 = (n) => (n ? Math.round(n).toLocaleString("es-MX") : "—");
@@ -12,9 +12,49 @@ export default function Resumen({ gastos, reembolsos }) {
   const [msg, setMsg] = useState(null);
   useEffect(() => { leerTodo(() => supabase.from("dispo_detalle_actual").select("cuenta_finat, centro_costo, periodo, presupuesto, gasto, disponible").in("cuenta_finat", [...new Set(gastos.map((g) => g.cuenta).filter((c) => /^\d{8}$/.test(c || ""))), "52411024", "51371004", "51371007", "51371005", "51391001"]).order("cuenta_finat").order("periodo").order("centro_costo").order("proyecto")).then(setDispo).catch((e) => setMsg({ error: true, t: e.message })); }, [gastos]);
   const filas = useMemo(() => resumenMensual(gastos, dispo), [gastos, dispo]);
+  const cf = useMemo(() => controlFondo(gastos, reembolsos), [gastos, reembolsos]);
+  const dato = (etq, valor, color) => (
+    <div style={{ background: "var(--gris-claro, #f7f7f7)", borderRadius: 10, padding: "10px 14px", minWidth: 150 }}>
+      <div style={{ fontSize: 11.5, color: "var(--texto-suave)", textTransform: "uppercase", letterSpacing: 0.4 }}>{etq}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || "var(--texto)" }}>{valor}</div>
+    </div>
+  );
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <Mensaje msg={msg} />
+      <div style={tarjeta}>
+        <div style={titulo}>CONTROL DEL FONDO FIJO</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
+          {dato("Fondo autorizado", money(cf.fondo))}
+          {dato("Por reembolsar", money(cf.porReembolsar))}
+          {dato("Enviado sin CR", money(cf.enviadoSinCR))}
+          {dato("Disponible", money(cf.disponible), cf.disponible < cf.fondo * 0.15 ? "var(--rojo)" : "var(--verde-oscuro)")}
+          {dato("Revolvencia prom.", cf.promedioIr.toLocaleString("es-MX"))}
+          {dato("Reembolsos del mes", `${cf.reembolsosMes} / 8`, cf.reembolsosMes >= 8 ? "var(--rojo)" : "var(--texto)")}
+        </div>
+        <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 8 }}>
+          Disponible = fondo − lo que ya salió y aún no regresa (por reembolsar + enviado sin CR). Índice de revolvencia (Anexo 12): reembolsos del mes ÷ fondo.
+        </div>
+        {cf.alertas.length > 0 && (
+          <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+            {cf.alertas.map((a, i) => (
+              <div key={i} style={{ fontSize: 13, padding: "7px 10px", borderRadius: 8, borderLeft: `4px solid ${a.nivel === "rojo" ? "var(--rojo)" : "#d97706"}`, background: a.nivel === "rojo" ? "rgba(220,38,38,.07)" : "rgba(217,119,6,.08)" }}>
+                {a.nivel === "rojo" ? "⛔ " : "⚠️ "}{a.t}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ ...tarjeta, overflowX: "auto" }}>
+        <div style={titulo}>ÍNDICE DE REVOLVENCIA POR MES (ANEXO 12)</div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr><th style={th}></th>{cf.porMes.map((m) => <th key={m.mes} style={{ ...th, textAlign: "right" }}>{m.mes.slice(0, 3)}</th>)}<th style={{ ...th, textAlign: "right" }}>Prom.</th></tr></thead>
+          <tbody>
+            <tr><td style={{ ...td, fontWeight: 600 }}>Reembolsado</td>{cf.porMes.map((m) => <td key={m.mes} style={{ ...td, textAlign: "right" }}>{n0(m.suma)}</td>)}<td style={td}></td></tr>
+            <tr><td style={{ ...td, fontWeight: 600 }}>Índice</td>{cf.porMes.map((m) => <td key={m.mes} style={{ ...td, textAlign: "right", color: "var(--texto-suave)" }}>{m.ir ? m.ir.toLocaleString("es-MX") : "—"}</td>)}<td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{cf.promedioIr.toLocaleString("es-MX")}</td></tr>
+          </tbody>
+        </table>
+      </div>
       <div style={{ ...tarjeta, overflowX: "auto" }}>
         <div style={titulo}>EJERCIDO POR MES (LO PAGADO POR EL FONDO, SEGÚN CAPTURA)</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
