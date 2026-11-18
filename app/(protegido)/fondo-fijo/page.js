@@ -9,7 +9,6 @@ import OtrosGastos from "./OtrosGastos";
 import Reembolsos from "./Reembolsos";
 import Enviados from "./Enviados";
 import Resumen from "./Resumen";
-import Banco from "./Banco";
 import Carga from "./Carga";
 
 export default function FondoFijo() {
@@ -36,7 +35,7 @@ export default function FondoFijo() {
   if (!d) return <p>Cargando fondo fijo…</p>;
   const porLlegar = d.precarga.filter((p) => !p.gasto_id).length;
   const porReembolsar = d.gastos.filter((g) => !g.reembolso_id && !g.anulado).length;
-  const TABS = [["pliegos", `Pliegos${porLlegar ? ` (${porLlegar} por llegar)` : ""}`], ["otros", "Otras cuentas"], ["reembolso", `Armar reembolso (${porReembolsar})`], ["enviados", "Enviados a OOAD"], ["resumen", "Resumen y proyección"], ["banco", "Banco y arqueo"], ["carga", "Carga y plantilla"]];
+  const TABS = [["pliegos", `Pliegos${porLlegar ? ` (${porLlegar} por llegar)` : ""}`], ["otros", "Otras cuentas"], ["reembolso", `Armar reembolso (${porReembolsar})`], ["enviados", "Enviados a OOAD"], ["resumen", "Resumen y proyección"], ["carga", "Carga y plantilla"]];
   const comun = { ...d, recargar };
   return (
     <div>
@@ -49,7 +48,6 @@ export default function FondoFijo() {
       {vista === "reembolso" && <Reembolsos {...comun} />}
       {vista === "enviados" && <Enviados {...comun} />}
       {vista === "resumen" && <Resumen {...comun} />}
-      {vista === "banco" && <Banco {...comun} />}
       {vista === "carga" && <Carga {...comun} />}
     </div>
   );
