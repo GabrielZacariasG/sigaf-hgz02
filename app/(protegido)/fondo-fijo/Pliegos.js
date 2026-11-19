@@ -113,7 +113,7 @@ export default function Pliegos({ gastos, precarga, comisionados, reembolsos = [
   return (
     <div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <button style={pestana(vista === "porLlegar")} onClick={() => { setMsg(null); setVista("porLlegar"); }}>Por llegar ({porLlegar.length})</button>
+        <button style={pestana(vista === "porLlegar")} onClick={() => { setMsg(null); setVista("porLlegar"); }}>Por capturar ({porLlegar.length})</button>
         <button style={pestana(vista === "captura" && !item && !enEdicion)} onClick={nueva}>+ Nueva captura</button>
         <button style={pestana(vista === "lista")} onClick={() => { setMsg(null); setVista("lista"); }}>Capturados ({pliegos.length})</button>
         <button className="boton secundario" style={{ marginLeft: "auto" }} disabled={ocupado} onClick={() => archivo.current?.click()}>Subir relación de Servicios Generales</button>
@@ -122,8 +122,9 @@ export default function Pliegos({ gastos, precarga, comisionados, reembolsos = [
       <Mensaje msg={msg} />
       {vista === "porLlegar" && (
         <div style={{ ...tarjeta, overflowX: "auto" }}>
+          <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 8 }}>Pliegos de la relación de Servicios Generales que <strong>aún no se capturan</strong> en el fondo. La columna "Estatus en Serv. Grales." es el estatus que ellos le tienen; cuando el pliego llegue, dale <strong>Capturar</strong>.</div>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Folio", "Comisionado", "Fecha", "Destino", "Importe", "Casetas", "Viene de", "Serv. Generales", ""].map((t) => <th key={t} style={th}>{t}</th>)}</tr></thead>
+            <thead><tr>{["Folio", "Comisionado", "Fecha", "Destino", "Importe", "Casetas", "Viene de", "Estatus en Serv. Grales.", ""].map((t) => <th key={t} style={th}>{t}</th>)}</tr></thead>
             <tbody>
               {porLlegar.map((it) => (
                 <tr key={it.clave}>
@@ -132,10 +133,10 @@ export default function Pliegos({ gastos, precarga, comisionados, reembolsos = [
                   <td style={td}>{it.destino || it.lugar || <span style={{ color: "var(--rojo)" }}>falta</span>}</td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>{it.importe == null ? <span style={{ color: "var(--rojo)" }}>falta</span> : money(it.importe)}{it.deducido && <div style={{ fontSize: 11, color: "var(--texto-suave)" }} title={it.deducido}>deducido</div>}</td>
                   <td style={td}>{Number(it.casetas) ? money(it.casetas) : "—"}</td><td style={td}>{it.fuentes}</td><td style={td}>{it.estatus_sg || "—"}</td>
-                  <td style={td}><button className="boton" style={chico} onClick={() => llego(it)}>Ya llegó</button></td>
+                  <td style={td}><button className="boton" style={chico} onClick={() => llego(it)}>Capturar</button></td>
                 </tr>
               ))}
-              {!porLlegar.length && <tr><td colSpan={9} style={td}>No hay folios por llegar. Sube el Control o el Informe de Servicios Generales.</td></tr>}
+              {!porLlegar.length && <tr><td colSpan={9} style={td}>No hay folios por capturar. Sube el Control o el Informe de Servicios Generales.</td></tr>}
             </tbody>
           </table>
         </div>
