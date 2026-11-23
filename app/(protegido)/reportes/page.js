@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { cargarTraslados, clasificar, scaceContraFacturas, CUENTAN, NOMBRE_CIUDAD } from "../../../lib/traslados";
+import { agruparComprobantes, cruzar } from "../../../lib/nap";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date();
@@ -166,6 +167,7 @@ export default function ReportesPage() {
     { key: "r3", grupo: "Facturas", label: "Servicios de mayor impacto", desc: "Ranking de conceptos por importe y cantidad (facturas con desglose).", filtros: ["contrato", "capitulo", "fechas"] },
     { key: "r3b", grupo: "Facturas", label: "Consumo por conceptos (elige del contrato)", desc: "Elige contrato → marca los conceptos que quieras → te dice en qué facturas salen y cuánto. Sin contrato, puedes buscar por texto. Requiere desglose capturado.", filtros: ["proveedor", "contrato", "fechas"] },
     { key: "r9", grupo: "Facturas", label: "Compra Emergente sin CR", desc: "Facturas de Compra Emergente que aún NO tienen contra-recibo (CR), agrupadas por cuenta: cuántas son y cuánto importe. Son las que todavía no reflejan gasto.", filtros: ["proveedor", "capitulo", "fechas", "detalleCE"] },
+    { key: "r10", grupo: "Facturas", label: "Pagadas en FINAT sin factura en SIGAF", desc: "Comprobantes del 1043 que FINAT marca PAGADOS (del HGZ 2, en cuentas que se llevan factura por factura) y que SIGAF no tiene capturados. Sale de lo ya cargado en \"Cargar reportes\".", filtros: ["fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
     { key: "t1", grupo: "Traslados", label: "Gasto de traslados por mes", desc: "Viajes del SCACE por mes del viaje: folios, boletos, importe, cuánto es devengo, facturado y pagado, acompañantes, fondo fijo y posibles repetidos.", filtros: ["fechas"] },
@@ -404,6 +406,44 @@ export default function ReportesPage() {
             rows, totales: { cuenta: `TOTAL (${rows.length} cuentas)`, facturas: rows.reduce((s, r) => s + r.facturas, 0), importe: rows.reduce((s, r) => s + r.importe, 0) },
           });
         }
+      } else if (repKey === "r10") {
+        // Comprobantes del 1043 (lo que FINAT marca PAGADO) que SIGAF no tiene como factura.
+        let comps = [], d0 = 0;
+        for (;;) {
+          const { data, error } = await supabase.from("comprobantes_ooad")
+            .select("cbte, tipo, no_proveedor, proveedor, factura_txt, importe, estado_entrada, estado_pago, fecha_emision, fecha_prog_pago, pedido, recepcion, ui, cuenta, importe_cuenta")
+            .range(d0, d0 + 999);
+          if (error) throw error;
+          comps = comps.concat(data || []);
+          if (!data || data.length < 1000) break;
+          d0 += 1000;
+        }
+        if (!comps.length) { setMsg("No hay comprobantes del 1043 cargados. Súbelos en \"Cargar reportes\"."); setGenerando(false); return; }
+        const { data: bloques } = await supabase.from("cedula_bloques").select("cuenta_finat, modo");
+        const porFactura = new Set((bloques || []).filter((x) => x.modo === "facturas").map((x) => x.cuenta_finat));
+        const cr = cruzar(agruparComprobantes(comps), facturas);
+        const faltan = cr.faltanEnSigaf.map((x) => x.c).filter((c) => c.pagado
+          && !String(c.lineas[0]?.tipo || "").startsWith("JRNL")
+          && (!porFactura.size || c.cuentasHGZ2.some((cta) => porFactura.has(cta))));
+        const rows = faltan
+          .filter((c) => (!filtros.desde || (c.fecha_prog_pago || "") >= filtros.desde) && (!filtros.hasta || (c.fecha_prog_pago || "") <= filtros.hasta))
+          .map((c) => ({ cbte: c.cbte, proveedor: c.proveedor, factura_txt: c.factura_txt || "—",
+            cuenta: c.cuentasHGZ2.join(", ") || "—", fecha_pago: fISO(c.fecha_prog_pago),
+            importe: Number(c.impHGZ2 || c.importe) || 0 }))
+          .sort((a, b) => b.importe - a.importe);
+        setRes({
+          titulo: "Pagadas en FINAT sin factura en SIGAF",
+          resumen: `${rows.length} comprobante(s) pagado(s) que SIGAF no tiene`,
+          nota: rows.length === 0
+            ? "No hay comprobantes pagados sin factura (con lo cargado del 1043). Si falta, sube el 1043 más reciente en \"Cargar reportes\"."
+            : "Son del último 1043 cargado, del HGZ 2 y de cuentas que se llevan factura por factura. Las que SÍ están en SIGAF pero con folio/importe distinto aparecen en \"Cargar reportes → Por confirmar\", no aquí.",
+          columns: [
+            { key: "cbte", label: "Comprobante (CR)" }, { key: "proveedor", label: "Proveedor (FINAT)" },
+            { key: "factura_txt", label: "Factura" }, { key: "cuenta", label: "Cuenta HGZ 2" },
+            { key: "fecha_pago", label: "Fecha prog. pago" }, { key: "importe", label: "Importe HGZ 2", money: true, align: "right" },
+          ],
+          rows, totales: { proveedor: `TOTAL (${rows.length})`, importe: rows.reduce((s, r) => s + r.importe, 0) },
+        });
       }
     } catch (e) { setMsg("Error al generar: " + e.message); }
     setGenerando(false);
