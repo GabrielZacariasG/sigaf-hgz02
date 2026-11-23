@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { cargarTraslados, clasificar, scaceContraFacturas, CUENTAN, NOMBRE_CIUDAD } from "../../../lib/traslados";
 import { agruparComprobantes, cruzar } from "../../../lib/nap";
+import ConciliacionProveedor, { descargarConciliacionWord } from "../../../lib/ConciliacionProveedor";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date();
@@ -118,13 +119,14 @@ export default function ReportesPage() {
   const [buscaConcepto, setBuscaConcepto] = useState("");
   const [folioOpen, setFolioOpen] = useState(false); // dropdown de sugerencias de folio (R2)
   const [trasCache, setTrasCache] = useState(null); // folios del SCACE ya clasificados (informes de traslados)
+  const [docInst, setDocInst] = useState(null);     // documento institucional de conciliación (membrete)
 
   useEffect(() => {
     (async () => {
       let todas = [], desde = 0;
       for (;;) {
         const { data, error } = await supabase.from("facturas").select(
-          "id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, validacion_ok, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, created_at, contrato_id, proveedor_id, orden_compra, cr_contrarecibo, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
+          "id, folio_ingreso, folio_proveedor, importe_factura, estatus_general, estatus_firmas, estatus_pedido_recepcion, validacion_ok, periodo_inicio, periodo_fin, mes_asignado, anio_asignado, created_at, fecha_pago, contrato_id, proveedor_id, orden_compra, cr_contrarecibo, contratos ( numero_interno ), proveedores ( razon_social ), capitulos ( nombre )"
         ).eq("anulada", false).range(desde, desde + 999);
         if (error) { setMsg("No se pudieron cargar facturas: " + error.message); break; }
         todas = todas.concat(data || []);
@@ -170,6 +172,7 @@ export default function ReportesPage() {
     { key: "r10", grupo: "Facturas", label: "Pagadas en FINAT sin factura en SIGAF", desc: "Comprobantes del 1043 que FINAT marca PAGADOS (del HGZ 2, en cuentas que se llevan factura por factura) y que SIGAF no tiene capturados. Sale de lo ya cargado en \"Cargar reportes\".", filtros: ["fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
+    { key: "r11", grupo: "Contratos", label: "Conciliación con proveedor (estado de cuenta)", desc: "Elige un proveedor → te arroja TODAS sus facturas (de todos sus contratos), factura por factura con importe, pagado, por pagar, CR y fecha de pago, y los totales. Lista para entregar y conciliar.", filtros: ["proveedor", "capitulo", "fechas"] },
     { key: "t1", grupo: "Traslados", label: "Gasto de traslados por mes", desc: "Viajes del SCACE por mes del viaje: folios, boletos, importe, cuánto es devengo, facturado y pagado, acompañantes, fondo fijo y posibles repetidos.", filtros: ["fechas"] },
     { key: "t2", grupo: "Traslados", label: "Traslados por destino", desc: "A qué ciudad y hospital van los pacientes: folios, boletos, importe y su peso en el total.", filtros: ["fechas"] },
     { key: "t3", grupo: "Traslados", label: "Acompañantes", desc: "Viajes con acompañante por mes y ciudad, y cuánto cuestan los boletos de acompañante.", filtros: ["fechas"] },
@@ -444,6 +447,38 @@ export default function ReportesPage() {
           ],
           rows, totales: { proveedor: `TOTAL (${rows.length})`, importe: rows.reduce((s, r) => s + r.importe, 0) },
         });
+      } else if (repKey === "r11") {
+        // Estado de cuenta por proveedor: todas sus facturas, factura por factura, para conciliar.
+        if (!filtros.proveedor) { setMsg("Elige un proveedor para su estado de cuenta."); setGenerando(false); return; }
+        const suyas = facturas.filter((f) => f.prov === filtros.proveedor
+          && (!filtros.capitulo || f.capNom === filtros.capitulo)
+          && (!filtros.desde || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") >= filtros.desde)
+          && (!filtros.hasta || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") <= filtros.hasta));
+        const rows = suyas.map((f) => {
+          const imp = Number(f.importe_factura) || 0;
+          const pagada = f.estatus_general === "gasto_reflejado";
+          return {
+            contrato: f.contrato, folio_ingreso: f.folio_ingreso || "—", folio_proveedor: f.folio_proveedor || "—",
+            periodo: f.periodo_inicio ? `${fISO(f.periodo_inicio)}${f.periodo_fin ? " → " + fISO(f.periodo_fin) : ""}` : (f.mes_asignado ? `${f.mes_asignado} ${f.anio_asignado || ""}`.trim() : "—"),
+            cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—",
+            importe: imp, pagado: pagada ? imp : 0, porpagar: pagada ? 0 : imp,
+            situacion: pagada ? "Pagada" : (LABEL_GEN[f.estatus_general] || f.estatus_general),
+          };
+        }).sort((a, b) => (a.contrato === b.contrato ? a.periodo.localeCompare(b.periodo) : a.contrato.localeCompare(b.contrato)));
+        if (!rows.length) { setMsg("Ese proveedor no tiene facturas con esos filtros."); setGenerando(false); return; }
+        const fact = rows.reduce((s, r) => s + r.importe, 0), pag = rows.reduce((s, r) => s + r.pagado, 0), pend = rows.reduce((s, r) => s + r.porpagar, 0);
+        setRes({
+          titulo: `Conciliación con ${filtros.proveedor}`,
+          resumen: `${rows.length} factura(s) · Facturado ${money(fact)} · Pagado ${money(pag)} · Por pagar ${money(pend)}`,
+          nota: "Estado de cuenta desde SIGAF: cada factura con su importe, lo pagado (CR y fecha) y lo que queda por pagar. Entrégalo al proveedor para cotejar contra sus registros.",
+          columns: [
+            { key: "contrato", label: "Contrato" }, { key: "folio_ingreso", label: "Folio ingreso" }, { key: "folio_proveedor", label: "Folio prov." },
+            { key: "periodo", label: "Periodo" }, { key: "importe", label: "Importe", money: true, align: "right" },
+            { key: "pagado", label: "Pagado", money: true, align: "right" }, { key: "porpagar", label: "Por pagar", money: true, align: "right" },
+            { key: "cr", label: "CR" }, { key: "fpago", label: "Fecha pago" }, { key: "situacion", label: "Situación" },
+          ],
+          rows, totales: { contrato: `TOTAL (${rows.length})`, importe: fact, pagado: pag, porpagar: pend },
+        });
       }
     } catch (e) { setMsg("Error al generar: " + e.message); }
     setGenerando(false);
@@ -466,6 +501,18 @@ export default function ReportesPage() {
   function exportPDF() { window.print(); }
 
   if (cargando) return <p style={{ padding: 8 }}>Cargando datos para reportes…</p>;
+
+  if (docInst) return (
+    <div>
+      <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="boton secundario" onClick={() => setDocInst(null)}>← Volver</button>
+        <button className="boton secundario" onClick={() => window.print()}>⬇ Imprimir / Guardar PDF</button>
+        <button className="boton secundario" onClick={() => descargarConciliacionWord(docInst).catch((e) => setMsg("No se pudo generar el Word: " + e.message))}>⬇ Descargar Word</button>
+        {msg && <span style={{ fontSize: 12, color: "var(--rojo)" }}>{msg}</span>}
+      </div>
+      <ConciliacionProveedor datos={docInst} />
+    </div>
+  );
 
   const filtroInputs = {
     contrato: <div key="c"><label style={lbl}>Contrato</label><input list="rp-cont" style={inp} value={filtros.contrato} onChange={(e) => setF("contrato", e.target.value)} placeholder="Todos" /><datalist id="rp-cont">{listaContratos.map((c) => <option key={c} value={c} />)}</datalist></div>,
@@ -585,6 +632,7 @@ export default function ReportesPage() {
               <button className="boton" onClick={generar} disabled={generando}>{generando ? "Generando…" : "Generar reporte"}</button>
               {res && <button className="boton secundario" onClick={exportExcel}>⬇ Excel</button>}
               {res && <button className="boton secundario" onClick={exportPDF}>⬇ PDF</button>}
+              {res && repKey === "r11" && <button className="boton" onClick={() => setDocInst({ proveedor: filtros.proveedor, fecha: new Date().toLocaleDateString("en-CA"), rows: res.rows, totales: res.totales })}>📄 Documento institucional (PDF / Word)</button>}
               {msg && <span style={{ fontSize: 12, color: "var(--rojo)" }}>{msg}</span>}
             </div>
           </div>
