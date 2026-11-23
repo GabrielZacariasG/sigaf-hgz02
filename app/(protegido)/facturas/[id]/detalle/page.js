@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../../lib/supabaseClient";
 
 const TOLERANCIA = 1.0; // $1.00 MXN
+// Traslado de pacientes por contrato (autobuses): se capturan pacientes/acompañantes por renglón.
+const CUENTA_TRASLADOS = "52411011";
+const enteroONulo = (v) => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
 
 const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -17,6 +20,8 @@ export default function DetalleFacturaPage() {
   const [factura, setFactura] = useState(null);
   const [servicios, setServicios] = useState([]);
   const [cantidades, setCantidades] = useState({});
+  const [pacientes, setPacientes] = useState({});       // traslados: # de pacientes por renglón
+  const [acompanantes, setAcompanantes] = useState({}); // traslados: # de acompañantes por renglón
   const [subtotal, setSubtotal] = useState("");   // SUBTOTAL capturado (antes de IVA)
   const [iva, setIva] = useState("");              // MONTO de IVA tal como viene en la factura (editable)
   const [filtro, setFiltro] = useState("");
@@ -32,7 +37,7 @@ export default function DetalleFacturaPage() {
       const { data: fac, error: errFac } = await supabase
         .from("facturas")
         .select(
-          "id, folio_ingreso, folio_proveedor, contrato_id, importe_factura, tasa_iva, subtotal_calculado, iva_calculado, vigencia_alerta, contratos ( numero_interno, adquisicion_servicio )"
+          "id, folio_ingreso, folio_proveedor, contrato_id, importe_factura, tasa_iva, subtotal_calculado, iva_calculado, vigencia_alerta, contratos ( numero_interno, adquisicion_servicio, partidas ( cuenta_finat ) )"
         )
         .eq("id", facturaId)
         .single();
@@ -63,13 +68,17 @@ export default function DetalleFacturaPage() {
       // Precargar el desglose ya guardado (si lo hay) para poder verlo/editarlo.
       const { data: det } = await supabase
         .from("factura_detalle")
-        .select("contrato_servicio_id, cantidad")
+        .select("contrato_servicio_id, cantidad, num_pacientes, num_acompanantes")
         .eq("factura_id", facturaId);
       if (!activo) return;
       if (det && det.length > 0) {
-        const mapa = {};
-        for (const d of det) mapa[d.contrato_servicio_id] = String(d.cantidad);
-        setCantidades(mapa);
+        const mapa = {}, mp = {}, ma = {};
+        for (const d of det) {
+          mapa[d.contrato_servicio_id] = String(d.cantidad);
+          if (d.num_pacientes != null) mp[d.contrato_servicio_id] = String(d.num_pacientes);
+          if (d.num_acompanantes != null) ma[d.contrato_servicio_id] = String(d.num_acompanantes);
+        }
+        setCantidades(mapa); setPacientes(mp); setAcompanantes(ma);
       }
       setCargando(false);
     }
@@ -117,6 +126,8 @@ export default function DetalleFacturaPage() {
     return servicios.filter((s) => s.nombre_servicio.toLowerCase().includes(f));
   }, [servicios, filtro]);
 
+  const esTraslados = (factura?.contratos?.partidas?.cuenta_finat || "") === CUENTA_TRASLADOS;
+
   async function guardar() {
     setMensaje(""); setResultado(null); setGuardando(true);
     try {
@@ -131,7 +142,7 @@ export default function DetalleFacturaPage() {
       const detalleRows = servicios
         .map((s) => ({ sid: s.id, cant: parseFloat(cantidades[s.id]) }))
         .filter((r) => !Number.isNaN(r.cant) && r.cant > 0)
-        .map((r) => ({ factura_id: facturaId, contrato_servicio_id: r.sid, cantidad: r.cant }));
+        .map((r) => ({ factura_id: facturaId, contrato_servicio_id: r.sid, cantidad: r.cant, ...(esTraslados ? { num_pacientes: enteroONulo(pacientes[r.sid]), num_acompanantes: enteroONulo(acompanantes[r.sid]) } : {}) }));
       await supabase.from("factura_detalle").delete().eq("factura_id", facturaId);
       if (detalleRows.length > 0) {
         const { error: eDet } = await supabase.from("factura_detalle").insert(detalleRows);
@@ -320,6 +331,8 @@ export default function DetalleFacturaPage() {
                   <th style={th}>Servicio</th>
                   <th style={{ ...th, textAlign: "right" }}>Precio</th>
                   <th style={{ ...th, textAlign: "right", width: 100 }}>Cantidad</th>
+                  {esTraslados && <th style={{ ...th, textAlign: "right", width: 90 }}>Pacientes</th>}
+                  {esTraslados && <th style={{ ...th, textAlign: "right", width: 100 }}>Acompañantes</th>}
                   <th style={{ ...th, textAlign: "right" }}>Importe</th>
                 </tr></thead>
                 <tbody>
@@ -335,6 +348,16 @@ export default function DetalleFacturaPage() {
                             onChange={(e) => setCantidades((p) => ({ ...p, [s.id]: e.target.value }))}
                             style={{ width: 80, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
                         </td>
+                        {esTraslados && <td style={{ ...td, textAlign: "right" }}>
+                          <input type="number" min="0" step="1" value={pacientes[s.id] ?? ""}
+                            onChange={(e) => setPacientes((p) => ({ ...p, [s.id]: e.target.value }))}
+                            style={{ width: 70, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
+                        </td>}
+                        {esTraslados && <td style={{ ...td, textAlign: "right" }}>
+                          <input type="number" min="0" step="1" value={acompanantes[s.id] ?? ""}
+                            onChange={(e) => setAcompanantes((p) => ({ ...p, [s.id]: e.target.value }))}
+                            style={{ width: 70, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
+                        </td>}
                         <td style={{ ...td, textAlign: "right" }}>{money(imp)}</td>
                       </tr>
                     );

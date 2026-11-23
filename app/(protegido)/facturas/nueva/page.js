@@ -18,7 +18,19 @@ const TOLERANCIA = 1.0; // $1.00 MXN
 const UMA_DIARIA = 117.31;
 const LIMITE_UMAS_CE = 300;
 const TOPE_EMERGENTE = Math.round(UMA_DIARIA * LIMITE_UMAS_CE * 100) / 100; // $35,193.00
+
+// Corte de cierre: lo que se CAPTURE a partir de esta fecha se registra como
+// PASIVO del ejercicio siguiente (no cuenta al presupuesto del año en curso).
+// La regla real vive en la BD (migración 070_corte_pasivo_2027.sql); esto es
+// solo el aviso al capturista. Mantén ambos valores en sincronía cada año.
+const CORTE_PASIVO = "2026-12-09";
+const EJERCICIO_PASIVO = 2027;
+const corteActivo = () => new Date() >= new Date(CORTE_PASIVO + "T00:00:00");
+const fechaCorteTxt = () => new Date(CORTE_PASIVO + "T00:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+// Traslado de pacientes por contrato (autobuses): aquí se captura, por renglón, cuántos pacientes y acompañantes.
+const CUENTA_TRASLADOS = "52411011";
+const enteroONulo = (v) => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
 
 // Prefijo de folio de ingreso por capítulo. Debe empatar con los usados en la
 // migración (HGZ2-INT-*, HGZ2-AM-*, HGZ2-SS-*, HGZ2-CB-*).
@@ -68,6 +80,8 @@ export default function NuevaFacturaPage() {
   const [servicios, setServicios] = useState([]);
   const [cargandoServ, setCargandoServ] = useState(false);
   const [cantidades, setCantidades] = useState({});
+  const [pacientes, setPacientes] = useState({});       // traslados: # de pacientes por renglón
+  const [acompanantes, setAcompanantes] = useState({}); // traslados: # de acompañantes por renglón
   const [filtro, setFiltro] = useState("");
   const [subtotal, setSubtotal] = useState("");     // SUBTOTAL antes de IVA
   const [iva, setIva] = useState("");               // MONTO de IVA
@@ -128,6 +142,8 @@ export default function NuevaFacturaPage() {
         if (d.subtotal) setSubtotal(d.subtotal);
         if (d.iva) setIva(d.iva);
         if (d.cantidades) setCantidades(d.cantidades);
+        if (d.pacientes) setPacientes(d.pacientes);
+        if (d.acompanantes) setAcompanantes(d.acompanantes);
         if (d.paso === 2) setPaso(2);
         setBorradorAviso(true);
       }
@@ -168,16 +184,21 @@ export default function NuevaFacturaPage() {
       if (vacio) { localStorage.removeItem(DRAFT_KEY); return; }
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin,
-        importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, paso,
+        importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, pacientes, acompanantes, paso,
       }));
     } catch { /* localStorage no disponible */ }
-  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, paso, exito]);
+  }, [modo, proveedorId, provText, contratoId, folioProveedor, fechaFactura, periodoInicio, periodoFin, importe, ordenCompra, clave, claveInfo, subtotal, iva, cantidades, pacientes, acompanantes, paso, exito]);
 
   const contratoSel = useMemo(() => contratos.find((c) => c.id === contratoId) || null, [contratos, contratoId]);
   const capituloSel = contratoSel?.partidas?.capitulos || null;
+  // Aviso de corte de cierre: aplica a captura de facturas, NO a subrogados.
+  const esSubrogadoCap = /subrog/i.test(capituloSel?.nombre || "");
+  const aplicaCortePasivo = corteActivo() && !esSubrogadoCap;
   const cuentaSel = contratoSel?.partidas?.cuenta_finat || contratoSel?.partidas?.cuenta_prei || "";
   // Centro de costos (codificación): en Compra Emergente lo trae la clave; en el resto, la cuenta del contrato.
   const ccSel = esOC ? (claveInfo?.centro_costo || "") : (contratoSel?.partidas?.centro_costo || "");
+  // Traslado de pacientes por contrato (autobuses): habilita capturar pacientes/acompañantes por renglón.
+  const esTraslados = (contratoSel?.partidas?.cuenta_finat || "") === CUENTA_TRASLADOS;
   // Contrato de Subrogados que NO genera folios SMS (convenio/intercambio, p. ej. ISSEA): no aplica el candado de folios.
   const sinFoliosSub = !!contratoSel?.sin_folios_subrogacion;
   const importeNum = parseFloat(importe) || 0;
@@ -444,7 +465,7 @@ export default function NuevaFacturaPage() {
           centro_costo: ccSel || null,
           estatus_general: "capturada",
           created_by: createdBy,
-        }, prefijoDe(capituloSel?.nombre), anio);
+        }, prefijoDe(capituloSel?.nombre), anio, "id, folio_ingreso, es_pasivo, anio_asignado");
 
       if (error) { setMensaje("No se pudo guardar la factura: " + error.message); setCargando(false); return; }
 
@@ -452,7 +473,7 @@ export default function NuevaFacturaPage() {
       const detalleRows = servicios
         .map((s) => ({ sid: s.id, cant: parseFloat(cantidades[s.id]) }))
         .filter((r) => !Number.isNaN(r.cant) && r.cant > 0)
-        .map((r) => ({ factura_id: nueva.id, contrato_servicio_id: r.sid, cantidad: r.cant }));
+        .map((r) => ({ factura_id: nueva.id, contrato_servicio_id: r.sid, cantidad: r.cant, ...(esTraslados ? { num_pacientes: enteroONulo(pacientes[r.sid]), num_acompanantes: enteroONulo(acompanantes[r.sid]) } : {}) }));
       let avisoDetalle = "";
       if (detalleRows.length > 0) {
         const { error: eDet } = await supabase.from("factura_detalle").insert(detalleRows);
@@ -475,7 +496,7 @@ export default function NuevaFacturaPage() {
 
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       if (avisoDetalle) setMensaje("Factura guardada" + avisoDetalle);
-      setExito({ id: nueva.id, folio: nueva.folio_ingreso, validacion_ok: ok });
+      setExito({ id: nueva.id, folio: nueva.folio_ingreso, validacion_ok: ok, es_pasivo: nueva.es_pasivo, anio_asignado: nueva.anio_asignado });
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err2) {
       setMensaje("Error al generar el folio o guardar: " + err2.message);
@@ -488,7 +509,7 @@ export default function NuevaFacturaPage() {
     setExito(null); setPaso(1);
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setFechaFactura(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
-    setServicios([]); setCantidades({}); setFiltro(""); setSubtotal(""); setIva("");
+    setServicios([]); setCantidades({}); setPacientes({}); setAcompanantes({}); setFiltro(""); setSubtotal(""); setIva("");
     setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -513,6 +534,11 @@ export default function NuevaFacturaPage() {
           <p style={{ fontSize: 14, margin: "10px 0 4px" }}>Se ha asignado el folio de ingreso:</p>
           <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 0.5 }}>{exito.folio}</div>
         </div>
+        {exito.es_pasivo && (
+          <div style={{ marginTop: 12, background: "#fff7ed", border: "1px solid var(--ambar)", color: "#92400e", borderRadius: 10, padding: "12px 14px", fontSize: 13.5, textAlign: "center" }}>
+            🔒 Registrada como <strong>PASIVO del ejercicio {exito.anio_asignado}</strong> por el corte de cierre del {fechaCorteTxt()}. No cuenta al presupuesto del año en curso; conserva el periodo real del servicio.
+          </div>
+        )}
         <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "center", flexWrap: "wrap" }}>
           <button className="boton" onClick={() => router.push(`/facturas/${exito.id}`)}>Ver factura</button>
           <button className="boton secundario" onClick={capturarOtra}>Capturar otra</button>
@@ -721,6 +747,12 @@ export default function NuevaFacturaPage() {
           <input type="number" step="0.01" min="0" value={importe} onChange={(e) => setImporte(e.target.value)} />
           {cajaSemaforo}
 
+          {aplicaCortePasivo && (
+            <div style={{ marginTop: 12, fontSize: 12.5, color: "#92400e", background: "#fff7ed", border: "1px solid var(--ambar)", borderRadius: 8, padding: "9px 11px" }}>
+              ⚠️ <strong>Corte de cierre.</strong> A partir del {fechaCorteTxt()}, toda factura que captures se registra como <strong>PASIVO del ejercicio {EJERCICIO_PASIVO}</strong> (no cuenta al presupuesto del año en curso). El servicio conserva su periodo real.
+            </div>
+          )}
+
           <div style={{ height: 22 }} />
           <button type="button" onClick={continuar} disabled={cargandoServ} className="boton" style={{ width: "100%" }}>
             {cargandoServ ? "Cargando…" : "Continuar →"}
@@ -745,6 +777,11 @@ export default function NuevaFacturaPage() {
               <span style={{ fontSize: 12, color: "var(--texto-suave)" }}>(con IVA)</span>
             </div>
           </div>
+          {aplicaCortePasivo && (
+            <div style={{ ...card, background: "#fff7ed", border: "1px solid var(--ambar)", color: "#92400e", fontSize: 13.5 }}>
+              ⚠️ <strong>Corte de cierre ({fechaCorteTxt()}).</strong> Al guardar, esta factura quedará como <strong>PASIVO del ejercicio {EJERCICIO_PASIVO}</strong> — no cuenta al presupuesto del año en curso. El periodo real del servicio se conserva.
+            </div>
+          )}
           {cajaSemaforo}
           {foliosPend.length > 0 && <SelectorFolios folios={foliosPend} seleccion={selFolios} onCambio={setSelFolios} importeFactura={importeNum} />}
 
@@ -850,6 +887,8 @@ export default function NuevaFacturaPage() {
                       <th style={th}>Servicio</th>
                       <th style={{ ...th, textAlign: "right" }}>Precio</th>
                       <th style={{ ...th, textAlign: "right", width: 100 }}>Cantidad</th>
+                      {esTraslados && <th style={{ ...th, textAlign: "right", width: 90 }}>Pacientes</th>}
+                      {esTraslados && <th style={{ ...th, textAlign: "right", width: 100 }}>Acompañantes</th>}
                       <th style={{ ...th, textAlign: "right" }}>Importe</th>
                     </tr></thead>
                     <tbody>
@@ -865,6 +904,16 @@ export default function NuevaFacturaPage() {
                                 onChange={(e) => setCantidades((p) => ({ ...p, [s.id]: e.target.value }))}
                                 style={{ width: 80, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
                             </td>
+                            {esTraslados && <td style={{ ...td, textAlign: "right" }}>
+                              <input type="number" min="0" step="1" value={pacientes[s.id] ?? ""}
+                                onChange={(e) => setPacientes((p) => ({ ...p, [s.id]: e.target.value }))}
+                                style={{ width: 70, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
+                            </td>}
+                            {esTraslados && <td style={{ ...td, textAlign: "right" }}>
+                              <input type="number" min="0" step="1" value={acompanantes[s.id] ?? ""}
+                                onChange={(e) => setAcompanantes((p) => ({ ...p, [s.id]: e.target.value }))}
+                                style={{ width: 70, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--borde)", textAlign: "right" }} />
+                            </td>}
                             <td style={{ ...td, textAlign: "right" }}>{money(imp)}</td>
                           </tr>
                         );

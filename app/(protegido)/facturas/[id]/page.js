@@ -196,7 +196,7 @@ export default function FacturaEstatusPage() {
       ).eq("id", facturaId).single(),
       supabase.from("factura_estatus_historial").select("circuito, estatus, fecha, usuarios ( nombre )").eq("factura_id", facturaId).order("fecha", { ascending: true }),
       supabase.from("alertas_config").select("circuito, estatus, dias_umbral"),
-      supabase.from("factura_detalle").select("cantidad, contrato_servicios ( nombre_servicio, precio_unitario )").eq("factura_id", facturaId),
+      supabase.from("factura_detalle").select("cantidad, num_pacientes, num_acompanantes, contrato_servicios ( nombre_servicio, precio_unitario )").eq("factura_id", facturaId),
       supabase.from("oficios").select("tipo, folio, created_at, motivo").contains("factura_ids", [facturaId]).order("created_at", { ascending: true }),
     ]);
     setOficiosFac((rOfi && rOfi.data) || []);
@@ -219,7 +219,7 @@ export default function FacturaEstatusPage() {
     setDetalle((rDet.data || []).map((d) => {
       const precio = Number(d.contrato_servicios?.precio_unitario) || 0;
       const cant = Number(d.cantidad) || 0;
-      return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant, precio, importe: cant * precio };
+      return { nombre: d.contrato_servicios?.nombre_servicio || "—", cant, precio, importe: cant * precio, pacientes: d.num_pacientes, acompanantes: d.num_acompanantes };
     }));
     // Cruce de la clave (compra emergente): descripción + cuenta desde cb_claves.
     const clave = String(rFac.data.clave_cbi ?? "").trim();
@@ -413,6 +413,8 @@ export default function FacturaEstatusPage() {
   const cuentaFactura = factura.partidas?.cuenta_finat || factura.partidas?.cuenta_prei;
   // Codificación: centro de costos de la factura (o, si no se guardó, el de la cuenta).
   const ccFactura = String(factura.centro_costo || factura.partidas?.centro_costo || "").trim();
+  // Traslado de pacientes: hay captura de pacientes/acompañantes en algún renglón.
+  const hayTraslado = detalle.some((d) => d.pacientes != null || d.acompanantes != null);
   const generaPR = generaPedidoRecepcion(factura.capitulos?.nombre, cuentaFactura);
   // Candado cruzado: solo se puede AVANZAR general a "enviada_ooad" si firmas (y pedido en Integrales) están completos.
   const idxGen = FLUJO_GENERAL.indexOf(factura.estatus_general);
@@ -571,6 +573,8 @@ export default function FacturaEstatusPage() {
               <thead><tr>
                 <th style={{ textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Concepto</th>
                 <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Cantidad</th>
+                {hayTraslado && <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Pacientes</th>}
+                {hayTraslado && <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Acompañantes</th>}
                 <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Precio</th>
                 <th style={{ textAlign: "right", fontSize: 12, color: "var(--texto-suave)", padding: "6px 8px", borderBottom: "1px solid var(--borde)" }}>Importe</th>
               </tr></thead>
@@ -579,12 +583,17 @@ export default function FacturaEstatusPage() {
                   <tr key={i}>
                     <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5 }}>{d.nombre}</td>
                     <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{d.cant}</td>
+                    {hayTraslado && <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{d.pacientes ?? "—"}</td>}
+                    {hayTraslado && <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{d.acompanantes ?? "—"}</td>}
                     <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(d.precio)}</td>
                     <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--borde)", fontSize: 13.5, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(d.importe)}</td>
                   </tr>
                 ))}
                 <tr>
-                  <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700 }} colSpan={3}>Total del desglose</td>
+                  <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700 }} colSpan={hayTraslado ? 2 : 3}>Total del desglose</td>
+                  {hayTraslado && <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{detalle.reduce((s, d) => s + (Number(d.pacientes) || 0), 0)}</td>}
+                  {hayTraslado && <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{detalle.reduce((s, d) => s + (Number(d.acompanantes) || 0), 0)}</td>}
+                  {hayTraslado && <td style={{ padding: "8px", borderTop: "2px solid #333" }}></td>}
                   <td style={{ padding: "8px", borderTop: "2px solid #333", fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(detalle.reduce((s, d) => s + d.importe, 0))}</td>
                 </tr>
               </tbody>
