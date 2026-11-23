@@ -459,40 +459,39 @@ export default function ReportesPage() {
           rows, totales: { proveedor: `TOTAL (${rows.length})`, importe: rows.reduce((s, r) => s + r.importe, 0) },
         });
       } else if (repKey === "r11") {
-        // Acto conciliatorio por contrato: facturación pagada / pendiente del contrato elegido + acta institucional.
-        let c = filtros.contrato ? (contratos.find((x) => x.numero_interno === filtros.contrato) || contratos.find((x) => x.numero_alterno === filtros.contrato)) : null;
-        if (!c && filtros.proveedor) {
-          const suyos = contratos.filter((x) => x.prov === filtros.proveedor);
-          if (suyos.length === 1) c = suyos[0];
-          else if (suyos.length > 1) { setMsg(`Ese proveedor tiene ${suyos.length} contratos: elige uno en "Contrato" (${suyos.map((x) => x.numero_interno).join(", ")}).`); setGenerando(false); return; }
+        // Acto conciliatorio: un contrato, o TODOS los del proveedor (una sola acta).
+        let ctos = [];
+        if (filtros.contrato) {
+          const c = contratos.find((x) => x.numero_interno === filtros.contrato) || contratos.find((x) => x.numero_alterno === filtros.contrato);
+          if (c) ctos = [c];
+        } else if (filtros.proveedor) {
+          ctos = contratos.filter((x) => x.prov === filtros.proveedor);
         }
-        if (!filtros.contrato && !filtros.proveedor) { setMsg("Elige un proveedor o un contrato a conciliar."); setGenerando(false); return; }
-        if (!c) { setMsg("No encontré ese contrato."); setGenerando(false); return; }
-        const suyas = facturas.filter((f) => f.contrato_id === c.id);
-        if (!suyas.length) { setMsg("Ese contrato no tiene facturas capturadas."); setGenerando(false); return; }
+        if (!ctos.length) { setMsg(filtros.proveedor || filtros.contrato ? "No encontré contratos con esos filtros." : "Elige un proveedor o un contrato a conciliar."); setGenerando(false); return; }
+        const idset = new Set(ctos.map((c) => c.id));
+        const suyas = facturas.filter((f) => idset.has(f.contrato_id));
+        if (!suyas.length) { setMsg("Esos contratos no tienen facturas capturadas."); setGenerando(false); return; }
+        const numDe = (c) => c.numero_alterno || c.numero_interno;
+        const ctoDe = (f) => ctos.find((x) => x.id === f.contrato_id);
         const porFecha = (a, b) => String(a.periodo_inicio || a.created_at || "").localeCompare(String(b.periodo_inicio || b.created_at || ""));
-        const aFila = (f) => ({ folio: f.folio_proveedor || f.folio_ingreso || "—", fecha: f.periodo_inicio || f.created_at, importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "", situacion: situacionDe(f) });
+        const sum = (arr) => arr.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+        const aFila = (f) => { const c = ctoDe(f); return { contrato: c ? numDe(c) : "—", folio: f.folio_proveedor || f.folio_ingreso || "—", fecha: f.periodo_inicio || f.created_at, importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "", situacion: situacionDe(f) }; };
         const pagadasF = suyas.filter((f) => f.estatus_general === "gasto_reflejado").sort(porFecha);
         const pendientesF = suyas.filter((f) => f.estatus_general !== "gasto_reflejado").sort(porFecha);
-        const total = suyas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
-        const pagado = pagadasF.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
-        const adeudo = Math.round((total - pagado) * 100) / 100;
-        const contratoNum = c.numero_alterno || c.numero_interno;
-        const rows = suyas.slice().sort(porFecha).map((f) => ({
-          folio: f.folio_proveedor || "—", fecha: f.periodo_inicio ? fISO(f.periodo_inicio) : "—", importe: Number(f.importe_factura) || 0,
-          cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—", situacion: situacionDe(f),
-        }));
+        const total = sum(suyas), pagado = sum(pagadasF), adeudo = Math.round((total - pagado) * 100) / 100;
+        const contratosDatos = ctos.map((c) => { const fs = suyas.filter((f) => f.contrato_id === c.id); const t = sum(fs); const p = sum(fs.filter((f) => f.estatus_general === "gasto_reflejado")); return { num: numDe(c), sai: c.numero_interno || "", administrador: c.administrador_contrato || "", total: t, pagado: p, adeudo: Math.round((t - p) * 100) / 100 }; });
+        const rows = suyas.slice().sort(porFecha).map((f) => { const c = ctoDe(f); return { contrato: c ? numDe(c) : "—", folio: f.folio_proveedor || "—", fecha: f.periodo_inicio ? fISO(f.periodo_inicio) : "—", importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—", situacion: situacionDe(f) }; });
+        const prov = ctos[0].prov;
         setRes({
-          titulo: `Acto conciliatorio · Contrato ${contratoNum}${c.numero_alterno && c.numero_interno !== c.numero_alterno ? ` (SAI ${c.numero_interno})` : ""}`,
-          resumen: `${c.prov} · Total ${money(total)} · Pagado ${money(pagado)} · Adeudo ${money(adeudo)}`,
+          titulo: ctos.length === 1 ? `Acto conciliatorio · Contrato ${contratosDatos[0].num}` : `Acto conciliatorio · ${prov} (${ctos.length} contratos)`,
+          resumen: `${prov} · Total ${money(total)} · Pagado ${money(pagado)} · Adeudo ${money(adeudo)}`,
           nota: "Revisa los datos y genera el documento institucional (con membrete y firmas). El representante legal y las horas se capturan al generar el acta.",
           columns: [
-            { key: "folio", label: "Folio factura" }, { key: "fecha", label: "Fecha" }, { key: "importe", label: "Importe", money: true, align: "right" },
+            { key: "contrato", label: "Contrato" }, { key: "folio", label: "Folio factura" }, { key: "fecha", label: "Fecha" }, { key: "importe", label: "Importe", money: true, align: "right" },
             { key: "cr", label: "Contra recibo" }, { key: "fpago", label: "Fecha pago" }, { key: "situacion", label: "Situación" },
           ],
-          rows, totales: { folio: `TOTAL (${rows.length})`, importe: total },
-          acta: { contratoNum, sai: c.numero_interno || "", proveedor: c.prov, administrador: c.administrador_contrato || "", total, pagado, adeudo,
-            pagadas: pagadasF.map(aFila), pendientes: pendientesF.map(aFila) },
+          rows, totales: { contrato: `TOTAL (${rows.length})`, importe: total },
+          acta: { proveedor: prov, contratos: contratosDatos, total, pagado, adeudo, pagadas: pagadasF.map(aFila), pendientes: pendientesF.map(aFila) },
         });
       }
     } catch (e) { setMsg("Error al generar: " + e.message); }
