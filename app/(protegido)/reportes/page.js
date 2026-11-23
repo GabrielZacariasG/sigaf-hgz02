@@ -97,6 +97,17 @@ function etapaDe(f) {
   return "En Finanzas";
 }
 const ETAPAS = ["En Finanzas", "En Servicio", "En Adm. de Contrato", "En OOAD", "Pagada", "Devuelta"];
+// Situación descriptiva (dónde va realmente la factura), para la conciliación.
+function situacionDe(f) {
+  if (f.estatus_general === "gasto_reflejado") return "Pagada";
+  if (f.estatus_general === "devuelta_proveedor") return "Devuelta al proveedor";
+  if (f.estatus_general === "enviada_ooad" || f.estatus_general === "en_tramite_ooad") return "En trámite de pago (OOAD)";
+  if (f.estatus_firmas === "autorizada_admin_contrato") return "Autorizada por el administrador del contrato";
+  if (f.estatus_firmas === "envio_firmas_admin_contrato") return "En firma del administrador del contrato";
+  if (f.estatus_firmas === "autorizada_servicio") return "Validada por el servicio";
+  if (f.estatus_firmas === "envio_firmas_servicio") return "En validación del servicio";
+  return "En revisión en Finanzas";
+}
 function estadoVigencia(fin) {
   const d = diasHasta(fin);
   if (d == null) return "Sin fecha";
@@ -460,20 +471,19 @@ export default function ReportesPage() {
         const suyas = facturas.filter((f) => f.contrato_id === c.id);
         if (!suyas.length) { setMsg("Ese contrato no tiene facturas capturadas."); setGenerando(false); return; }
         const porFecha = (a, b) => String(a.periodo_inicio || a.created_at || "").localeCompare(String(b.periodo_inicio || b.created_at || ""));
-        const aFila = (f) => ({ folio: f.folio_proveedor || f.folio_ingreso || "—", fecha: f.periodo_inicio || f.created_at, importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "" });
+        const aFila = (f) => ({ folio: f.folio_proveedor || f.folio_ingreso || "—", fecha: f.periodo_inicio || f.created_at, importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "", situacion: situacionDe(f) });
         const pagadasF = suyas.filter((f) => f.estatus_general === "gasto_reflejado").sort(porFecha);
         const pendientesF = suyas.filter((f) => f.estatus_general !== "gasto_reflejado").sort(porFecha);
         const total = suyas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
         const pagado = pagadasF.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
         const adeudo = Math.round((total - pagado) * 100) / 100;
         const contratoNum = c.numero_alterno || c.numero_interno;
-        const rows = suyas.slice().sort(porFecha).map((f) => {
-          const pagada = f.estatus_general === "gasto_reflejado";
-          return { folio: f.folio_proveedor || "—", fecha: f.periodo_inicio ? fISO(f.periodo_inicio) : "—", importe: Number(f.importe_factura) || 0,
-            cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—", situacion: pagada ? "Pagada" : (LABEL_GEN[f.estatus_general] || f.estatus_general) };
-        });
+        const rows = suyas.slice().sort(porFecha).map((f) => ({
+          folio: f.folio_proveedor || "—", fecha: f.periodo_inicio ? fISO(f.periodo_inicio) : "—", importe: Number(f.importe_factura) || 0,
+          cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—", situacion: situacionDe(f),
+        }));
         setRes({
-          titulo: `Acto conciliatorio · Contrato ${contratoNum}`,
+          titulo: `Acto conciliatorio · Contrato ${contratoNum}${c.numero_alterno && c.numero_interno !== c.numero_alterno ? ` (SAI ${c.numero_interno})` : ""}`,
           resumen: `${c.prov} · Total ${money(total)} · Pagado ${money(pagado)} · Adeudo ${money(adeudo)}`,
           nota: "Revisa los datos y genera el documento institucional (con membrete y firmas). El representante legal y las horas se capturan al generar el acta.",
           columns: [
@@ -481,7 +491,7 @@ export default function ReportesPage() {
             { key: "cr", label: "Contra recibo" }, { key: "fpago", label: "Fecha pago" }, { key: "situacion", label: "Situación" },
           ],
           rows, totales: { folio: `TOTAL (${rows.length})`, importe: total },
-          acta: { contratoNum, proveedor: c.prov, administrador: c.administrador_contrato || "", total, pagado, adeudo,
+          acta: { contratoNum, sai: c.numero_interno || "", proveedor: c.prov, administrador: c.administrador_contrato || "", total, pagado, adeudo,
             pagadas: pagadasF.map(aFila), pendientes: pendientesF.map(aFila) },
         });
       }
