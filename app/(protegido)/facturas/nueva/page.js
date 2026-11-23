@@ -8,7 +8,9 @@ import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe, ID_NUEVA } from "../../../../lib/avisos";
 import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
 import SelectorFolios from "../../../../lib/SelectorFolios";
+import SelectorFoliosTraslado from "../../../../lib/SelectorFoliosTraslado";
 import { foliosDelContrato, ligarFolios, estatusFolio } from "../../../../lib/subrogadosCarga";
+import { foliosTrasladoDelContrato, ligarFoliosTraslado, estatusFolioTraslado } from "../../../../lib/trasladosCarga";
 
 const DRAFT_KEY = "sigaf_borrador_factura"; // borrador local para no perder la captura
 
@@ -223,6 +225,19 @@ export default function NuevaFacturaPage() {
     foliosDelContrato(contratoId).then((fs) => { if (vivo) setFoliosPend(fs.filter((f) => estatusFolio(f) === "devengo")); }).catch(() => {});
     return () => { vivo = false; };
   }, [contratoId]);
+  // Folios de traslado (autobuses) en devengo del contrato: se palomean los viajes que cobra esta factura.
+  const [foliosTras, setFoliosTras] = useState([]);
+  const [selTras, setSelTras] = useState(new Set());
+  useEffect(() => {
+    let vivo = true; setFoliosTras([]); setSelTras(new Set());
+    if (!contratoId || !esTraslados) return;
+    foliosTrasladoDelContrato(contratoId).then((fs) => { if (vivo) setFoliosTras(fs.filter((f) => estatusFolioTraslado(f) === "devengo")); }).catch(() => {});
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contratoId, esTraslados]);
+  // Solo los viajes que caen dentro del periodo de la factura (si ya se capturó el periodo).
+  const foliosTrasPeriodo = useMemo(() => foliosTras.filter((f) =>
+    (!periodoInicio || f.fecha_viaje >= periodoInicio) && (!periodoFin || f.fecha_viaje <= periodoFin)), [foliosTras, periodoInicio, periodoFin]);
 
   const semNueva = useMemo(() => (datosCto && importeNum > 0 ? semaforoDe(datosCto, { importe: importeNum, fecha: fechaFactura, cuenta: cuentaSel }) : null), [datosCto, importeNum, fechaFactura, cuentaSel]);
   const cajaSemaforo = semNueva
@@ -394,6 +409,12 @@ export default function NuevaFacturaPage() {
         : "Selecciona al menos un folio de subrogados que ampara esta factura antes de guardar (abajo, en «Folios de subrogados que cobra esta factura»).");
       setPaso(2); return;
     }
+    // 🔒 Candado de traslados (autobuses): si hay viajes del SCACE en devengo para el periodo, la factura debe
+    // amparar al menos uno. (Si no hay viajes cargados para ese periodo —p. ej. factura de otra unidad— no bloquea.)
+    if (esTraslados && foliosTrasPeriodo.length > 0 && selTras.size === 0) {
+      setMensaje("Selecciona al menos un folio de traslado (viaje del SCACE) que cobra esta factura antes de guardar (abajo, en «Folios de traslado que cobra esta factura»).");
+      setPaso(2); return;
+    }
     // Candado final anti-duplicados (por si algo cambió tras el paso 1).
     const dups = await buscarDuplicados();
     if (dups.folioDupFolio) { setFolioDup(dups.folioDupFolio); setMensaje(`El folio de proveedor "${folioProveedor.trim()}" ya fue capturado en la factura ${dups.folioDupFolio}. No se puede duplicar.`); setPaso(1); return; }
@@ -493,6 +514,11 @@ export default function NuevaFacturaPage() {
         try { await ligarFolios([...selFolios], nueva.id); }
         catch (eF) { avisoDetalle += ` (los folios no se pudieron ligar: ${eF.message}; lígalos desde el detalle)`; }
       }
+      // Ligar los folios de traslado (autobuses) palomeados a la factura nueva
+      if (selTras.size) {
+        try { await ligarFoliosTraslado([...selTras], nueva.id); }
+        catch (eF) { avisoDetalle += ` (los folios de traslado no se pudieron ligar: ${eF.message}; lígalos desde el detalle)`; }
+      }
 
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       if (avisoDetalle) setMensaje("Factura guardada" + avisoDetalle);
@@ -509,7 +535,7 @@ export default function NuevaFacturaPage() {
     setExito(null); setPaso(1);
     setProveedorId(""); setProvText(""); setProvOpen(false); setContratoId("");
     setFolioProveedor(""); setFechaFactura(""); setPeriodoInicio(""); setPeriodoFin(""); setImporte("");
-    setServicios([]); setCantidades({}); setPacientes({}); setAcompanantes({}); setFiltro(""); setSubtotal(""); setIva("");
+    setServicios([]); setCantidades({}); setPacientes({}); setAcompanantes({}); setFiltro(""); setSubtotal(""); setIva(""); setSelTras(new Set());
     setOrdenCompra(""); setClave(""); setClaveInfo(null); setClaveMsg(""); setOcDup(""); setFolioDup(""); setMensaje(""); setBorradorAviso(false);
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -784,6 +810,7 @@ export default function NuevaFacturaPage() {
           )}
           {cajaSemaforo}
           {foliosPend.length > 0 && <SelectorFolios folios={foliosPend} seleccion={selFolios} onCambio={setSelFolios} importeFactura={importeNum} />}
+          {esTraslados && foliosTrasPeriodo.length > 0 && <SelectorFoliosTraslado folios={foliosTrasPeriodo} seleccion={selTras} onCambio={setSelTras} importeFactura={importeNum} />}
 
           {/* Captura de subtotal + IVA + validación */}
           <div style={card}>

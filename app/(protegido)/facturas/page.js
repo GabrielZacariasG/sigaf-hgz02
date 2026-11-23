@@ -13,6 +13,7 @@ import {
 } from "../../../lib/estatus";
 import { leerTodo } from "../../../lib/paginar";
 import { liberarFoliosDeFactura } from "../../../lib/subrogadosCarga";
+import { liberarFoliosTrasladoDeFactura } from "../../../lib/trasladosCarga";
 import ResumenServicios from "./ResumenServicios";
 
 // Estatus generales desde los que una factura puede salir a pago con oficio EP.
@@ -526,9 +527,12 @@ export default function FacturasListaPage() {
           });
         }
         if (!okFilas.length) continue;
-        // Devolución al proveedor: liberar los folios de subrogados de esas facturas (vuelven a devengo).
+        // Devolución al proveedor: liberar los folios (subrogados y traslados) de esas facturas (vuelven a devengo).
         if (oficio.tipo === "devolucion") {
-          for (const f of okFilas) { try { await liberarFoliosDeFactura(f.id); } catch { /* no bloquea el oficio */ } }
+          for (const f of okFilas) {
+            try { await liberarFoliosDeFactura(f.id); } catch { /* no bloquea el oficio */ }
+            try { await liberarFoliosTrasladoDeFactura(f.id); } catch { /* no bloquea el oficio */ }
+          }
         }
         // 2) Folio atómico al guardar (reintenta si choca con otro emitido a la vez).
         try {

@@ -14,7 +14,9 @@ import { insertarFacturaConFolio } from "../../../../lib/folios";
 import { cargarContrato, semaforoDe } from "../../../../lib/avisos";
 import SemaforoDictamen from "../../../../lib/SemaforoDictamen";
 import SelectorFolios from "../../../../lib/SelectorFolios";
+import SelectorFoliosTraslado from "../../../../lib/SelectorFoliosTraslado";
 import { foliosDelContrato, ligarFolios, desligarFolios, estatusFolio, liberarFoliosDeFactura } from "../../../../lib/subrogadosCarga";
+import { foliosTrasladoDelContrato, ligarFoliosTraslado, desligarFoliosTraslado, estatusFolioTraslado, liberarFoliosTrasladoDeFactura } from "../../../../lib/trasladosCarga";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -188,6 +190,28 @@ export default function FacturaEstatusPage() {
     } catch (e) { setMensaje(e.message); }
     setGuardandoFol(false);
   };
+  // Folios de traslado (autobuses): los ligados a esta factura + los pendientes (devengo) del contrato
+  const [foliosT, setFoliosT] = useState({ lista: [], ligados: new Set() });
+  const [selFolT, setSelFolT] = useState(new Set());
+  const [guardandoFolT, setGuardandoFolT] = useState(false);
+  const cargarFoliosTras = async (fac) => {
+    if (!fac?.contrato_id) { setFoliosT({ lista: [], ligados: new Set() }); return; }
+    const fs = await foliosTrasladoDelContrato(fac.contrato_id);
+    const lista = fs.filter((f) => f.factura_id === fac.id || estatusFolioTraslado(f) === "devengo");
+    const ligados = new Set(lista.filter((f) => f.factura_id === fac.id).map((f) => f.folio));
+    setFoliosT({ lista, ligados }); setSelFolT(new Set(ligados));
+  };
+  const guardarFoliosTras = async () => {
+    setGuardandoFolT(true);
+    try {
+      const agregar = [...selFolT].filter((k) => !foliosT.ligados.has(k));
+      const quitar = [...foliosT.ligados].filter((k) => !selFolT.has(k));
+      await ligarFoliosTraslado(agregar, factura.id); await desligarFoliosTraslado(quitar);
+      setMensaje(`Folios de traslado guardados: ${agregar.length} ligados${quitar.length ? `, ${quitar.length} quitados` : ""}.`);
+      await cargarFoliosTras(factura);
+    } catch (e) { setMensaje(e.message); }
+    setGuardandoFolT(false);
+  };
 
   async function cargar() {
     const [rFac, rHist, rAlertas, rDet, rOfi] = await Promise.all([
@@ -213,6 +237,7 @@ export default function FacturaEstatusPage() {
       cargarContrato(rFac.data.contrato_id).then((d) => setSemDic(semaforoDe(d))).catch(() => setSemDic(null));
     else setSemDic(null);
     cargarFolios(rFac.data).catch(() => {});
+    cargarFoliosTras(rFac.data).catch(() => {});
     const m = {};
     (rAlertas.data || []).forEach((a) => (m[`${a.circuito}:${a.estatus}`] = a.dias_umbral));
     setAlertasMap(m);
@@ -362,6 +387,7 @@ export default function FacturaEstatusPage() {
 
       // Liberar sus folios de subrogados: vuelven a devengo para que la NUEVA factura los ampare.
       try { await liberarFoliosDeFactura(factura.id); } catch { /* no bloquea la re-factura */ }
+      try { await liberarFoliosTrasladoDeFactura(factura.id); } catch { /* no bloquea la re-factura */ }
 
       router.push(`/facturas/${nueva.id}/detalle`);
     } catch (err) { setMensaje("No se pudo crear la re-factura: " + err.message); setGuardando(null); }
@@ -374,6 +400,7 @@ export default function FacturaEstatusPage() {
     setEliminando(true); setMensaje("");
     // Liberar sus folios de subrogados antes de eliminar (vuelven a devengo).
     try { await liberarFoliosDeFactura(factura.id); } catch { /* no bloquea la eliminación */ }
+    try { await liberarFoliosTrasladoDeFactura(factura.id); } catch { /* no bloquea la eliminación */ }
     const { error } = await supabase.rpc("fn_eliminar_factura", { p_factura_id: factura.id });
     if (error) { setMensaje("No se pudo eliminar: " + error.message); setEliminando(false); return; }
     router.push("/facturas");
@@ -555,6 +582,18 @@ export default function FacturaEstatusPage() {
             titulo={`Folios de subrogados de esta factura (${folios.ligados.size} ligados)`} />
           {factura.estatus_general !== "gasto_reflejado" && (selFol.size !== folios.ligados.size || [...selFol].some((k) => !folios.ligados.has(k))) && (
             <button className="boton" onClick={guardarFolios} disabled={guardandoFol} style={{ marginBottom: 10 }}>{guardandoFol ? "Guardando…" : "Guardar folios"}</button>
+          )}
+        </div>
+      )}
+
+      {/* Folios de traslado (autobuses) que cobra esta factura. Al estar PAGADA quedan atrapados (solo lectura). */}
+      {foliosT.lista.length > 0 && !factura.anulada && (
+        <div>
+          <SelectorFoliosTraslado folios={foliosT.lista} seleccion={selFolT} onCambio={setSelFolT} importeFactura={factura.importe_factura}
+            bloqueado={factura.estatus_general === "gasto_reflejado"}
+            titulo={`Folios de traslado de esta factura (${foliosT.ligados.size} ligados)`} />
+          {factura.estatus_general !== "gasto_reflejado" && (selFolT.size !== foliosT.ligados.size || [...selFolT].some((k) => !foliosT.ligados.has(k))) && (
+            <button className="boton" onClick={guardarFoliosTras} disabled={guardandoFolT} style={{ marginBottom: 10 }}>{guardandoFolT ? "Guardando…" : "Guardar folios"}</button>
           )}
         </div>
       )}
