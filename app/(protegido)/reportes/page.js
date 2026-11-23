@@ -133,7 +133,7 @@ export default function ReportesPage() {
         if (!data || data.length < 1000) break;
         desde += 1000;
       }
-      const rC = await supabase.from("contratos").select("id, numero_interno, administrador_contrato, vigencia_inicio, vigencia_fin, monto_minimo, monto_maximo, proveedor_id, proveedores ( razon_social ), partidas ( cuenta_finat, capitulos ( nombre ) )").order("numero_interno");
+      const rC = await supabase.from("contratos").select("id, numero_interno, numero_alterno, administrador_contrato, vigencia_inicio, vigencia_fin, monto_minimo, monto_maximo, proveedor_id, proveedores ( razon_social ), partidas ( cuenta_finat, capitulos ( nombre ) )").order("numero_interno");
       setFacturas(todas.map((f) => ({
         ...f, prov: f.proveedores?.razon_social || "—", contrato: f.contratos?.numero_interno || "—",
         capNom: f.capitulos?.nombre || "—", etapa: etapaDe(f),
@@ -172,7 +172,7 @@ export default function ReportesPage() {
     { key: "r10", grupo: "Facturas", label: "Pagadas en FINAT sin factura en SIGAF", desc: "Comprobantes del 1043 que FINAT marca PAGADOS (del HGZ 2, en cuentas que se llevan factura por factura) y que SIGAF no tiene capturados. Sale de lo ya cargado en \"Cargar reportes\".", filtros: ["fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
-    { key: "r11", grupo: "Contratos", label: "Conciliación con proveedor (estado de cuenta)", desc: "Elige un proveedor → te arroja TODAS sus facturas (de todos sus contratos), factura por factura con importe, pagado, por pagar, CR y fecha de pago, y los totales. Lista para entregar y conciliar.", filtros: ["proveedor", "capitulo", "fechas"] },
+    { key: "r11", grupo: "Contratos", label: "Acto conciliatorio con proveedor", desc: "Elige el contrato → te arroja el acta de conciliación lista: importe total, pagado y adeudo, la facturación pagada (y la pendiente si la hay), y el documento institucional con membrete, asistentes y firmas, imprimible a PDF y descargable en Word.", filtros: ["proveedor", "contrato"] },
     { key: "t1", grupo: "Traslados", label: "Gasto de traslados por mes", desc: "Viajes del SCACE por mes del viaje: folios, boletos, importe, cuánto es devengo, facturado y pagado, acompañantes, fondo fijo y posibles repetidos.", filtros: ["fechas"] },
     { key: "t2", grupo: "Traslados", label: "Traslados por destino", desc: "A qué ciudad y hospital van los pacientes: folios, boletos, importe y su peso en el total.", filtros: ["fechas"] },
     { key: "t3", grupo: "Traslados", label: "Acompañantes", desc: "Viajes con acompañante por mes y ciudad, y cuánto cuestan los boletos de acompañante.", filtros: ["fechas"] },
@@ -448,36 +448,36 @@ export default function ReportesPage() {
           rows, totales: { proveedor: `TOTAL (${rows.length})`, importe: rows.reduce((s, r) => s + r.importe, 0) },
         });
       } else if (repKey === "r11") {
-        // Estado de cuenta por proveedor: todas sus facturas, factura por factura, para conciliar.
-        if (!filtros.proveedor) { setMsg("Elige un proveedor para su estado de cuenta."); setGenerando(false); return; }
-        const suyas = facturas.filter((f) => f.prov === filtros.proveedor
-          && (!filtros.capitulo || f.capNom === filtros.capitulo)
-          && (!filtros.desde || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") >= filtros.desde)
-          && (!filtros.hasta || (f.periodo_inicio || f.created_at?.slice(0, 10) || "") <= filtros.hasta));
-        const rows = suyas.map((f) => {
-          const imp = Number(f.importe_factura) || 0;
+        // Acto conciliatorio por contrato: facturación pagada / pendiente del contrato elegido + acta institucional.
+        if (!filtros.contrato) { setMsg("Elige el contrato a conciliar (puedes filtrar por proveedor para encontrarlo)."); setGenerando(false); return; }
+        const c = contratos.find((x) => x.numero_interno === filtros.contrato) || contratos.find((x) => x.numero_alterno === filtros.contrato);
+        if (!c) { setMsg("No encontré ese contrato."); setGenerando(false); return; }
+        const suyas = facturas.filter((f) => f.contrato_id === c.id);
+        if (!suyas.length) { setMsg("Ese contrato no tiene facturas capturadas."); setGenerando(false); return; }
+        const porFecha = (a, b) => String(a.periodo_inicio || a.created_at || "").localeCompare(String(b.periodo_inicio || b.created_at || ""));
+        const aFila = (f) => ({ folio: f.folio_proveedor || f.folio_ingreso || "—", fecha: f.periodo_inicio || f.created_at, importe: Number(f.importe_factura) || 0, cr: f.cr_contrarecibo || "" });
+        const pagadasF = suyas.filter((f) => f.estatus_general === "gasto_reflejado").sort(porFecha);
+        const pendientesF = suyas.filter((f) => f.estatus_general !== "gasto_reflejado").sort(porFecha);
+        const total = suyas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+        const pagado = pagadasF.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
+        const adeudo = Math.round((total - pagado) * 100) / 100;
+        const contratoNum = c.numero_alterno || c.numero_interno;
+        const rows = suyas.slice().sort(porFecha).map((f) => {
           const pagada = f.estatus_general === "gasto_reflejado";
-          return {
-            contrato: f.contrato, folio_ingreso: f.folio_ingreso || "—", folio_proveedor: f.folio_proveedor || "—",
-            periodo: f.periodo_inicio ? `${fISO(f.periodo_inicio)}${f.periodo_fin ? " → " + fISO(f.periodo_fin) : ""}` : (f.mes_asignado ? `${f.mes_asignado} ${f.anio_asignado || ""}`.trim() : "—"),
-            cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—",
-            importe: imp, pagado: pagada ? imp : 0, porpagar: pagada ? 0 : imp,
-            situacion: pagada ? "Pagada" : (LABEL_GEN[f.estatus_general] || f.estatus_general),
-          };
-        }).sort((a, b) => (a.contrato === b.contrato ? a.periodo.localeCompare(b.periodo) : a.contrato.localeCompare(b.contrato)));
-        if (!rows.length) { setMsg("Ese proveedor no tiene facturas con esos filtros."); setGenerando(false); return; }
-        const fact = rows.reduce((s, r) => s + r.importe, 0), pag = rows.reduce((s, r) => s + r.pagado, 0), pend = rows.reduce((s, r) => s + r.porpagar, 0);
+          return { folio: f.folio_proveedor || "—", fecha: f.periodo_inicio ? fISO(f.periodo_inicio) : "—", importe: Number(f.importe_factura) || 0,
+            cr: f.cr_contrarecibo || "—", fpago: f.fecha_pago ? fISO(f.fecha_pago) : "—", situacion: pagada ? "Pagada" : (LABEL_GEN[f.estatus_general] || f.estatus_general) };
+        });
         setRes({
-          titulo: `Conciliación con ${filtros.proveedor}`,
-          resumen: `${rows.length} factura(s) · Facturado ${money(fact)} · Pagado ${money(pag)} · Por pagar ${money(pend)}`,
-          nota: "Estado de cuenta desde SIGAF: cada factura con su importe, lo pagado (CR y fecha) y lo que queda por pagar. Entrégalo al proveedor para cotejar contra sus registros.",
+          titulo: `Acto conciliatorio · Contrato ${contratoNum}`,
+          resumen: `${c.prov} · Total ${money(total)} · Pagado ${money(pagado)} · Adeudo ${money(adeudo)}`,
+          nota: "Revisa los datos y genera el documento institucional (con membrete y firmas). El representante legal y las horas se capturan al generar el acta.",
           columns: [
-            { key: "contrato", label: "Contrato" }, { key: "folio_ingreso", label: "Folio ingreso" }, { key: "folio_proveedor", label: "Folio prov." },
-            { key: "periodo", label: "Periodo" }, { key: "importe", label: "Importe", money: true, align: "right" },
-            { key: "pagado", label: "Pagado", money: true, align: "right" }, { key: "porpagar", label: "Por pagar", money: true, align: "right" },
-            { key: "cr", label: "CR" }, { key: "fpago", label: "Fecha pago" }, { key: "situacion", label: "Situación" },
+            { key: "folio", label: "Folio factura" }, { key: "fecha", label: "Fecha" }, { key: "importe", label: "Importe", money: true, align: "right" },
+            { key: "cr", label: "Contra recibo" }, { key: "fpago", label: "Fecha pago" }, { key: "situacion", label: "Situación" },
           ],
-          rows, totales: { contrato: `TOTAL (${rows.length})`, importe: fact, pagado: pag, porpagar: pend },
+          rows, totales: { folio: `TOTAL (${rows.length})`, importe: total },
+          acta: { contratoNum, proveedor: c.prov, administrador: c.administrador_contrato || "", total, pagado, adeudo,
+            pagadas: pagadasF.map(aFila), pendientes: pendientesF.map(aFila) },
         });
       }
     } catch (e) { setMsg("Error al generar: " + e.message); }
@@ -504,8 +504,11 @@ export default function ReportesPage() {
 
   if (docInst) return (
     <div>
-      <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
         <button className="boton secundario" onClick={() => setDocInst(null)}>← Volver</button>
+        <div><label style={lbl}>Representante legal del proveedor</label><input style={{ ...inp, width: 260 }} value={docInst.representante} onChange={(e) => setDocInst((p) => ({ ...p, representante: e.target.value }))} placeholder="Quien firma por el proveedor" /></div>
+        <div><label style={lbl}>Hora inicio</label><input style={{ ...inp, width: 90 }} value={docInst.horaInicio} onChange={(e) => setDocInst((p) => ({ ...p, horaInicio: e.target.value }))} /></div>
+        <div><label style={lbl}>Hora fin</label><input style={{ ...inp, width: 90 }} value={docInst.horaFin} onChange={(e) => setDocInst((p) => ({ ...p, horaFin: e.target.value }))} /></div>
         <button className="boton secundario" onClick={() => window.print()}>⬇ Imprimir / Guardar PDF</button>
         <button className="boton secundario" onClick={() => descargarConciliacionWord(docInst).catch((e) => setMsg("No se pudo generar el Word: " + e.message))}>⬇ Descargar Word</button>
         {msg && <span style={{ fontSize: 12, color: "var(--rojo)" }}>{msg}</span>}
@@ -632,7 +635,7 @@ export default function ReportesPage() {
               <button className="boton" onClick={generar} disabled={generando}>{generando ? "Generando…" : "Generar reporte"}</button>
               {res && <button className="boton secundario" onClick={exportExcel}>⬇ Excel</button>}
               {res && <button className="boton secundario" onClick={exportPDF}>⬇ PDF</button>}
-              {res && repKey === "r11" && <button className="boton" onClick={() => setDocInst({ proveedor: filtros.proveedor, fecha: new Date().toLocaleDateString("en-CA"), rows: res.rows, totales: res.totales })}>📄 Documento institucional (PDF / Word)</button>}
+              {res && repKey === "r11" && res.acta && <button className="boton" onClick={() => setDocInst({ ...res.acta, fecha: new Date().toLocaleDateString("en-CA"), representante: "", horaInicio: "08:00", horaFin: "09:00" })}>📄 Generar acta institucional (PDF / Word)</button>}
               {msg && <span style={{ fontSize: 12, color: "var(--rojo)" }}>{msg}</span>}
             </div>
           </div>
