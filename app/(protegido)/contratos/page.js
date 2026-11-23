@@ -132,7 +132,7 @@ export default function ContratosPage() {
     await cargar();
   };
   const borrarApoyo = async (a) => {
-    if (!window.confirm(`¿Borrar el apoyo de ${money(a.importe)} a la UI ${a.ui_destino}? Regresa al saldo del dictamen.`)) return;
+    if (!window.confirm(a.tipo === "recibido" ? `¿Borrar el apoyo recibido de ${money(a.importe)} de la UI ${a.ui_destino}? Vuelve a contar como gasto del HGZ 2.` : `¿Borrar el apoyo de ${money(a.importe)} a la UI ${a.ui_destino}? Regresa al saldo del dictamen.`)) return;
     setGuardando(`apoyo|${a.id}`);
     const { error } = await supabase.from("contrato_apoyos").delete().eq("id", a.id);
     setGuardando("");
@@ -198,6 +198,7 @@ export default function ContratosPage() {
       const x = calcularContrato(c, { facturas: fPor[c.id] || [], ampliaciones: aPor[c.id] || [], devengos: dPor[c.id] || [], programado: pPor[c.id] || [], devengoFolios: datos.devFolios[c.id] || null, apoyos: apPor[c.id] || [] });
       for (let m = 1; m <= 12; m++) { meses[m].fact += x.mensual[m]; meses[m].dev += x.devengoMes[m]; }
       for (const a of apPor[c.id] || []) {
+        if (a.tipo === "recibido") continue; // ya viene restado en x.mensual
         const d = String((a.estado === "gasto" && a.fecha_gasto) || a.fecha || ""), m = Number(d.slice(5, 7));
         if (Number(d.slice(0, 4)) === ANIO && m >= 1 && m <= 12) meses[m].apoyo += Number(a.importe) || 0;
       }
@@ -390,11 +391,11 @@ export default function ContratosPage() {
                 return (
                   <div style={{ fontSize: 12.5, margin: "0 0 8px", padding: "8px 10px", background: "#fff", border: "1px solid var(--borde)", borderRadius: 8, maxWidth: 900 }}>
                     <strong>Apoyos que damos a otras unidades</strong>
-                    <span style={{ color: "var(--texto-suave)" }}> · primero en devengo, después el gasto; se descuentan del saldo del dictamen</span>
+                    <span style={{ color: "var(--texto-suave)" }}> · primero en devengo, después el gasto; se descuentan del saldo del dictamen. Los recibidos (otra unidad pagó parte de una factura nuestra) se restan del gasto del HGZ 2</span>
                     {propios.map((a) => (
                       <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 5 }}>
-                        <span style={{ fontWeight: 700, color: a.estado === "gasto" ? "var(--verde)" : "#7c3aed" }}>{a.estado === "gasto" ? "Gasto" : "Devengo"}</span>
-                        <span>UI {a.ui_destino} · {money(a.importe)}{a.factura_txt ? ` · factura ${a.factura_txt}` : ""} · dictamen {a.dictamen} · {fechaTxt(a.estado === "gasto" ? a.fecha_gasto : a.fecha)}{a.nota ? ` · ${a.nota}` : ""}</span>
+                        <span style={{ fontWeight: 700, color: a.tipo === "recibido" ? "#2b6cb0" : a.estado === "gasto" ? "var(--verde)" : "#7c3aed" }}>{a.tipo === "recibido" ? "Recibido" : a.estado === "gasto" ? "Gasto" : "Devengo"}</span>
+                        <span>{a.tipo === "recibido" ? "de la " : ""}UI {a.ui_destino} ·{money(a.importe)}{a.factura_txt ? ` · factura ${a.factura_txt}` : ""} · dictamen {a.dictamen} · {fechaTxt(a.estado === "gasto" ? a.fecha_gasto : a.fecha)}{a.nota ? ` · ${a.nota}` : ""}</span>
                         {a.estado === "devengo" && <button className="boton secundario" style={{ fontSize: 12, padding: "3px 9px" }} disabled={guardando === `apoyo|${a.id}`} onClick={() => apoyoAGasto(a)}>Registrar gasto</button>}
                         <button className="boton secundario" style={{ fontSize: 12, padding: "3px 9px" }} disabled={guardando === `apoyo|${a.id}`} onClick={() => borrarApoyo(a)}>Borrar</button>
                       </div>
