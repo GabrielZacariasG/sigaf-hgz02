@@ -449,8 +449,13 @@ export default function ReportesPage() {
         });
       } else if (repKey === "r11") {
         // Acto conciliatorio por contrato: facturación pagada / pendiente del contrato elegido + acta institucional.
-        if (!filtros.contrato) { setMsg("Elige el contrato a conciliar (puedes filtrar por proveedor para encontrarlo)."); setGenerando(false); return; }
-        const c = contratos.find((x) => x.numero_interno === filtros.contrato) || contratos.find((x) => x.numero_alterno === filtros.contrato);
+        let c = filtros.contrato ? (contratos.find((x) => x.numero_interno === filtros.contrato) || contratos.find((x) => x.numero_alterno === filtros.contrato)) : null;
+        if (!c && filtros.proveedor) {
+          const suyos = contratos.filter((x) => x.prov === filtros.proveedor);
+          if (suyos.length === 1) c = suyos[0];
+          else if (suyos.length > 1) { setMsg(`Ese proveedor tiene ${suyos.length} contratos: elige uno en "Contrato" (${suyos.map((x) => x.numero_interno).join(", ")}).`); setGenerando(false); return; }
+        }
+        if (!filtros.contrato && !filtros.proveedor) { setMsg("Elige un proveedor o un contrato a conciliar."); setGenerando(false); return; }
         if (!c) { setMsg("No encontré ese contrato."); setGenerando(false); return; }
         const suyas = facturas.filter((f) => f.contrato_id === c.id);
         if (!suyas.length) { setMsg("Ese contrato no tiene facturas capturadas."); setGenerando(false); return; }
@@ -518,7 +523,7 @@ export default function ReportesPage() {
   );
 
   const filtroInputs = {
-    contrato: <div key="c"><label style={lbl}>Contrato</label><input list="rp-cont" style={inp} value={filtros.contrato} onChange={(e) => setF("contrato", e.target.value)} placeholder="Todos" /><datalist id="rp-cont">{listaContratos.map((c) => <option key={c} value={c} />)}</datalist></div>,
+    contrato: <div key="c"><label style={lbl}>Contrato{filtros.proveedor ? " (del proveedor elegido)" : ""}</label><input list="rp-cont" style={inp} value={filtros.contrato} onChange={(e) => setF("contrato", e.target.value)} placeholder={filtros.proveedor ? "Uno solo → se toma solo" : "Todos"} /><datalist id="rp-cont">{(filtros.proveedor ? [...new Set(contratos.filter((c) => c.prov === filtros.proveedor).map((c) => c.numero_interno))].sort() : listaContratos).map((c) => <option key={c} value={c} />)}</datalist></div>,
     proveedor: <div key="p"><label style={lbl}>Proveedor</label><input list="rp-prov" style={inp} value={filtros.proveedor} onChange={(e) => setF("proveedor", e.target.value)} placeholder="Todos" /><datalist id="rp-prov">{proveedores.map((c) => <option key={c} value={c} />)}</datalist></div>,
     capitulo: <div key="cap"><label style={lbl}>Capítulo</label><select style={inp} value={filtros.capitulo} onChange={(e) => setF("capitulo", e.target.value)}><option value="">Todos</option>{capitulos.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>,
     etapa: <div key="e"><label style={lbl}>Etapa</label><select style={inp} value={filtros.etapa} onChange={(e) => setF("etapa", e.target.value)}><option value="">Todas</option>{ETAPAS.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>,
