@@ -45,6 +45,8 @@ function etapaDe(f) {
   if (["envio_firmas_servicio", "autorizada_servicio"].includes(f.estatus_firmas)) return "Servicio";
   return "Finanzas";
 }
+// Orden del detalle: pendientes primero (OOAD arriba), pagadas al final.
+const ORDEN_ETAPA = { "OOAD (sin CR)": 0, "OOAD (con CR)": 1, "Devuelta": 2, "Adm. de contrato": 3, "Servicio": 4, "Finanzas": 5, "Pagada": 9 };
 
 export default function CedulaPage() {
   const [tab, setTab] = useState("resumen");
@@ -201,7 +203,7 @@ export default function CedulaPage() {
           <div style={{ maxHeight: 280, overflow: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <thead><tr>{["¿Dónde está?", "Folio ingreso", "Factura", "Proveedor", "Importe", "Pasivo", "CR", "Fecha de pago"].map((h) => <th key={h} style={{ ...th, background: "#4b5563" }}>{h}</th>)}</tr></thead>
-              <tbody>{f.facturas.slice(0, 400).map((x) => (
+              <tbody>{[...f.facturas].sort((a, b) => (ORDEN_ETAPA[etapaDe(a)] ?? 6) - (ORDEN_ETAPA[etapaDe(b)] ?? 6) || (Number(b.importe_factura) || 0) - (Number(a.importe_factura) || 0)).slice(0, 400).map((x) => (
                 <tr key={x.id}>
                   <td style={td}>{etapaDe(x)}</td>
                   <td style={td}><Link href={`/facturas/${x.id}`} style={{ color: "var(--verde)" }}>{x.folio_ingreso}</Link></td>
