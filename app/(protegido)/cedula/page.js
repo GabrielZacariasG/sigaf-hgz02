@@ -227,7 +227,7 @@ export default function CedulaPage() {
                 <tr><td style={tdt}>Remanente de las que ya tienen CR / en trámite (FINAT aún no refleja)</td><td style={{ ...tdv, color: residuo < -0.5 ? "var(--rojo)" : undefined }}>{money2(residuo)}</td></tr>
                 <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
               </tbody></table>
-              <div style={{ fontSize: 11, color: "var(--texto-suave)", marginTop: 4, maxWidth: 380 }}>El remanente no se puede clavar en una sola factura: FINAT reporta su gasto por cuenta (agregado), no factura por factura.</div>
+              <div style={{ fontSize: 11, color: "var(--texto-suave)", marginTop: 4, maxWidth: 440 }}>El remanente es un <b>neto por cuenta</b>: facturas que ya tienen CR y FINAT aún no refleja en el IMKK022, <b>menos</b> lo que FINAT ya ejerció y aquí sigue apareciendo sin CR. El detalle factura por factura sale del cruce con el 1043 en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Comprobantes</Link>.</div>
             </div>
           </div>
         )}
