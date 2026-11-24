@@ -223,11 +223,18 @@ export default function CedulaPage() {
             <div style={caja}>
               <div style={rotulo}>De qué se compone</div>
               <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}><tbody>
-                <tr><td style={tdt}>Facturas sin CR (aún no ejercidas) · {sinCR.length}</td><td style={tdv}>{money2(sumaSinCR)}</td></tr>
-                <tr><td style={tdt}>Remanente de las que ya tienen CR / en trámite (FINAT aún no refleja)</td><td style={{ ...tdv, color: residuo < -0.5 ? "var(--rojo)" : undefined }}>{money2(residuo)}</td></tr>
+                <tr><td style={{ ...tdt, fontWeight: 700 }}>Facturas sin CR (aún no ejercidas) · {sinCR.length}</td><td style={{ ...tdv, fontWeight: 700 }}>{money2(sumaSinCR)}</td></tr>
+                {sinCR.map((x) => (
+                  <tr key={x.id}>
+                    <td style={{ ...tdt, paddingLeft: 12 }}>· <Link href={`/facturas/${x.id}`} style={{ color: "var(--verde)" }}>{x.folio_proveedor || x.folio_ingreso}</Link> <span style={{ color: "var(--texto-suave)" }}>— {x.proveedores?.razon_social || "—"}</span></td>
+                    <td style={tdv}>{money2(x.importe_factura)}</td>
+                  </tr>
+                ))}
+                {!sinCR.length && <tr><td style={{ ...tdt, paddingLeft: 12, color: "var(--texto-suave)" }} colSpan={2}>(ninguna)</td></tr>}
+                <tr><td style={{ ...tdt, borderTop: "1px solid var(--borde)", paddingTop: 3 }}>Remanente (cruce con 1043)</td><td style={{ ...tdv, borderTop: "1px solid var(--borde)", paddingTop: 3, color: residuo < -0.5 ? "var(--rojo)" : undefined }}>{money2(residuo)}</td></tr>
                 <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
               </tbody></table>
-              <div style={{ fontSize: 11, color: "var(--texto-suave)", marginTop: 4, maxWidth: 440 }}>El remanente es un <b>neto por cuenta</b>: facturas que ya tienen CR y FINAT aún no refleja en el IMKK022, <b>menos</b> lo que FINAT ya ejerció y aquí sigue apareciendo sin CR. El detalle factura por factura sale del cruce con el 1043 en <Link href="/comprobantes" style={{ color: "var(--verde)", fontWeight: 600 }}>Comprobantes</Link>.</div>
+              {Math.abs(residuo) > 0.5 && <Link href="/comprobantes" style={{ fontSize: 11, color: "var(--verde)", fontWeight: 600 }}>Ver el remanente factura por factura (1043) →</Link>}
             </div>
           </div>
         )}
