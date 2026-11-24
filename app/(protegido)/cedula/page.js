@@ -163,7 +163,7 @@ export default function CedulaPage() {
       <span style={{ position: "relative", fontSize: 11, fontWeight: 700, paddingLeft: 4 }}>{pctTxt(x)}</span>
     </div>
   );
-  const celdas = (t) => {
+  const celdas = (t, clickable) => {
     const total = t.pasivo + t.devengado; const cxp = t.cxp;
     const vacio = t.modo === "vacio"; const tip = t.modo ? MODO_TXT[t.modo] : undefined;
     const sist = t.modo === "sistema" ? { color: "var(--texto-suave)", fontStyle: "italic" } : {};
@@ -175,7 +175,7 @@ export default function CedulaPage() {
       <td style={{ ...tdN, ...sist }} title={tip}>{vacio ? "" : money2(t.devengado)}</td>
       <td style={{ ...tdN, background: "#e0f2fe", ...sist }} title={tip}>{vacio ? "" : money2(total)}</td>
       <td style={{ ...td, minWidth: 70 }}>{vacio ? "" : barra(pct(total, t.presupuesto))}</td>
-      <td style={{ ...tdN, color: cxp < -0.5 ? "var(--rojo)" : undefined }} title={tip}>{vacio ? "" : cxp.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td style={{ ...tdN, color: cxp < -0.5 ? "var(--rojo)" : clickable && !vacio ? "var(--verde)" : undefined, cursor: clickable && !vacio ? "pointer" : undefined, textDecoration: clickable && !vacio ? "underline dotted" : undefined }} title={clickable && !vacio ? "Clic para ver cómo se forma" : tip}>{vacio ? "" : cxp.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
     </>);
   };
   // Cuenta, cuenta anterior y nombre se quedan fijos a la izquierda; los encabezados, fijos arriba.
@@ -190,6 +190,19 @@ export default function CedulaPage() {
   const detalleCuenta = (f) => {
     const porEtapa = {}; for (const x of f.facturas) { const e = etapaDe(x); (porEtapa[e] ||= { n: 0, imp: 0 }); porEtapa[e].n++; porEtapa[e].imp += Number(x.importe_factura) || 0; }
     const p = partidaDe[f.finat];
+    // Reconciliación de "Cuentas por pagar": Total registrado en SIGAF − Gasto ejercido (FINAT).
+    // Lo descomponemos en lo auditable (facturas aún sin CR) + el remanente de las que ya tienen CR y FINAT todavía no refleja.
+    const esFacturas = f.modo === "facturas";
+    const totSig = (Number(f.pasivo) || 0) + (Number(f.devengado) || 0);
+    const finat = Number(f.gasto) || 0;
+    const cxpF = Number(f.cxp) || 0;
+    const sinCR = f.facturas.filter((x) => !x.cr_contrarecibo && !["gasto_reflejado", "devuelta_proveedor"].includes(x.estatus_general));
+    const sumaSinCR = sinCR.reduce((s, x) => s + (Number(x.importe_factura) || 0), 0);
+    const residuo = cxpF - sumaSinCR;
+    const caja = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 8, padding: "8px 12px" };
+    const rotulo = { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--texto-suave)", marginBottom: 4 };
+    const tdt = { padding: "2px 10px 2px 0" }, tdv = { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+    const filaTot = { fontWeight: 800, borderTop: "1px solid var(--borde)" };
     return (
       <tr><td colSpan={14} style={{ padding: "10px 14px", background: "var(--fondo, #f7f8f7)", borderBottom: "2px solid var(--verde)" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
@@ -197,6 +210,27 @@ export default function CedulaPage() {
           {Object.entries(porEtapa).map(([e, v]) => <span key={e} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 99, background: "var(--verde-claro)" }}>{e}: {v.n} · {money2(v.imp)}</span>)}
           {p && <Link href={`/disponibilidad/${p.id}`} style={{ fontSize: 12, color: "var(--verde)" }}>Ver tablero de la cuenta →</Link>}
         </div>
+        {esFacturas && (
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={caja}>
+              <div style={rotulo}>Cómo se forma "Cuentas por pagar"</div>
+              <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}><tbody>
+                <tr><td style={tdt}>Total registrado en SIGAF (pasivo + devengado)</td><td style={tdv}>{money2(totSig)}</td></tr>
+                <tr><td style={tdt}>− Gasto ejercido por FINAT (IMKK022)</td><td style={tdv}>{money2(finat)}</td></tr>
+                <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
+              </tbody></table>
+            </div>
+            <div style={caja}>
+              <div style={rotulo}>De qué se compone</div>
+              <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}><tbody>
+                <tr><td style={tdt}>Facturas sin CR (aún no ejercidas) · {sinCR.length}</td><td style={tdv}>{money2(sumaSinCR)}</td></tr>
+                <tr><td style={tdt}>Remanente de las que ya tienen CR / en trámite (FINAT aún no refleja)</td><td style={{ ...tdv, color: residuo < -0.5 ? "var(--rojo)" : undefined }}>{money2(residuo)}</td></tr>
+                <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
+              </tbody></table>
+              <div style={{ fontSize: 11, color: "var(--texto-suave)", marginTop: 4, maxWidth: 380 }}>El remanente no se puede clavar en una sola factura: FINAT reporta su gasto por cuenta (agregado), no factura por factura.</div>
+            </div>
+          </div>
+        )}
         {f.facturas.length ? (
           <div style={{ maxHeight: 280, overflow: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -254,7 +288,7 @@ export default function CedulaPage() {
                       <Fragment key={k}>
                         <tr onClick={() => setAbierta(abierta === k ? null : k)} style={{ cursor: "pointer", background: abierta === k ? "#fff7d6" : undefined }} title="Clic para ver sus facturas">
                           <td style={{ ...td, ...fija(0, abierta === k ? "#fff7d6" : null) }}>{f.finat || "—"}</td><td style={{ ...td, ...fija(1, abierta === k ? "#fff7d6" : null) }}>{f.prei}</td><td style={{ ...td, ...fija(2, abierta === k ? "#fff7d6" : null), overflow: "hidden", textOverflow: "ellipsis" }} title={f.nombre}>{f.nombre}</td>
-                          {celdas(f)}
+                          {celdas(f, true)}
                         </tr>
                         {abierta === k && detalleCuenta(f)}
                       </Fragment>);
