@@ -190,19 +190,6 @@ export default function CedulaPage() {
   const detalleCuenta = (f) => {
     const porEtapa = {}; for (const x of f.facturas) { const e = etapaDe(x); (porEtapa[e] ||= { n: 0, imp: 0 }); porEtapa[e].n++; porEtapa[e].imp += Number(x.importe_factura) || 0; }
     const p = partidaDe[f.finat];
-    // Reconciliación de "Cuentas por pagar": Total registrado en SIGAF − Gasto ejercido (FINAT).
-    // Lo descomponemos en lo auditable (facturas aún sin CR) + el remanente de las que ya tienen CR y FINAT todavía no refleja.
-    const esFacturas = f.modo === "facturas";
-    const totSig = (Number(f.pasivo) || 0) + (Number(f.devengado) || 0);
-    const finat = Number(f.gasto) || 0;
-    const cxpF = Number(f.cxp) || 0;
-    const sinCR = f.facturas.filter((x) => !x.cr_contrarecibo && !["gasto_reflejado", "devuelta_proveedor"].includes(x.estatus_general));
-    const sumaSinCR = sinCR.reduce((s, x) => s + (Number(x.importe_factura) || 0), 0);
-    const residuo = cxpF - sumaSinCR;
-    const caja = { background: "var(--blanco)", border: "1px solid var(--borde)", borderRadius: 8, padding: "8px 12px" };
-    const rotulo = { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--texto-suave)", marginBottom: 4 };
-    const tdt = { padding: "2px 10px 2px 0" }, tdv = { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-    const filaTot = { fontWeight: 800, borderTop: "1px solid var(--borde)" };
     return (
       <tr><td colSpan={14} style={{ padding: "10px 14px", background: "var(--fondo, #f7f8f7)", borderBottom: "2px solid var(--verde)" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
@@ -210,34 +197,6 @@ export default function CedulaPage() {
           {Object.entries(porEtapa).map(([e, v]) => <span key={e} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 99, background: "var(--verde-claro)" }}>{e}: {v.n} · {money2(v.imp)}</span>)}
           {p && <Link href={`/disponibilidad/${p.id}`} style={{ fontSize: 12, color: "var(--verde)" }}>Ver tablero de la cuenta →</Link>}
         </div>
-        {esFacturas && (
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
-            <div style={caja}>
-              <div style={rotulo}>Cómo se forma "Cuentas por pagar"</div>
-              <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}><tbody>
-                <tr><td style={tdt}>Total registrado en SIGAF (pasivo + devengado)</td><td style={tdv}>{money2(totSig)}</td></tr>
-                <tr><td style={tdt}>− Gasto ejercido por FINAT (IMKK022)</td><td style={tdv}>{money2(finat)}</td></tr>
-                <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
-              </tbody></table>
-            </div>
-            <div style={caja}>
-              <div style={rotulo}>De qué se compone</div>
-              <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}><tbody>
-                <tr><td style={{ ...tdt, fontWeight: 700 }}>Facturas sin CR (aún no ejercidas) · {sinCR.length}</td><td style={{ ...tdv, fontWeight: 700 }}>{money2(sumaSinCR)}</td></tr>
-                {sinCR.map((x) => (
-                  <tr key={x.id}>
-                    <td style={{ ...tdt, paddingLeft: 12 }}>· <Link href={`/facturas/${x.id}`} style={{ color: "var(--verde)" }}>{x.folio_proveedor || x.folio_ingreso}</Link> <span style={{ color: "var(--texto-suave)" }}>— {x.proveedores?.razon_social || "—"}</span></td>
-                    <td style={tdv}>{money2(x.importe_factura)}</td>
-                  </tr>
-                ))}
-                {!sinCR.length && <tr><td style={{ ...tdt, paddingLeft: 12, color: "var(--texto-suave)" }} colSpan={2}>(ninguna)</td></tr>}
-                <tr><td style={{ ...tdt, borderTop: "1px solid var(--borde)", paddingTop: 3 }}>Remanente (cruce con 1043)</td><td style={{ ...tdv, borderTop: "1px solid var(--borde)", paddingTop: 3, color: residuo < -0.5 ? "var(--rojo)" : undefined }}>{money2(residuo)}</td></tr>
-                <tr style={filaTot}><td style={{ ...tdt, paddingTop: 3 }}>= Cuentas por pagar</td><td style={{ ...tdv, paddingTop: 3, color: cxpF < -0.5 ? "var(--rojo)" : undefined }}>{money2(cxpF)}</td></tr>
-              </tbody></table>
-              {Math.abs(residuo) > 0.5 && <Link href="/comprobantes" style={{ fontSize: 11, color: "var(--verde)", fontWeight: 600 }}>Ver el remanente factura por factura (1043) →</Link>}
-            </div>
-          </div>
-        )}
         {f.facturas.length ? (
           <div style={{ maxHeight: 280, overflow: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
