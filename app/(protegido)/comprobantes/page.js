@@ -14,6 +14,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
 import { leerNAP1043, agruparComprobantes, cruzar } from "../../../lib/nap";
+import { formatCR } from "../../../lib/formatoCR";
 import { tipoReporte, leerPagos, cruzarPagos, leer1013, cruzar1013, avisosDe } from "../../../lib/reportes";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO } from "../../../lib/estatus";
 import { leerDispoIMKK022, guardarLoteDispo, totalesDispo } from "../../../lib/dispo";
@@ -36,7 +37,7 @@ const deCruce = (x) => ({
   cambiosPorFactura: x.cambios ? Object.fromEntries(x.facturas.map((f) => [f.id, x.cambios])) : x.cambiosPorFactura, motivos: x.motivos || null,
 });
 const describir = (cam) => [
-  cam.cr_contrarecibo && `CR ${cam.cr_contrarecibo}`, cam.estatus_general && GEN(cam.estatus_general),
+  cam.cr_contrarecibo && `CR ${formatCR(cam.cr_contrarecibo)}`, cam.estatus_general && GEN(cam.estatus_general),
   cam.fecha_pago && `pago ${fechaTxt(cam.fecha_pago)}`, cam.numero_pedido && `pedido ${cam.numero_pedido}`,
   cam.numero_recepcion && `recepción ${cam.numero_recepcion}`, cam.estatus_pedido_recepcion && "pedido-recepción generado",
 ].filter(Boolean).join(" · ");
@@ -272,7 +273,7 @@ export default function ComprobantesPage() {
         {x.facturas.map((fs) => { const f = res.original.get(fs.id) || fs; return (
           <div key={f.id} style={{ marginBottom: 3 }}>
             <LinkF f={f} /> · {f.folio_proveedor} · {money(f.importe_factura)}
-            <span style={{ color: "var(--texto-suave)" }}> · hoy: {GEN(f.estatus_general)}{f.cr_contrarecibo ? ` · CR ${f.cr_contrarecibo}` : " · sin CR"}</span>
+            <span style={{ color: "var(--texto-suave)" }}> · hoy: {GEN(f.estatus_general)}{f.cr_contrarecibo ? ` · CR ${formatCR(f.cr_contrarecibo)}` : " · sin CR"}</span>
             {describir(x.cambiosPorFactura[f.id] || {}) && <div style={{ fontSize: 12 }}>→ {describir(x.cambiosPorFactura[f.id])}</div>}
           </div>
         ); })}

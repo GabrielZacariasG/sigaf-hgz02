@@ -12,6 +12,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
+import { formatCR } from "../../../lib/formatoCR";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 const money2 = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -206,7 +207,7 @@ export default function CedulaPage() {
                   <td style={td}><Link href={`/facturas/${x.id}`} style={{ color: "var(--verde)" }}>{x.folio_ingreso}</Link></td>
                   <td style={td}>{x.folio_proveedor}</td><td style={td}>{x.proveedores?.razon_social || "—"}</td>
                   <td style={tdN}>{money2(x.importe_factura)}</td><td style={td}>{x.es_pasivo ? "Sí" : ""}</td>
-                  <td style={td}>{x.cr_contrarecibo || ""}</td><td style={td}>{x.fecha_pago ? fechaTxt(x.fecha_pago) : ""}</td>
+                  <td style={td}>{formatCR(x.cr_contrarecibo)}</td><td style={td}>{x.fecha_pago ? fechaTxt(x.fecha_pago) : ""}</td>
                 </tr>))}</tbody>
             </table>
           </div>

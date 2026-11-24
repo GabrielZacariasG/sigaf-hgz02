@@ -2,6 +2,7 @@
 // Vista de solo lectura con todo lo capturado de un comprobante (pliego u otro).
 import { TIPOS_CONTRATACION, GRUPOS } from "../../../lib/pliegos";
 import { money } from "../../../lib/fondoFijo";
+import { formatCR } from "../../../lib/formatoCR";
 import { fCorta, tarjeta, titulo } from "./comun";
 
 const tcNombre = (tc) => TIPOS_CONTRATACION.find((t) => t.clave === tc)?.nombre || tc || "—";
@@ -120,7 +121,7 @@ export default function DetalleGasto({ gasto: g, reembolso, onClose, onEditar })
             <>
               <Fila k="Relación (solicitud)" v={txt(reembolso.solicitud)} fuerte />
               {reembolso.folio_oficio && <Fila k="Oficio" v={txt(reembolso.folio_oficio)} />}
-              <Fila k="Contra-recibo (CR)" v={reembolso.cr ? reembolso.cr : "Aún sin CR"} />
+              <Fila k="Contra-recibo (CR)" v={reembolso.cr ? formatCR(reembolso.cr) : "Aún sin CR"} />
               {reembolso.ref_bancaria && <Fila k="Referencia de pago" v={txt(reembolso.ref_bancaria)} />}
               {reembolso.fecha_ingreso && <Fila k="Ingreso a OOAD" v={fCorta(reembolso.fecha_ingreso)} />}
               {reembolso.fecha_prob_pago && <Fila k="Pago probable" v={fCorta(reembolso.fecha_prob_pago)} />}

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerDispoIMKK022 } from "../../../lib/dispo";
+import { formatCR } from "../../../lib/formatoCR";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const TOL = 1.0; // tolerancia de cuadre ($1)
@@ -248,7 +249,7 @@ export default function CierrePage() {
                         <td style={{ ...td, fontWeight: 600 }}>{f.folio_ingreso}<div style={{ fontSize: 11, color: "var(--texto-suave)", fontWeight: 400 }}>{f.folio_proveedor}</div></td>
                         <td style={{ ...td, fontSize: 12 }}>{f.proveedores?.razon_social || "—"}</td>
                         <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(f.importe_factura)}</td>
-                        <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{String(f.cr_contrarecibo ?? "").trim() || "—"}</td>
+                        <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{formatCR(f.cr_contrarecibo) || "—"}</td>
                         <td style={td}>{dia ? <strong>{dia}</strong> : <span style={{ color: "var(--texto-suave)" }}>sin pago aún</span>}</td>
                         <td style={td}>
                           {dia && dias.includes(dia)

@@ -17,6 +17,7 @@ import SelectorFolios from "../../../../lib/SelectorFolios";
 import SelectorFoliosTraslado from "../../../../lib/SelectorFoliosTraslado";
 import { foliosDelContrato, ligarFolios, desligarFolios, estatusFolio, liberarFoliosDeFactura } from "../../../../lib/subrogadosCarga";
 import { foliosTrasladoDelContrato, ligarFoliosTraslado, desligarFoliosTraslado, estatusFolioTraslado, liberarFoliosTrasladoDeFactura } from "../../../../lib/trasladosCarga";
+import { formatCR } from "../../../../lib/formatoCR";
 
 // Prefijo de folio de ingreso por capítulo (igual que en captura).
 const PREFIJO_CAPITULO = { "Integrales": "INT", "Servicios Integrales": "INT", "Área Médica": "AM", "Subrogados": "SS", "Cuadro Básico": "CB", "Compra Emergente": "CE" };
@@ -506,7 +507,7 @@ export default function FacturaEstatusPage() {
           <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--borde)", display: "flex", gap: 24, flexWrap: "wrap" }}>
             <div><strong>Contra‑recibo (CR):</strong>{" "}
               {String(factura.cr_contrarecibo ?? "").trim()
-                ? <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{factura.cr_contrarecibo}</span>
+                ? <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{formatCR(factura.cr_contrarecibo)}</span>
                 : <span style={{ color: "var(--texto-suave)" }}>—</span>}
             </div>
             {factura.fecha_pago && <div><strong>Gasto reflejado:</strong> {factura.fecha_pago}</div>}

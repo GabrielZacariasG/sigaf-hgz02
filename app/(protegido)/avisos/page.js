@@ -8,6 +8,7 @@ import { cargarAvisos } from "../../../lib/avisos";
 import ArmarOficio from "../../../lib/ArmarOficio";
 import { abrirPdfAvisos } from "../../../lib/pdfAvisos";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO, generaPedidoRecepcion, puedeEnviarOoad, periodoTxt, pasivosPrimero } from "../../../lib/estatus";
+import { formatCR } from "../../../lib/formatoCR";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const COLOR = { verde: ["#e6f4ea", "#1e7a3c"], ambar: ["#fef3c7", "#92400e"], rojo: ["#fee2e2", "#b91c1c"], validada: ["#e0ecff", "#1d4ed8"], gris: ["#f1f1f1", "#555"] };
@@ -63,7 +64,7 @@ export default function AvisosPage() {
           <td style={{ ...td, fontSize: 12.5 }}>{periodoTxt(f)}{f.es_pasivo && <div style={{ fontWeight: 700 }}>PASIVO</div>}</td>
           <td style={tdN}>{money(f.importe_factura)}</td>
           <td style={td}>{pendienteDe(f)}</td>
-          <td style={td}>{f.cr_contrarecibo || "—"}{s.error && <div style={{ color: "var(--rojo)", fontWeight: 600, fontSize: 12 }}>error de presupuesto</div>}</td>
+          <td style={td}>{formatCR(f.cr_contrarecibo) || "—"}{s.error && <div style={{ color: "var(--rojo)", fontWeight: 600, fontSize: 12 }}>error de presupuesto</div>}</td>
           {tituloExtra && <td style={{ ...td, fontSize: 12.5 }}>{extra({ f, s })}</td>}
         </tr>
       ))}</tbody>
@@ -240,7 +241,7 @@ export default function AvisosPage() {
                     );
                   })()}
                 </td>
-                <td style={td}>{r.facturas.map((f) => <div key={f.id}><LinkF f={f} /> · {f.folio_proveedor} · {money(f.importe_factura)}{f.cr_contrarecibo ? ` · CR ${f.cr_contrarecibo}` : " · sin CR"}{a.sem.get(f.id)?.error ? <strong style={{ color: "var(--rojo)" }}> · error de presupuesto</strong> : ""}</div>)}</td>
+                <td style={td}>{r.facturas.map((f) => <div key={f.id}><LinkF f={f} /> · {f.folio_proveedor} · {money(f.importe_factura)}{f.cr_contrarecibo ? ` · CR ${formatCR(f.cr_contrarecibo)}` : " · sin CR"}{a.sem.get(f.id)?.error ? <strong style={{ color: "var(--rojo)" }}> · error de presupuesto</strong> : ""}</div>)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -293,7 +294,7 @@ export default function AvisosPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Factura", "Proveedor", "Importe", "CR", "Dictamen"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{a.enError.map((f) => (
-              <tr key={f.id}><td style={td}><LinkF f={f} /></td><td style={td}>{f.proveedores?.razon_social}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{f.cr_contrarecibo}</td><td style={td}><Semaforo s={a.sem.get(f.id)} /></td></tr>
+              <tr key={f.id}><td style={td}><LinkF f={f} /></td><td style={td}>{f.proveedores?.razon_social}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{formatCR(f.cr_contrarecibo)}</td><td style={td}><Semaforo s={a.sem.get(f.id)} /></td></tr>
             ))}</tbody>
           </table>
         </div>

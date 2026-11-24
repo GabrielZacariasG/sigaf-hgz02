@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "../../../lib/supabaseClient";
 import { leerTodo } from "../../../lib/paginar";
 import { calcularContrato, calcularDictamen, sumar, ANIO, apoyosPorDictamen } from "../../../lib/contratos";
+import { formatCR } from "../../../lib/formatoCR";
 import { dictamenDe } from "../../../lib/avisos";
 import { saldoAlDia } from "../../../lib/dictamenVivo";
 import { leerCrValidados, corteMasViejo } from "../../../lib/crValidados";
@@ -357,7 +358,7 @@ export default function ContratosPage() {
                   )}
                   {(dic.validadas.length > 0 || dic.enError.length > 0) && <div style={{ marginTop: 4 }}>
                     {dic.validadas.length > 0 && <span style={{ color: "var(--verde)", marginRight: 14 }}>Ya validadas en FINAT (pasaron): {dic.validadas.length} · {money(dic.impValidadas)}</span>}
-                    {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${f.cr_contrarecibo} (${money(f.importe_factura)})`).join(" · ")}</span>}
+                    {dic.enError.length > 0 && <span style={{ color: "var(--rojo)", fontWeight: 600 }}>Con error de presupuesto: {dic.enError.map((f) => `CR ${formatCR(f.cr_contrarecibo)} (${money(f.importe_factura)})`).join(" · ")}</span>}
                   </div>}
                   <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Disponible de cada mes del HGZ 2 (informativo): {Object.entries(dic.porMes).sort(([a], [b]) => a - b).map(([k, v]) => `${MESES[Number(k) % 100].slice(0, 3)} ${money0(v)}`).join(" · ")}</div>
                   {!dic.viejo && dic.otras.length > 0 && <div style={{ marginTop: 4, color: "var(--texto-suave)" }}>Saldo al día en otras unidades del mismo dictamen (para oficio de apoyo): {dic.otras.map((o) => `UI ${o.ui} ${money(o.disponible)}`).join(" · ")}</div>}
@@ -418,7 +419,7 @@ export default function ContratosPage() {
                   <tbody>{facturas.slice().sort((a, b) => (a.periodo_inicio || "").localeCompare(b.periodo_inicio || "")).map((f) => (
                     <tr key={f.id}><td style={td}><Link href={`/facturas/${f.id}`} style={{ color: "var(--verde)" }}>{f.folio_ingreso}</Link></td><td style={td}>{f.folio_proveedor}</td>
                       <td style={td}>{f.mes_presupuestal ? `${MESES[f.mes_presupuestal]} ${f.anio_presupuestal}` : ""}</td><td style={tdN}>{money(f.importe_factura)}</td><td style={td}>{f.es_pasivo ? "Sí" : ""}</td>
-                      <td style={td}>{f.estatus_general === "gasto_reflejado" ? "Pagada" : f.estatus_general}</td><td style={td}>{f.cr_contrarecibo || ""}</td><td style={td}>{f.fecha_pago ? fechaTxt(f.fecha_pago) : ""}</td></tr>
+                      <td style={td}>{f.estatus_general === "gasto_reflejado" ? "Pagada" : f.estatus_general}</td><td style={td}>{formatCR(f.cr_contrarecibo)}</td><td style={td}>{f.fecha_pago ? fechaTxt(f.fecha_pago) : ""}</td></tr>
                   ))}</tbody>
                 </table>
               </div>

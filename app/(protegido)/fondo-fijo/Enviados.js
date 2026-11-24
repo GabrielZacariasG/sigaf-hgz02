@@ -6,6 +6,7 @@ import { armarReembolso, TIPOS_GASTO } from "../../../lib/reembolsos";
 import { gastoParaReembolso, leerTodo, ligarComprobantes, money } from "../../../lib/fondoFijo";
 import { Mensaje, chico, fCorta, inp, tarjeta, td, th } from "./comun";
 import Formatos from "./Formatos";
+import { formatCR } from "../../../lib/formatoCR";
 import DetalleGasto from "./DetalleGasto";
 import { folioOficio } from "./Reembolsos";
 
@@ -66,7 +67,7 @@ export default function Enviados({ gastos, reembolsos, recargar }) {
                 <td style={td}>{fCorta(r.fecha)}</td>
                 <td style={td}><button onClick={() => setAbierto(expandida ? null : r.id)} style={linkBtn} title="Ver qué pliegos la componen">{r.comprobantes} {expandida ? "▾" : "▸"}</button></td>
                 <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{money(r.total)}</td>
-                <td style={td}>{r.cr || (c ? <span>{c.cbte} <span style={{ fontSize: 11, color: "var(--texto-suave)" }}>(sin guardar)</span></span> : r.estatus === "cancelado" ? "—" : <span style={{ color: "#92400e" }}>Esperando</span>)}</td>
+                <td style={td}>{formatCR(r.cr) || (c ? <span>{formatCR(c.cbte)} <span style={{ fontSize: 11, color: "var(--texto-suave)" }}>(sin guardar)</span></span> : r.estatus === "cancelado" ? "—" : <span style={{ color: "#92400e" }}>Esperando</span>)}</td>
                 <td style={td}>{c ? PAGO[c.pago] || c.pago || "—" : "—"}{c?.programado && c.pago !== "P" && <div style={{ fontSize: 11, color: "var(--texto-suave)" }}>Prog. {fCorta(c.programado)}</div>}</td>
                 <td style={{ ...td, color: notas.length ? "#92400e" : "inherit" }}>{notas.join(" ") || "—"}</td>
                 <td style={{ ...td, whiteSpace: "nowrap" }}>
@@ -80,7 +81,7 @@ export default function Enviados({ gastos, reembolsos, recargar }) {
                   <td colSpan={8} style={{ ...td, background: "var(--gris-claro, #f7f7f7)" }}>
                     <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 6, display: "flex", gap: 14, flexWrap: "wrap" }}>
                       <span>Pliegos/comprobantes de <strong style={{ color: "var(--texto)" }}>{r.solicitud}</strong></span>
-                      {r.cr && <span>CR <strong style={{ color: "var(--texto)" }}>{r.cr}</strong></span>}
+                      {r.cr && <span>CR <strong style={{ color: "var(--texto)" }}>{formatCR(r.cr)}</strong></span>}
                       {r.ref_bancaria && <span>Ref. de pago <strong style={{ color: "var(--texto)" }}>{r.ref_bancaria}</strong></span>}
                       {r.fecha_prob_pago && <span>Pago prob. <strong style={{ color: "var(--texto)" }}>{fCorta(r.fecha_prob_pago)}</strong></span>}
                     </div>

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabaseClient";
 import { LABEL_GENERAL, LABEL_FIRMAS, LABEL_PEDIDO } from "../../../../lib/estatus";
 import { leerTodo } from "../../../../lib/paginar";
+import { formatCR } from "../../../../lib/formatoCR";
 
 const money = (n) =>
   (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -231,7 +232,7 @@ export default function DetalleCuentaPage() {
                   <td style={td}>{LABEL_GENERAL[f.estatus_general] || f.estatus_general}</td>
                   <td style={td}>{LABEL_FIRMAS[f.estatus_firmas] || f.estatus_firmas}</td>
                   {esIntegrales && <td style={td}>{LABEL_PEDIDO[f.estatus_pedido_recepcion] || f.estatus_pedido_recepcion}</td>}
-                  {esIntegrales && <td style={td}>{f.cr_contrarecibo || <span style={{ color: "var(--rojo)" }}>sin CR</span>}</td>}
+                  {esIntegrales && <td style={td}>{formatCR(f.cr_contrarecibo) || <span style={{ color: "var(--rojo)" }}>sin CR</span>}</td>}
                 </tr>
               ))}
             </tbody>
