@@ -10,6 +10,7 @@ import {
   FLUJO_FIRMAS, LABEL_FIRMAS,
   FLUJO_PEDIDO, LABEL_PEDIDO,
   puedeEnviarOoad, generaPedidoRecepcion, periodoTxt, pasivosPrimero,
+  FIRMAS_COMPLETO, SIN_ADMIN_CONTRATO,
 } from "../../../lib/estatus";
 import { leerTodo } from "../../../lib/paginar";
 import { liberarFoliosDeFactura } from "../../../lib/subrogadosCarga";
@@ -423,23 +424,51 @@ export default function FacturasListaPage() {
     }
     throw new Error("No se pudo asignar un folio único (demasiados intentos simultáneos).");
   };
+  // Al FORZAR una factura a pago (el jefe confirma que ya tiene las firmas físicas),
+  // se marcan las firmas (y el pedido-recepción cuando aplica) como completas en el
+  // MISMO update que la manda a pago: así el trigger fn_bloqueo_envio_ooad las lee ya
+  // completas y las deja pasar, sin tocar la base ni debilitar el candado.
+  const patchForzarFirmas = (f) => {
+    const esCE = SIN_ADMIN_CONTRATO.includes(f.capNom);
+    const p = { estatus_firmas: esCE ? "autorizada_servicio" : FIRMAS_COMPLETO };
+    const pr = generaPedidoRecepcion(f.capNom, f.partidas?.cuenta_finat || f.partidas?.cuenta_prei);
+    if (pr && f.estatus_pedido_recepcion !== "generado") p.estatus_pedido_recepcion = "generado";
+    return p;
+  };
   const enviarOOAD = async (lista) => {
     // (el botón pasa el evento del clic: solo se toma `lista` si de verdad es un arreglo)
     const todas = Array.isArray(lista) && lista.length ? lista : seleccionadas;
     if (!todas.length) return;
     // Candado: solo facturas con firmas completas (y P&R cuando aplica) y que aún no estén en OOAD.
-    const fuera = todas.map((f) => ({ f, m: motivoNoOoad(f) })).filter((x) => x.m);
-    const items = todas.filter((f) => !motivoNoOoad(f));
-    if (fuera.length) {
-      const txt = fuera.slice(0, 8).map((x) => `${x.f.folio_proveedor || x.f.folio_ingreso} (${x.m})`).join(" · ") + (fuera.length > 8 ? ` y ${fuera.length - 8} más` : "");
-      setMensaje(items.length
-        ? `⚠️ ${fuera.length} factura(s) NO se incluyen en el oficio de pago: ${txt}.`
-        : `⛔ Ninguna de las facturas seleccionadas puede ir a pago: ${txt}.`);
+    const conMotivo = todas.map((f) => ({ f, m: motivoNoOoad(f) }));
+    const items = conMotivo.filter((x) => !x.m).map((x) => x.f);
+    // "Forzables": bloqueadas SOLO por falta de firmas / pedido-recepción (NO las que ya están en OOAD o pagadas).
+    const forzables = conMotivo.filter((x) => x.m && /firma|pedido-recepci/i.test(x.m)).map((x) => x.f);
+    const yaEnFlujo = conMotivo.filter((x) => x.m && !/firma|pedido-recepci/i.test(x.m));
+    let forzadas = [];
+    if (forzables.length) {
+      const txt = forzables.slice(0, 10).map((f) => `• ${f.folio_proveedor || f.folio_ingreso} — ${f.prov || ""} — ${money(f.importe_factura)}`).join("\n")
+        + (forzables.length > 10 ? `\n… y ${forzables.length - 10} más` : "");
+      const ok = window.confirm(
+        `⚠️ ${forzables.length} factura(s) NO tienen las firmas registradas en SIGAF:\n\n${txt}\n\n`
+        + `¿Estás seguro de enviarlas a pago? ¿YA tienen las firmas físicas?\n\n`
+        + `Si aceptas, se marcarán como firmadas en SIGAF y se incluirán en el oficio de pago.`
+      );
+      if (ok) forzadas = forzables;
     }
-    if (!items.length) return;
+    if (yaEnFlujo.length) {
+      const txt = yaEnFlujo.slice(0, 8).map((x) => `${x.f.folio_proveedor || x.f.folio_ingreso} (${x.m})`).join(" · ") + (yaEnFlujo.length > 8 ? ` y ${yaEnFlujo.length - 8} más` : "");
+      setMensaje(`⚠️ ${yaEnFlujo.length} factura(s) no se incluyen en el oficio (no se pueden reenviar): ${txt}.`);
+    }
+    const todosItems = [...items, ...forzadas];
+    if (!todosItems.length) {
+      if (!yaEnFlujo.length) setMensaje("No hay facturas que enviar a pago.");
+      return;
+    }
+    const forzadasIds = new Set(forzadas.map((f) => f.id));
     const anio = new Date().getFullYear();
     const consec = await proximoConsec("envio_pago", anio);
-    setOficio({ tipo: "pago", docs: [{ filas: [...items], tipoDb: "envio_pago", anio, consecutivo: consec, folio: fmtFolio("envio_pago", consec, anio) }] });
+    setOficio({ tipo: "pago", docs: [{ filas: [...todosItems], forzadasIds, tipoDb: "envio_pago", anio, consecutivo: consec, folio: fmtFolio("envio_pago", consec, anio) }] });
   };
   const devolverProveedor = async () => {
     if (!seleccionadas.length) return;
@@ -510,17 +539,25 @@ export default function FacturasListaPage() {
         : { estatus_general: "devuelta_proveedor", fecha_devolucion: new Date().toISOString() };
       const foliosFinales = {}; // índice de doc -> folio definitivo
       const allIds = new Set();  // facturas que SÍ cambiaron de estatus
+      const extraFirmas = {};    // id -> patch de firmas/P&R aplicado a las forzadas (para reflejarlo en pantalla)
       const fallas = [];         // facturas que la base de datos rechazó (candado) o no pudo actualizar
       for (let di = 0; di < oficio.docs.length; di++) {
         const d = oficio.docs[di];
         const dest = oficio.tipo === "pago" ? "Mtra. Farlyn Isabel Hernández Arias (Depto. Presupuesto, Contabilidad y Erogaciones)" : d.prov;
-        const patch = oficio.tipo === "devolucion" ? { ...patchBase, motivo_devolucion: d.motivo || null, dev_solicitada: false } : patchBase;
+        // Patch por factura: devolución lleva el motivo; pago normal solo cambia el general;
+        // pago FORZADO (jefe confirmó firmas) marca además firmas/P&R completas para pasar el candado de BD.
+        const patchDeFila = (f) =>
+          oficio.tipo === "devolucion"
+            ? { ...patchBase, motivo_devolucion: d.motivo || null, dev_solicitada: false }
+            : d.forzadasIds?.has(f.id)
+              ? { ...patchBase, ...patchForzarFirmas(f) }
+              : patchBase;
         // 1) Primero se cambia el estatus de cada factura y se revisa el resultado: el candado de la BD
         //    puede rechazar alguna. El oficio solo lleva las que sí cambiaron.
         const okFilas = [];
         for (let i = 0; i < d.filas.length; i += 25) {
           const lote = d.filas.slice(i, i + 25);
-          const res = await Promise.all(lote.map((f) => supabase.from("facturas").update(patch).eq("id", f.id).select("id")));
+          const res = await Promise.all(lote.map((f) => supabase.from("facturas").update(patchDeFila(f)).eq("id", f.id).select("id")));
           res.forEach((r, k) => {
             const f = lote[k];
             if (r.error || !r.data?.length) fallas.push(`${f.folio_proveedor || f.folio_ingreso}: ${r.error ? r.error.message : "sin permiso para modificarla"}`);
@@ -540,7 +577,7 @@ export default function FacturasListaPage() {
           const totalDoc = okFilas.reduce((s, f) => s + (Number(f.importe_factura) || 0), 0);
           const { folio } = await insertarOficioUnico({ tipo: d.tipoDb, anio: d.anio, destinatario: dest, total: totalDoc, factura_ids: okFilas.map((f) => f.id), motivo: d.motivo || null });
           foliosFinales[di] = { folio, filas: okFilas };
-          okFilas.forEach((f) => allIds.add(f.id));
+          okFilas.forEach((f) => { allIds.add(f.id); if (d.forzadasIds?.has(f.id)) extraFirmas[f.id] = patchForzarFirmas(f); });
         } catch (e) {
           // 3) Sin oficio no puede quedar el estatus cambiado: se regresa cada factura a como estaba.
           await Promise.all(okFilas.map((f) => supabase.from("facturas").update({ estatus_general: f.estatus_general }).eq("id", f.id)));
@@ -548,7 +585,7 @@ export default function FacturasListaPage() {
         }
       }
       if (!allIds.size) throw new Error("ninguna factura cambió de estatus. " + fallas.join(" · "));
-      setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general } : f)));
+      setFacturas((prev) => prev.map((f) => (allIds.has(f.id) ? { ...f, estatus_general: patchBase.estatus_general, ...(extraFirmas[f.id] || {}) } : f)));
       if (imprimir) {
         // Estampar el folio DEFINITIVO en la hoja antes de imprimir; solo oficios registrados y con sus facturas reales.
         flushSync(() => setOficio((o) => o && ({ ...o, docs: o.docs.map((d, i) => (foliosFinales[i] ? { ...d, folio: foliosFinales[i].folio, filas: foliosFinales[i].filas } : null)).filter(Boolean) })));
@@ -604,6 +641,11 @@ export default function FacturasListaPage() {
             <div key={i} style={{ border: "1px solid var(--borde)", borderRadius: 6, padding: 10, display: "grid", gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>Oficio {i + 1}{d.prov ? ` · ${d.prov}` : ""} ({d.filas.length} factura{d.filas.length !== 1 ? "s" : ""})</div>
               <div style={{ fontSize: 12 }}>No. de oficio (automático): <strong>{d.folio}</strong></div>
+              {esPago && d.forzadasIds?.size > 0 && (
+                <div style={{ fontSize: 12, color: "var(--rojo)", background: "var(--rojo-claro)", border: "1px solid var(--rojo)", borderRadius: 6, padding: "6px 9px", fontWeight: 600 }}>
+                  ⚠️ {d.forzadasIds.size} factura(s) se envían a pago SIN firmas registradas (forzadas): {d.filas.filter((f) => d.forzadasIds.has(f.id)).map((f) => f.folio_proveedor || f.folio_ingreso).join(", ")}. Al confirmar se marcarán como firmadas en SIGAF.
+                </div>
+              )}
               {!esPago && (
                 <label style={{ fontSize: 12 }}>Causa de la devolución:
                   <textarea value={d.motivo} onChange={(e) => setDoc(i, "motivo", e.target.value)} rows={2} placeholder="Ej. La factura 21100 cobra 42 jamón y 19 pechuga, debiendo ser 47 jamón y 14 pechuga…" style={{ ...inp, width: "100%", display: "block", marginTop: 4 }} />
