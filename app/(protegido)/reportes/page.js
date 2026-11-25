@@ -6,7 +6,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { cargarTraslados, clasificar, scaceContraFacturas, CUENTAN, NOMBRE_CIUDAD } from "../../../lib/traslados";
 import { agruparComprobantes, cruzar } from "../../../lib/nap";
 import ConciliacionProveedor, { descargarConciliacionWord } from "../../../lib/ConciliacionProveedor";
-import { leerReporteCE, cruzarCE } from "../../../lib/cruceCompraEmergente";
+import { leerReporteCE, cruzarCE, armarReporteCE } from "../../../lib/cruceCompraEmergente";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date();
@@ -481,43 +481,7 @@ export default function ReportesPage() {
           for (const x of dd || []) dispo.cuentas[x.cuenta_finat] = { presupuesto: Number(x.presupuesto) || 0, gasto: Number(x.gasto) || 0, disponible: Number(x.disponible) || 0 };
         }
         const x = cruzarCE({ reporte, facturas: facturasCE, dispo, nombres });
-        const sumaK = (l, k) => Math.round(l.reduce((s, r) => s + (Number(r[k]) || 0), 0) * 100) / 100;
-        const M = (key, label) => ({ key, label, money: true, align: "right" });
-        const avisos = [];
-        if (x.meta.otraUnidad) avisos.push(`${x.meta.otraUnidad} renglón(es) de otra unidad no se tomaron`);
-        if (x.meta.sinFolio) avisos.push(`${x.meta.sinFolio} renglón(es) sin número de folio no se tomaron`);
-        if (!fechaDispo) avisos.push("no hay dispo cargada: el presupuesto sale en ceros");
-        setRes({
-          titulo: "Cruce vs compras emergentes",
-          resumen: `Reporte del administrador del ${fISO(x.meta.fechaReporte)} ${x.meta.horaReporte || ""} · dispo del ${fISO(fechaDispo)} · ${x.meta.facturasCE} facturas de Compra Emergente en SIGAF`,
-          nota: avisos.length ? avisos.join(" · ") + "." : "",
-          tarjetas: x.tarjetas,
-          secciones: [
-            { id: "ppto", titulo: "Presupuesto asignado vs OC: en qué cuentas falta generar OC",
-              nota: "OC en camino = lo del reporte que no tiene CR (no ha llegado a SIGAF, en firmas, en OOAD o devuelta) + lo que está en SIGAF sin CR y no viene en el reporte. Las devueltas ya refacturadas no cuentan. Por generar OC = Disponible − OC en camino.",
-              columns: [{ key: "cuenta", label: "Cuenta" }, M("presupuesto", "Presupuesto 2026"), M("gasto", "Gastado"), M("disponible", "Disponible hoy"), M("caminoReporte", "En camino (del reporte)"), M("caminoFuera", "En SIGAF sin CR fuera del reporte"), M("camino", "OC en camino"), M("porGenerar", "Por generar OC"), { key: "estatus", label: "Estatus" }],
-              rows: x.ppto, totales: { cuenta: "TOTAL", ...Object.fromEntries(["presupuesto", "gasto", "disponible", "caminoReporte", "caminoFuera", "camino", "porGenerar"].map((k) => [k, sumaK(x.ppto, k)])) } },
-            { id: "cuenta", titulo: "Por cuenta: cuánto del reporte ya está en SIGAF y cuánto falta",
-              columns: [{ key: "cuenta", label: "Cuenta" }, M("falta", "Falta en SIGAF"), M("ya", "Ya en SIGAF"), M("total", "Total")],
-              rows: x.porCuenta, totales: { cuenta: "TOTAL", falta: sumaK(x.porCuenta, "falta"), ya: sumaK(x.porCuenta, "ya"), total: sumaK(x.porCuenta, "total") } },
-            { id: "etapa", titulo: "En qué etapa van las compras del reporte",
-              columns: [{ key: "etapa", label: "Etapa en SIGAF" }, { key: "folios", label: "Folios", align: "right" }, M("monto", "Monto"), { key: "pct", label: "% del monto", align: "right" }],
-              rows: x.porEtapa, totales: { etapa: "TOTAL", folios: sumaK(x.porEtapa, "folios"), monto: sumaK(x.porEtapa, "monto"), pct: "100%" } },
-            { id: "nollegan", titulo: "Compras que NO han llegado a SIGAF, por proveedor",
-              columns: [{ key: "proveedor", label: "Proveedor" }, { key: "cuentas", label: "Cuenta(s)" }, { key: "folios", label: "Folios", align: "right" }, M("monto", "Monto")],
-              rows: x.noLleganProv, totales: { proveedor: "TOTAL", folios: sumaK(x.noLleganProv, "folios"), monto: sumaK(x.noLleganProv, "monto") } },
-            { id: "revisar", titulo: "Para revisar", hoja: "Para revisar",
-              nota: "SIGAF solo lo señala, no corrige nada. Importe distinto: diferencia = SIGAF − reporte.",
-              columns: [{ key: "tipo", label: "Qué pasa" }, { key: "folio", label: "Folio reporte" }, { key: "sigaf", label: "Folio SIGAF" }, { key: "detalle", label: "Detalle" }, M("importe", "Importe")],
-              rows: x.revisar },
-            { id: "cruce", titulo: "Cruce completo", plegada: true, hoja: "Cruce completo",
-              nota: "Los que no han llegado a SIGAF van en rojo. En el Excel trae filtro en cada columna.",
-              columns: [{ key: "folio", label: "Folio solicitud" }, { key: "alta", label: "No. alta" }, { key: "oc", label: "OC portal" }, { key: "fechaFolio", label: "Fecha folio" }, { key: "mes", label: "Mes" },
-                { key: "partida", label: "Partida" }, { key: "concepto", label: "Cuenta y concepto" }, { key: "proveedor", label: "Proveedor" }, { key: "articulo", label: "Artículo" }, { key: "factura", label: "Factura" },
-                M("total", "Total reporte"), { key: "enSigaf", label: "En SIGAF" }, { key: "folioSigaf", label: "Folio SIGAF" }, { key: "etapa", label: "Etapa SIGAF" }, { key: "cr", label: "CR" }, M("importeSigaf", "Importe SIGAF")],
-              rows: x.cruce, totales: { folio: `TOTAL (${x.cruce.length})`, total: sumaK(x.cruce, "total") } },
-          ],
-        });
+        setRes(armarReporteCE(x, fechaDispo));
       } else if (repKey === "r10") {
         // Comprobantes del 1043 (lo que FINAT marca PAGADO) que SIGAF no tiene como factura.
         let comps = [], d0 = 0;
@@ -598,34 +562,22 @@ export default function ReportesPage() {
 
   async function exportExcel() {
     if (!res) return;
-    const mod = await import("xlsx");
-    const XLSX = mod.default || mod;
     if (res.secciones) {
-      // Reporte con varias tablas (R12): "Dinamicas" con todas las tablas apiladas + una pestaña por cada tabla grande
-      const valor = (c, v) => (c.money ? (v === "" || v == null ? "" : Number(v) || 0) : v ?? "");
-      const bloque = (s) => {
-        const aoa = [[s.titulo], s.columns.map((c) => c.label), ...s.rows.map((r) => s.columns.map((c) => valor(c, r[c.key])))];
-        if (s.totales) aoa.push(s.columns.map((c) => (s.totales[c.key] != null ? valor(c, s.totales[c.key]) : "")));
-        if (s.nota) aoa.push([s.nota]);
-        return aoa;
-      };
-      const wb = XLSX.utils.book_new();
-      const din = [[res.titulo], [res.resumen || ""], []];
-      if (res.tarjetas) { din.push(res.tarjetas.map((t) => t.label)); din.push(res.tarjetas.map((t) => Number(t.valor) || 0)); din.push(res.tarjetas.map((t) => t.sub)); din.push([]); }
-      for (const s of res.secciones.filter((s) => !s.hoja)) { din.push(...bloque(s), []); }
-      const wsD = XLSX.utils.aoa_to_sheet(din);
-      wsD["!cols"] = [{ wch: 48 }, ...Array(8).fill({ wch: 18 })];
-      XLSX.utils.book_append_sheet(wb, wsD, "Dinamicas");
-      for (const s of res.secciones.filter((s) => s.hoja)) {
-        const aoa = bloque(s).slice(1); // sin el título: encabezado en la fila 1 para que funcione el filtro
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws["!cols"] = s.columns.map((c) => ({ wch: Math.min(45, Math.max(10, c.label.length + 2)) }));
-        ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, s.rows.length), c: s.columns.length - 1 } }) };
-        XLSX.utils.book_append_sheet(wb, ws, s.hoja);
-      }
-      XLSX.writeFile(wb, `${res.titulo.replace(/[^\w]+/g, "_").slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      // Reporte con varias tablas (R12): Excel ejecutivo con formato (Dinamicas + Para revisar + Cruce completo)
+      try {
+        const [mx, { excelCruceCE }] = await Promise.all([import("exceljs"), import("../../../lib/excelCruceCE")]);
+        const buf = await excelCruceCE(mx.default || mx, res);
+        const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+        const a = document.createElement("a");
+        const hoyMX = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "").toUpperCase();
+        a.href = url; a.download = `Cruce compra emergente vs SIGAF ${hoyMX}.xlsx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (e) { setMsg("No se pudo generar el Excel: " + e.message); }
       return;
     }
+    const mod = await import("xlsx");
+    const XLSX = mod.default || mod;
     const encabezado = res.columns.map((c) => c.label);
     const cuerpo = res.rows.map((r) => res.columns.map((c) => (c.money ? Number(r[c.key]) || 0 : r[c.key])));
     const aoa = [[res.titulo], [], encabezado, ...cuerpo];
