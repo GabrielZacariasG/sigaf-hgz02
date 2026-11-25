@@ -6,6 +6,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import { cargarTraslados, clasificar, scaceContraFacturas, CUENTAN, NOMBRE_CIUDAD } from "../../../lib/traslados";
 import { agruparComprobantes, cruzar } from "../../../lib/nap";
 import ConciliacionProveedor, { descargarConciliacionWord } from "../../../lib/ConciliacionProveedor";
+import { leerReporteCE, cruzarCE } from "../../../lib/cruceCompraEmergente";
 
 const money = (n) => (Number(n) || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 const hoy = () => new Date();
@@ -87,6 +88,32 @@ const card = { background: "var(--blanco)", border: "1px solid var(--borde)", bo
 const th = { textAlign: "left", fontSize: 12, color: "var(--texto-suave)", padding: "8px 10px", borderBottom: "2px solid var(--borde)", whiteSpace: "nowrap" };
 const td = { padding: "7px 10px", borderBottom: "1px solid var(--borde)", fontSize: 13, verticalAlign: "top" };
 
+// Tabla de un reporte con varias secciones (R12). Renglones con _rojo = no han llegado a SIGAF.
+function TablaRep({ s }) {
+  const celda = (c, v) => (c.money ? (v === "" || v == null ? "—" : money(v)) : (v === "" || v == null ? "—" : v));
+  return (
+    <>
+      <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 10 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr>{s.columns.map((c) => <th key={c.key} style={{ ...th, textAlign: c.align === "right" ? "right" : "left" }}>{c.label}</th>)}</tr></thead>
+          <tbody>
+            {s.rows.map((r, i) => (
+              <tr key={i} style={r._rojo ? { background: "#fde8e8" } : undefined}>
+                {s.columns.map((c, j) => <td key={c.key} style={{ ...td, minWidth: j === 0 && (c.key === "cuenta" || c.key === "tipo") ? 240 : undefined, whiteSpace: c.money || c.key === "estatus" || c.key === "etapa" ? "nowrap" : undefined, textAlign: c.align === "right" ? "right" : "left", color: r._rojo && c.key === "enSigaf" ? "var(--rojo)" : undefined, fontWeight: r._rojo && c.key === "enSigaf" ? 700 : undefined }}>{celda(c, r[c.key])}</td>)}
+              </tr>
+            ))}
+            {s.rows.length === 0 && <tr><td style={td} colSpan={s.columns.length}>Nada que señalar.</td></tr>}
+            {s.totales && (
+              <tr>{s.columns.map((c) => <td key={c.key} style={{ ...td, fontWeight: 700, borderTop: "2px solid #333", textAlign: c.align === "right" ? "right" : "left" }}>{s.totales[c.key] != null ? (c.money ? money(s.totales[c.key]) : s.totales[c.key]) : ""}</td>)}</tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {s.nota && <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>{s.nota}</div>}
+    </>
+  );
+}
+
 const LABEL_GEN = { capturada: "Capturada", en_revision: "En revisión", enviada_ooad: "Enviada a OOAD", en_tramite_ooad: "En trámite OOAD", gasto_reflejado: "Gasto reflejado", devuelta_proveedor: "Devuelta al proveedor" };
 function etapaDe(f) {
   if (f.estatus_general === "gasto_reflejado") return "Pagada";
@@ -131,6 +158,7 @@ export default function ReportesPage() {
   const [folioOpen, setFolioOpen] = useState(false); // dropdown de sugerencias de folio (R2)
   const [trasCache, setTrasCache] = useState(null); // folios del SCACE ya clasificados (informes de traslados)
   const [docInst, setDocInst] = useState(null);     // documento institucional de conciliación (membrete)
+  const [ceArchivo, setCeArchivo] = useState(null); // reporte de solicitudes de compra emergente (R12)
 
   useEffect(() => {
     (async () => {
@@ -180,6 +208,7 @@ export default function ReportesPage() {
     { key: "r3", grupo: "Facturas", label: "Servicios de mayor impacto", desc: "Ranking de conceptos por importe y cantidad (facturas con desglose).", filtros: ["contrato", "capitulo", "fechas"] },
     { key: "r3b", grupo: "Facturas", label: "Consumo por conceptos (elige del contrato)", desc: "Elige contrato → marca los conceptos que quieras → te dice en qué facturas salen y cuánto. Sin contrato, puedes buscar por texto. Requiere desglose capturado.", filtros: ["proveedor", "contrato", "fechas"] },
     { key: "r9", grupo: "Facturas", label: "Compra Emergente sin CR", desc: "Facturas de Compra Emergente que aún NO tienen contra-recibo (CR), agrupadas por cuenta: cuántas son y cuánto importe. Son las que todavía no reflejan gasto.", filtros: ["proveedor", "capitulo", "fechas", "detalleCE"] },
+    { key: "r12", grupo: "Facturas", label: "Cruce vs compras emergentes", desc: "Sube el reporte de Solicitudes de compra emergente que pasa el administrador (SAI): SIGAF lo cruza con sus facturas de Compra Emergente y la última dispo cargada. Te dice qué ya llegó a SIGAF, en qué etapa va, qué falta, y por cuenta cuánto falta generar de OC.", filtros: ["archivoCE"] },
     { key: "r10", grupo: "Facturas", label: "Pagadas en FINAT sin factura en SIGAF", desc: "Comprobantes del 1043 que FINAT marca PAGADOS (del HGZ 2, en cuentas que se llevan factura por factura) y que SIGAF no tiene capturados. Sale de lo ya cargado en \"Cargar reportes\".", filtros: ["fechas"] },
     { key: "r7", grupo: "Contratos", label: "Vigencias (semáforo)", desc: "Contratos vigentes / por vencer (≤30 días) / vencidos.", filtros: ["proveedor", "capitulo"] },
     { key: "r8", grupo: "Contratos", label: "Conciliación por contrato", desc: "Contratado vs ejercido vs saldo; pagado vs adeudo (pendiente). Ideal para conciliar con proveedor.", filtros: ["proveedor", "capitulo", "soloVencidos"] },
@@ -420,6 +449,75 @@ export default function ReportesPage() {
             rows, totales: { cuenta: `TOTAL (${rows.length} cuentas)`, facturas: rows.reduce((s, r) => s + r.facturas, 0), importe: rows.reduce((s, r) => s + r.importe, 0) },
           });
         }
+      } else if (repKey === "r12") {
+        if (!ceArchivo) { setMsg("Primero elige el archivo de Solicitudes de compra emergente."); setGenerando(false); return; }
+        const mod = await import("xlsx"); const XLSX = mod.default || mod;
+        const reporte = leerReporteCE(XLSX, new Uint8Array(await ceArchivo.arrayBuffer()));
+        if (reporte.error) { setMsg(reporte.error); setGenerando(false); return; }
+        // Facturas de Compra Emergente (sin anuladas), con su cuenta
+        let fce = [];
+        for (let d = 0; ; d += 1000) {
+          const { data, error } = await supabase.from("facturas")
+            .select("id, folio_ingreso, folio_proveedor, orden_compra, importe_factura, estatus_general, estatus_firmas, cr_contrarecibo, created_at, proveedores ( razon_social ), partidas ( cuenta_finat, nombre ), capitulos!inner ( nombre )")
+            .eq("capitulos.nombre", "Compra Emergente").eq("anulada", false).order("id").range(d, d + 999);
+          if (error) throw new Error("facturas de Compra Emergente: " + error.message);
+          fce = fce.concat(data || []);
+          if (!data || data.length < 1000) break;
+        }
+        const facturasCE = fce.map((f) => ({ id: f.id, folio_ingreso: f.folio_ingreso, folio_proveedor: f.folio_proveedor, orden_compra: f.orden_compra, importe: f.importe_factura,
+          estatus_general: f.estatus_general, estatus_firmas: f.estatus_firmas, cr: f.cr_contrarecibo, cuenta: f.partidas?.cuenta_finat || "", proveedor: f.proveedores?.razon_social || "", created_at: f.created_at }));
+        // Nombres de las cuentas del capítulo Compra Emergente
+        const { data: pts, error: eP } = await supabase.from("partidas").select("cuenta_finat, nombre, capitulos!inner ( nombre )").eq("capitulos.nombre", "Compra Emergente");
+        if (eP) throw new Error("partidas: " + eP.message);
+        const nombres = Object.fromEntries((pts || []).filter((p) => p.cuenta_finat).map((p) => [p.cuenta_finat, p.nombre]));
+        // Última dispo cargada (HGZ 2, por cuenta)
+        const { data: ult, error: eU } = await supabase.from("disponibilidad_diaria").select("fecha").order("fecha", { ascending: false }).limit(1);
+        if (eU) throw new Error("dispo: " + eU.message);
+        const fechaDispo = ult?.[0]?.fecha || "";
+        const dispo = { fecha: fechaDispo, cuentas: {} };
+        if (fechaDispo) {
+          const { data: dd, error: eD } = await supabase.from("disponibilidad_diaria").select("cuenta_finat, presupuesto, gasto, disponible").eq("fecha", fechaDispo);
+          if (eD) throw new Error("dispo: " + eD.message);
+          for (const x of dd || []) dispo.cuentas[x.cuenta_finat] = { presupuesto: Number(x.presupuesto) || 0, gasto: Number(x.gasto) || 0, disponible: Number(x.disponible) || 0 };
+        }
+        const x = cruzarCE({ reporte, facturas: facturasCE, dispo, nombres });
+        const sumaK = (l, k) => Math.round(l.reduce((s, r) => s + (Number(r[k]) || 0), 0) * 100) / 100;
+        const M = (key, label) => ({ key, label, money: true, align: "right" });
+        const avisos = [];
+        if (x.meta.otraUnidad) avisos.push(`${x.meta.otraUnidad} renglón(es) de otra unidad no se tomaron`);
+        if (x.meta.sinFolio) avisos.push(`${x.meta.sinFolio} renglón(es) sin número de folio no se tomaron`);
+        if (!fechaDispo) avisos.push("no hay dispo cargada: el presupuesto sale en ceros");
+        setRes({
+          titulo: "Cruce vs compras emergentes",
+          resumen: `Reporte del administrador del ${fISO(x.meta.fechaReporte)} ${x.meta.horaReporte || ""} · dispo del ${fISO(fechaDispo)} · ${x.meta.facturasCE} facturas de Compra Emergente en SIGAF`,
+          nota: avisos.length ? avisos.join(" · ") + "." : "",
+          tarjetas: x.tarjetas,
+          secciones: [
+            { id: "ppto", titulo: "Presupuesto asignado vs OC: en qué cuentas falta generar OC",
+              nota: "OC en camino = lo del reporte que no tiene CR (no ha llegado a SIGAF, en firmas, en OOAD o devuelta) + lo que está en SIGAF sin CR y no viene en el reporte. Las devueltas ya refacturadas no cuentan. Por generar OC = Disponible − OC en camino.",
+              columns: [{ key: "cuenta", label: "Cuenta" }, M("presupuesto", "Presupuesto 2026"), M("gasto", "Gastado"), M("disponible", "Disponible hoy"), M("caminoReporte", "En camino (del reporte)"), M("caminoFuera", "En SIGAF sin CR fuera del reporte"), M("camino", "OC en camino"), M("porGenerar", "Por generar OC"), { key: "estatus", label: "Estatus" }],
+              rows: x.ppto, totales: { cuenta: "TOTAL", ...Object.fromEntries(["presupuesto", "gasto", "disponible", "caminoReporte", "caminoFuera", "camino", "porGenerar"].map((k) => [k, sumaK(x.ppto, k)])) } },
+            { id: "cuenta", titulo: "Por cuenta: cuánto del reporte ya está en SIGAF y cuánto falta",
+              columns: [{ key: "cuenta", label: "Cuenta" }, M("falta", "Falta en SIGAF"), M("ya", "Ya en SIGAF"), M("total", "Total")],
+              rows: x.porCuenta, totales: { cuenta: "TOTAL", falta: sumaK(x.porCuenta, "falta"), ya: sumaK(x.porCuenta, "ya"), total: sumaK(x.porCuenta, "total") } },
+            { id: "etapa", titulo: "En qué etapa van las compras del reporte",
+              columns: [{ key: "etapa", label: "Etapa en SIGAF" }, { key: "folios", label: "Folios", align: "right" }, M("monto", "Monto"), { key: "pct", label: "% del monto", align: "right" }],
+              rows: x.porEtapa, totales: { etapa: "TOTAL", folios: sumaK(x.porEtapa, "folios"), monto: sumaK(x.porEtapa, "monto"), pct: "100%" } },
+            { id: "nollegan", titulo: "Compras que NO han llegado a SIGAF, por proveedor",
+              columns: [{ key: "proveedor", label: "Proveedor" }, { key: "cuentas", label: "Cuenta(s)" }, { key: "folios", label: "Folios", align: "right" }, M("monto", "Monto")],
+              rows: x.noLleganProv, totales: { proveedor: "TOTAL", folios: sumaK(x.noLleganProv, "folios"), monto: sumaK(x.noLleganProv, "monto") } },
+            { id: "revisar", titulo: "Para revisar", hoja: "Para revisar",
+              nota: "SIGAF solo lo señala, no corrige nada. Importe distinto: diferencia = SIGAF − reporte.",
+              columns: [{ key: "tipo", label: "Qué pasa" }, { key: "folio", label: "Folio reporte" }, { key: "sigaf", label: "Folio SIGAF" }, { key: "detalle", label: "Detalle" }, M("importe", "Importe")],
+              rows: x.revisar },
+            { id: "cruce", titulo: "Cruce completo", plegada: true, hoja: "Cruce completo",
+              nota: "Los que no han llegado a SIGAF van en rojo. En el Excel trae filtro en cada columna.",
+              columns: [{ key: "folio", label: "Folio solicitud" }, { key: "alta", label: "No. alta" }, { key: "oc", label: "OC portal" }, { key: "fechaFolio", label: "Fecha folio" }, { key: "mes", label: "Mes" },
+                { key: "partida", label: "Partida" }, { key: "concepto", label: "Cuenta y concepto" }, { key: "proveedor", label: "Proveedor" }, { key: "articulo", label: "Artículo" }, { key: "factura", label: "Factura" },
+                M("total", "Total reporte"), { key: "enSigaf", label: "En SIGAF" }, { key: "folioSigaf", label: "Folio SIGAF" }, { key: "etapa", label: "Etapa SIGAF" }, { key: "cr", label: "CR" }, M("importeSigaf", "Importe SIGAF")],
+              rows: x.cruce, totales: { folio: `TOTAL (${x.cruce.length})`, total: sumaK(x.cruce, "total") } },
+          ],
+        });
       } else if (repKey === "r10") {
         // Comprobantes del 1043 (lo que FINAT marca PAGADO) que SIGAF no tiene como factura.
         let comps = [], d0 = 0;
@@ -502,6 +600,32 @@ export default function ReportesPage() {
     if (!res) return;
     const mod = await import("xlsx");
     const XLSX = mod.default || mod;
+    if (res.secciones) {
+      // Reporte con varias tablas (R12): "Dinamicas" con todas las tablas apiladas + una pestaña por cada tabla grande
+      const valor = (c, v) => (c.money ? (v === "" || v == null ? "" : Number(v) || 0) : v ?? "");
+      const bloque = (s) => {
+        const aoa = [[s.titulo], s.columns.map((c) => c.label), ...s.rows.map((r) => s.columns.map((c) => valor(c, r[c.key])))];
+        if (s.totales) aoa.push(s.columns.map((c) => (s.totales[c.key] != null ? valor(c, s.totales[c.key]) : "")));
+        if (s.nota) aoa.push([s.nota]);
+        return aoa;
+      };
+      const wb = XLSX.utils.book_new();
+      const din = [[res.titulo], [res.resumen || ""], []];
+      if (res.tarjetas) { din.push(res.tarjetas.map((t) => t.label)); din.push(res.tarjetas.map((t) => Number(t.valor) || 0)); din.push(res.tarjetas.map((t) => t.sub)); din.push([]); }
+      for (const s of res.secciones.filter((s) => !s.hoja)) { din.push(...bloque(s), []); }
+      const wsD = XLSX.utils.aoa_to_sheet(din);
+      wsD["!cols"] = [{ wch: 48 }, ...Array(8).fill({ wch: 18 })];
+      XLSX.utils.book_append_sheet(wb, wsD, "Dinamicas");
+      for (const s of res.secciones.filter((s) => s.hoja)) {
+        const aoa = bloque(s).slice(1); // sin el título: encabezado en la fila 1 para que funcione el filtro
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = s.columns.map((c) => ({ wch: Math.min(45, Math.max(10, c.label.length + 2)) }));
+        ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(1, s.rows.length), c: s.columns.length - 1 } }) };
+        XLSX.utils.book_append_sheet(wb, ws, s.hoja);
+      }
+      XLSX.writeFile(wb, `${res.titulo.replace(/[^\w]+/g, "_").slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      return;
+    }
     const encabezado = res.columns.map((c) => c.label);
     const cuerpo = res.rows.map((r) => res.columns.map((c) => (c.money ? Number(r[c.key]) || 0 : r[c.key])));
     const aoa = [[res.titulo], [], encabezado, ...cuerpo];
@@ -578,6 +702,7 @@ export default function ReportesPage() {
     ),
     concepto: <div key="co"><label style={lbl}>Concepto / insumo</label><input style={inp} value={filtros.concepto} onChange={(e) => setF("concepto", e.target.value)} placeholder="Ej. jitomate, gasa, oxígeno…" /></div>,
     soloVencidos: <label key="sv" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.soloVencidos} onChange={(e) => setF("soloVencidos", e.target.checked)} /> Solo contratos vencidos</label>,
+    archivoCE: <div key="ace" style={{ gridColumn: "1 / -1" }}><label style={lbl}>Archivo de Solicitudes de compra emergente (el que pasa el administrador, .xlsx del SAI)</label><input type="file" accept=".xlsx,.xls" style={inp} onChange={(e) => { setCeArchivo(e.target.files?.[0] || null); setRes(null); setMsg(""); }} />{ceArchivo && <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 4 }}>Elegido: {ceArchivo.name}</div>}</div>,
     detalleCE: <label key="dce" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginTop: 18 }}><input type="checkbox" checked={filtros.detalleCE} onChange={(e) => setF("detalleCE", e.target.checked)} /> Ver detalle por factura</label>,
   };
 
@@ -661,6 +786,29 @@ export default function ReportesPage() {
                 HGZ No. 02 · Generado {new Date().toLocaleString("es-MX")}{res.resumen ? " · " + res.resumen : ""}
               </div>
               {res.nota && <div style={{ background: "var(--ambar-claro)", color: "var(--ambar)", padding: "8px 12px", borderRadius: 8, fontSize: 13, marginBottom: 8 }}>⚠️ {res.nota}</div>}
+              {res.tarjetas && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginBottom: 14 }}>
+                  {res.tarjetas.map((t) => (
+                    <div key={t.label} style={{ ...card, borderTop: `4px solid ${t.alerta ? "var(--rojo)" : "var(--verde)"}` }}>
+                      <div style={{ fontSize: 12, color: "var(--texto-suave)", textTransform: "uppercase", letterSpacing: 0.4 }}>{t.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: t.alerta ? "var(--rojo)" : "var(--texto)" }}>{money(t.valor)}</div>
+                      <div style={{ fontSize: 12.5, color: "var(--texto-suave)" }}>{t.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {res.secciones && res.secciones.map((s) => s.plegada ? (
+                <details key={s.id} style={{ marginBottom: 16 }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 14.5, marginBottom: 6 }}>{s.titulo} ({s.rows.length})</summary>
+                  <TablaRep s={s} />
+                </details>
+              ) : (
+                <div key={s.id} style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 6 }}>{s.titulo}</div>
+                  <TablaRep s={s} />
+                </div>
+              ))}
+              {!res.secciones && <>
               <div style={{ overflowX: "auto", border: "1px solid var(--borde)", borderRadius: 10 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr>{res.columns.map((c) => <th key={c.key} style={{ ...th, textAlign: c.align === "right" ? "right" : "left" }}>{c.label}</th>)}</tr></thead>
@@ -676,6 +824,7 @@ export default function ReportesPage() {
                 </table>
               </div>
               <div style={{ fontSize: 12, color: "var(--texto-suave)", marginTop: 6 }}>{res.rows.length} renglón(es).</div>
+              </>}
             </div>
           )}
         </div>
