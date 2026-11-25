@@ -99,7 +99,7 @@ function TablaRep({ s }) {
           <tbody>
             {s.rows.map((r, i) => (
               <tr key={i} style={r._rojo ? { background: "#fde8e8" } : undefined}>
-                {s.columns.map((c, j) => <td key={c.key} style={{ ...td, minWidth: j === 0 && (c.key === "cuenta" || c.key === "tipo") ? 240 : undefined, whiteSpace: c.money || c.key === "estatus" || c.key === "etapa" ? "nowrap" : undefined, textAlign: c.align === "right" ? "right" : "left", color: r._rojo && c.key === "enSigaf" ? "var(--rojo)" : undefined, fontWeight: r._rojo && c.key === "enSigaf" ? 700 : undefined }}>{celda(c, r[c.key])}</td>)}
+                {s.columns.map((c, j) => <td key={c.key} style={{ ...td, minWidth: j === 0 && (c.key === "cuenta" || c.key === "tipo") ? 240 : undefined, whiteSpace: c.money || c.key === "estatus" || c.key === "etapa" ? "nowrap" : undefined, textAlign: c.align === "right" ? "right" : "left", color: (r._rojo && c.key === "enSigaf") || (c.money && Number(r[c.key]) < 0) ? "var(--rojo)" : undefined, fontWeight: (r._rojo && c.key === "enSigaf") || (c.money && Number(r[c.key]) < 0) ? 700 : undefined }}>{celda(c, r[c.key])}</td>)}
               </tr>
             ))}
             {s.rows.length === 0 && <tr><td style={td} colSpan={s.columns.length}>Nada que señalar.</td></tr>}
