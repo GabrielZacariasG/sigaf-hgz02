@@ -235,9 +235,8 @@ export default function NuevaFacturaPage() {
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratoId, esTraslados]);
-  // Solo los viajes que caen dentro del periodo de la factura (si ya se capturó el periodo).
-  const foliosTrasPeriodo = useMemo(() => foliosTras.filter((f) =>
-    (!periodoInicio || f.fecha_viaje >= periodoInicio) && (!periodoFin || f.fecha_viaje <= periodoFin)), [foliosTras, periodoInicio, periodoFin]);
+  // Se muestran TODOS los viajes en devengo del contrato (sin filtrar por el periodo de la
+  // factura), igual que subrogados: la fecha del viaje no siempre cae dentro del periodo capturado.
 
   const semNueva = useMemo(() => (datosCto && importeNum > 0 ? semaforoDe(datosCto, { importe: importeNum, fecha: fechaFactura, cuenta: cuentaSel }) : null), [datosCto, importeNum, fechaFactura, cuentaSel]);
   const cajaSemaforo = semNueva
@@ -403,15 +402,18 @@ export default function NuevaFacturaPage() {
     if (!calc.ok) { setMensaje("El subtotal + IVA aún no coincide con el total de la factura. Ajústalo antes de guardar."); return; }
     if (requiereDesglose && !desgloseListo) { setMensaje("Captura el desglose por servicio: es obligatorio en este contrato."); return; }
     // 🔒 Candado de subrogación: una factura de contrato de Subrogados debe amparar al menos un folio (devengo).
-    if (/subrog/i.test(capituloSel?.nombre || "") && !sinFoliosSub && selFolios.size === 0) {
+    // Los traslados (autobuses) también caen en el capítulo de subrogación, pero sus folios viven en la tabla de
+    // traslados (foliosTras), no en subrogados (foliosPend); su candado es el de abajo. Aquí se excluyen para no
+    // pedir un folio de subrogados que nunca existirá.
+    if (esSubrogadoCap && !esTraslados && !sinFoliosSub && selFolios.size === 0) {
       setMensaje(foliosPend.length === 0
         ? "Este contrato de subrogación no tiene folios en devengo. Carga primero el Avance SMS / CD_SMS en «Cargar reportes» (o verifica que existan folios pendientes) antes de capturar la factura."
         : "Selecciona al menos un folio de subrogados que ampara esta factura antes de guardar (abajo, en «Folios de subrogados que cobra esta factura»).");
       setPaso(2); return;
     }
-    // 🔒 Candado de traslados (autobuses): si hay viajes del SCACE en devengo para el periodo, la factura debe
-    // amparar al menos uno. (Si no hay viajes cargados para ese periodo —p. ej. factura de otra unidad— no bloquea.)
-    if (esTraslados && foliosTrasPeriodo.length > 0 && selTras.size === 0) {
+    // 🔒 Candado de traslados (autobuses): si hay viajes del SCACE en devengo del contrato, la factura debe
+    // amparar al menos uno. (Si no hay viajes en devengo —p. ej. factura de otra unidad— no bloquea.)
+    if (esTraslados && foliosTras.length > 0 && selTras.size === 0) {
       setMensaje("Selecciona al menos un folio de traslado (viaje del SCACE) que cobra esta factura antes de guardar (abajo, en «Folios de traslado que cobra esta factura»).");
       setPaso(2); return;
     }
@@ -810,7 +812,7 @@ export default function NuevaFacturaPage() {
           )}
           {cajaSemaforo}
           {foliosPend.length > 0 && <SelectorFolios folios={foliosPend} seleccion={selFolios} onCambio={setSelFolios} importeFactura={importeNum} />}
-          {esTraslados && foliosTrasPeriodo.length > 0 && <SelectorFoliosTraslado folios={foliosTrasPeriodo} seleccion={selTras} onCambio={setSelTras} importeFactura={importeNum} />}
+          {esTraslados && foliosTras.length > 0 && <SelectorFoliosTraslado folios={foliosTras} seleccion={selTras} onCambio={setSelTras} importeFactura={importeNum} />}
 
           {/* Captura de subtotal + IVA + validación */}
           <div style={card}>
